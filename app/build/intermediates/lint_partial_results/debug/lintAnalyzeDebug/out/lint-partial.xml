@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<incidents format="6" by="lint 8.12.0" type="partial_results">
+    <map id="UnsafeImplicitIntentLaunch">
+            <map id="actionsSent">
+                    <map id="android.intent.action.DIAL (used to start an activity)">
+                        <location id="0"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                            line="350"
+                            column="22"
+                            startOffset="12018"
+                            endLine="353"
+                            endColumn="6"
+                            endOffset="12111"/>
+                        <location id="1"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+                            line="499"
+                            column="16"
+                            startOffset="17401"
+                            endLine="499"
+                            endColumn="73"
+                            endOffset="17458"/>
+                    </map>
+                    <map id="android.intent.action.SENDTO (used to start an activity)">
+                        <location id="0"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                            line="328"
+                            column="21"
+                            startOffset="11248"
+                            endLine="331"
+                            endColumn="6"
+                            endOffset="11345"/>
+                        <location id="1"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+                            line="492"
+                            column="16"
+                            startOffset="17153"
+                            endLine="492"
+                            endColumn="72"
+                            endOffset="17209"/>
+                    </map>
+                    <map id="android.intent.action.VIEW (used to start an activity)">
+                        <location id="0"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                            line="307"
+                            column="25"
+                            startOffset="10326"
+                            endLine="310"
+                            endColumn="6"
+                            endOffset="10478"/>
+                        <location id="1"
+                            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+                            line="2572"
+                            column="23"
+                            startOffset="87977"
+                            endLine="2577"
+                            endColumn="4"
+                            endOffset="88129"/>
+                    </map>
+            </map>
+    </map>
+    <map id="UnsafeIntentLaunch">
+            <map id="unprotected">
+                <entry
+                    name="com.athar.accessibilitymapping.MainActivity"
+                    boolean="true"/>
+            </map>
+    </map>
+    <map id="UnusedResources">
+        <entry
+            name="model"
+            string="color[app_window_background(U),athar_primary(U),athar_on_primary(U)],drawable[athar_logo(U)],style[Theme_Athar(U),Theme_Material3_DayNight_NoActionBar(R)];4^5^1^2^0;;;"/>
+    </map>
+
+</incidents>

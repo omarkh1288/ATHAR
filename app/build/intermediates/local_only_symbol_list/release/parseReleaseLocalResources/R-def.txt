@@ -1,0 +1,8 @@
+R_DEF: Internal format may change without notice
+local
+color app_window_background
+color athar_on_primary
+color athar_primary
+drawable athar_logo
+font inter_variable
+style Theme.Athar

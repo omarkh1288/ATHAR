@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.athar.backend.EgyptianSignInterpreterTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-03-17T00:24:55.346Z" hostname="LAPTOP-G2VPM48F" time="0.311">
+  <properties/>
+  <testcase name="interpretFallsBackToLatestSupportedSignMeaning()" classname="com.athar.backend.EgyptianSignInterpreterTest" time="0.308"/>
+  <testcase name="interpretUsesSequenceRuleWhenRecentSignsMatch()" classname="com.athar.backend.EgyptianSignInterpreterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

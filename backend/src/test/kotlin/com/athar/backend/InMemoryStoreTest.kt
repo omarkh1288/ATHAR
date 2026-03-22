@@ -1,0 +1,210 @@
+package com.athar.backend
+
+import io.ktor.http.HttpStatusCode
+import java.nio.file.Files
+import java.sql.DriverManager
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+class InMemoryStoreTest {
+  private data class TestStoreContext(
+    val store: InMemoryStore,
+    val jdbcUrl: String
+  )
+
+  private fun newStoreContext(): TestStoreContext {
+    val dbFile = Files.createTempFile("athar-backend-test-", ".db")
+    dbFile.toFile().deleteOnExit()
+    val jdbcUrl = "jdbc:sqlite:${dbFile.toAbsolutePath()}"
+    return TestStoreContext(
+      jdbcUrl = jdbcUrl,
+      store = InMemoryStore(
+      accountDatabase = AccountDatabase("jdbc:sqlite:${dbFile.toAbsolutePath()}")
+      )
+    )
+  }
+
+  private fun rowCount(jdbcUrl: String, table: String): Int {
+    return DriverManager.getConnection(jdbcUrl).use { connection ->
+      connection.prepareStatement("SELECT COUNT(*) FROM $table").use { statement ->
+        statement.executeQuery().use { result ->
+          if (result.next()) result.getInt(1) else 0
+        }
+      }
+    }
+  }
+
+  private fun volunteerDocumentSnapshot(jdbcUrl: String, accountId: String): Triple<String?, String?, Int?> {
+    return DriverManager.getConnection(jdbcUrl).use { connection ->
+      connection.prepareStatement(
+        """
+        SELECT id_document_name, id_document_content_type, LENGTH(id_document_blob) AS blob_len
+        FROM volunteer_profiles
+        WHERE account_id = ?
+        """.trimIndent()
+      ).use { statement ->
+        statement.setString(1, accountId)
+        statement.executeQuery().use { result ->
+          if (!result.next()) return Triple(null, null, null)
+          Triple(
+            result.getString("id_document_name"),
+            result.getString("id_document_content_type"),
+            result.getInt("blob_len").takeIf { !result.wasNull() }
+          )
+        }
+      }
+    }
+  }
+
+  @Test
+  fun registerBlocksCrossRoleEmailReuse() {
+    val store = newStoreContext().store
+
+    val conflict = store.registerUser(
+      request = RegisterUserRequest(
+        fullName = "Conflict User",
+        email = "volunteer@athar.app",
+        phone = "+10000000000",
+        location = "Riyadh",
+        password = "Password123!",
+        disabilityType = "Mobility challenges",
+        emergencyContactName = "EC",
+        emergencyContactPhone = "+10000000001"
+      ),
+      passwordHash = "unused"
+    )
+
+    val failure = assertIs<ServiceResult.Failure>(conflict)
+    assertEquals(HttpStatusCode.Conflict, failure.status)
+    assertTrue(failure.message.contains("already registered"))
+  }
+
+  @Test
+  fun loginReturnsCorrectRoleForSeedAccounts() {
+    val store = newStoreContext().store
+    val auth = AuthService(store)
+
+    val userLogin = auth.login(LoginRequest(email = "user@athar.app", password = "Password123!"))
+    val volunteerLogin = auth.login(LoginRequest(email = "volunteer@athar.app", password = "Password123!"))
+
+    val user = assertIs<ServiceResult.Success<AuthResponseDto>>(userLogin).value.user
+    val volunteer = assertIs<ServiceResult.Success<AuthResponseDto>>(volunteerLogin).value.user
+
+    assertEquals(UserRole.User, user.role)
+    assertEquals(UserRole.Volunteer, volunteer.role)
+  }
+
+  @Test
+  fun requestLifecycleCreateAcceptCompleteWorks() {
+    val store = newStoreContext().store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "QA Start",
+        destination = "QA End",
+        distance = "0.4 km",
+        urgency = "medium",
+        helpType = "QA Help",
+        description = "QA request",
+        payment_method = PaymentMethod.CASH,
+        service_fee = 0.0
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+
+    val accept = store.acceptRequest(userId = "vol-seed-1", requestId = requestId)
+    val acceptResult = assertIs<ServiceResult.Success<ActionResultDto>>(accept).value
+    assertTrue(acceptResult.success)
+
+    val complete = store.completeRequest(userId = "vol-seed-1", requestId = requestId)
+    val completeResult = assertIs<ServiceResult.Success<ActionResultDto>>(complete).value
+    assertTrue(completeResult.success)
+
+    val mine = store.getMyRequests("user-seed-1")
+    val mineResult = assertIs<ServiceResult.Success<MyRequestsResponse>>(mine).value
+    val request = mineResult.userRequests.first { it.id == requestId }
+    assertEquals("completed", request.status)
+  }
+
+  @Test
+  fun registerPersistsUserAndVolunteerIntoSeparateTables() {
+    val context = newStoreContext()
+    val store = context.store
+    val usersBefore = rowCount(context.jdbcUrl, "user_profiles")
+    val volunteersBefore = rowCount(context.jdbcUrl, "volunteer_profiles")
+
+    val userRegistration = store.registerUser(
+      request = RegisterUserRequest(
+        fullName = "New User",
+        email = "new-user@example.com",
+        phone = "+10000000010",
+        location = "Riyadh",
+        password = "Password123!",
+        disabilityType = "Low vision",
+        emergencyContactName = "Contact A",
+        emergencyContactPhone = "+10000000011"
+      ),
+      passwordHash = "hash-user"
+    )
+    assertIs<ServiceResult.Success<AccountRecord>>(userRegistration)
+
+    val volunteerRegistration = store.registerVolunteer(
+      request = RegisterVolunteerRequest(
+        fullName = "New Volunteer",
+        email = "new-volunteer@example.com",
+        phone = "+10000000020",
+        location = "Riyadh",
+        password = "Password123!",
+        idNumber = "1122334455",
+        dateOfBirth = "1999-01-01",
+        motivation = "Helping community",
+        languages = listOf("Arabic", "English"),
+        availability = listOf("Weekends")
+      ),
+      passwordHash = "hash-volunteer"
+    )
+    assertIs<ServiceResult.Success<AccountRecord>>(volunteerRegistration)
+
+    assertEquals(usersBefore + 1, rowCount(context.jdbcUrl, "user_profiles"))
+    assertEquals(volunteersBefore + 1, rowCount(context.jdbcUrl, "volunteer_profiles"))
+  }
+
+  @Test
+  fun registerVolunteerPersistsUploadedIdDocumentMetadataAndBytes() {
+    val context = newStoreContext()
+    val store = context.store
+    val fileBytes = "sample-id-document".encodeToByteArray()
+
+    val volunteerRegistration = store.registerVolunteer(
+      request = RegisterVolunteerRequest(
+        fullName = "Doc Volunteer",
+        email = "doc-volunteer@example.com",
+        phone = "+10000000021",
+        location = "Riyadh",
+        password = "Password123!",
+        idNumber = "7788990011",
+        dateOfBirth = "1995-04-03",
+        motivation = "Help with accessibility support",
+        languages = listOf("Arabic"),
+        availability = listOf("Weekday evenings"),
+        idDocumentFileName = "id-proof.pdf",
+        idDocumentContentType = "application/pdf",
+        idDocumentSizeBytes = fileBytes.size.toLong(),
+        idDocumentBytes = fileBytes
+      ),
+      passwordHash = "hash-volunteer-doc"
+    )
+    val account = assertIs<ServiceResult.Success<AccountRecord>>(volunteerRegistration).value
+
+    val (name, contentType, blobLength) = volunteerDocumentSnapshot(context.jdbcUrl, account.id)
+    assertEquals("id-proof.pdf", name)
+    assertEquals("application/pdf", contentType)
+    assertNotNull(blobLength)
+    assertEquals(fileBytes.size, blobLength)
+  }
+}

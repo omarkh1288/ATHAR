@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.athar.accessibilitymapping.app-debug-4:/font_inter_variable.ttf.flat",
+        "source": "com.athar.accessibilitymapping.app-main-70:/font/inter_variable.ttf"
+    },
+    {
+        "merged": "com.athar.accessibilitymapping.app-debug-4:/drawable_athar_logo.png.flat",
+        "source": "com.athar.accessibilitymapping.app-main-70:/drawable/athar_logo.png"
+    }
+]

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.athar.backend.InMemoryStoreTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-03-17T00:24:55.660Z" hostname="LAPTOP-G2VPM48F" time="1.224">
+  <properties/>
+  <testcase name="registerPersistsUserAndVolunteerIntoSeparateTables()" classname="com.athar.backend.InMemoryStoreTest" time="0.378"/>
+  <testcase name="registerBlocksCrossRoleEmailReuse()" classname="com.athar.backend.InMemoryStoreTest" time="0.144"/>
+  <testcase name="loginReturnsCorrectRoleForSeedAccounts()" classname="com.athar.backend.InMemoryStoreTest" time="0.395"/>
+  <testcase name="requestLifecycleCreateAcceptCompleteWorks()" classname="com.athar.backend.InMemoryStoreTest" time="0.163"/>
+  <testcase name="registerVolunteerPersistsUploadedIdDocumentMetadataAndBytes()" classname="com.athar.backend.InMemoryStoreTest" time="0.14"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[SLF4J(I): Connected with provider of type [ch.qos.logback.classic.spi.LogbackServiceProvider]
+]]></system-err>
+</testsuite>

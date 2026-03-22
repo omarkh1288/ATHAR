@@ -1,0 +1,11 @@
+{
+    "java.import.gradle.java.home": "C:\\Users\\Omar\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+    "kotlin.java.home": "C:\\Users\\Omar\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "C:\\Users\\Omar\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+            "default": true
+        }
+    ]
+}

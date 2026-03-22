@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="app_window_background">#EAF2FB</color>
+  <color name="athar_primary">#1F3C5B</color>
+  <color name="athar_on_primary">#FFFFFF</color>
+</resources>

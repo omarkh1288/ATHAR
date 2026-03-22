@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding='utf-8' standalone='no'?>
+<resources>
+<!-- blaze-out/k8-opt/genfiles/java/com/google/android/libraries/places/res/values-ro/strings.xml -->
+<eat-comment/>
+<string name="places_autocomplete_clear_button">Șterge căutarea</string>
+<string name="places_autocomplete_label">Alege o locație</string>
+<string name="places_autocomplete_no_results_for_query">Niciun rezultat pentru %1$s</string>
+<string name="places_autocomplete_search_hint">Caută o locație</string>
+<string name="places_cancel">Anulează</string>
+<string name="places_powered_by_google">Un produs Google</string>
+<string name="places_search_error">Nu se încarcă rezultatele căutării.</string>
+<string name="places_try_again">Reîncearcă</string>
+</resources>

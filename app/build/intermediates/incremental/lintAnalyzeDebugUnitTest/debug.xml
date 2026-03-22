@@ -1,0 +1,32 @@
+<variant
+    name="debug"
+    package="com.athar.accessibilitymapping"
+    minSdkVersion="24"
+    targetSdkVersion="34"
+    debuggable="true"
+    mergedManifest="C:\Users\Omar\.gradle-local-build\AccessibilityMappingApp\app\intermediates\merged_manifest\debug\processDebugMainManifest\AndroidManifest.xml"
+    partialResultsDir="C:\Users\Omar\.gradle-local-build\AccessibilityMappingApp\app\intermediates\unit_test_lint_partial_results\debug\lintAnalyzeDebugUnitTest\out"
+    desugaredMethodsFiles="C:\Users\Omar\.gradle\caches\8.13\transforms\5c7137f5b3be90332f45a8b33d9ec75c\transformed\desugar_jdk_libs_configuration-2.1.5-desugar-lint.txt;C:\Users\Omar\.gradle\caches\8.13\transforms\95d8944b1a2295afb34702e56c303868\transformed\D8BackportedDesugaredMethods.txt">
+  <buildFeatures
+      coreLibraryDesugaring="true"
+      namespacing="REQUIRED"/>
+  <sourceProviders>
+  </sourceProviders>
+  <testSourceProviders>
+    <sourceProvider
+        manifests="src\test\AndroidManifest.xml"
+        javaDirectories="src\test\java;src\testDebug\java;src\test\kotlin;src\testDebug\kotlin"
+        assetsDirectories="src\test\assets;src\testDebug\assets"
+        unitTest="true"/>
+  </testSourceProviders>
+  <testFixturesSourceProviders>
+  </testFixturesSourceProviders>
+  <manifestPlaceholders>
+    <placeholder
+        name="MAPS_API_KEY"
+        value="AIzaSyAJ3nicpl50oIkMWm09T6m2mvvNYDJYH0s" />
+  </manifestPlaceholders>
+  <artifact
+      type="UNIT_TEST">
+  </artifact>
+</variant>

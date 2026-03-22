@@ -1,0 +1,905 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<incidents format="6" by="lint 8.12.0" type="incidents">
+
+    <incident
+        id="DefaultLocale"
+        severity="warning"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/VolunteerAnalyticsScreen.kt"
+            line="349"
+            column="105"
+            startOffset="14668"
+            endLine="349"
+            endColumn="133"
+            endOffset="14696"/>
+    </incident>
+
+    <incident
+        id="DefaultLocale"
+        severity="warning"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/VolunteerAnalyticsScreen.kt"
+            line="350"
+            column="101"
+            startOffset="14797"
+            endLine="350"
+            endColumn="129"
+            endOffset="14825"/>
+    </incident>
+
+    <incident
+        id="AndroidGradlePluginVersion"
+        severity="warning"
+        message="A newer version of Gradle than 8.13 is available: 8.14.4">
+        <fix-replace
+            description="Update to 8.14.4"
+            oldString="8.13"
+            replacement="8.14.4"
+            priority="0"/>
+        <location
+            file="$HOME/OneDrive/Desktop/android/gradle/wrapper/gradle-wrapper.properties"
+            line="3"
+            column="17"
+            startOffset="81"
+            endLine="3"
+            endColumn="79"
+            endOffset="143"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.core:core-ktx than 1.17.0 is available: 1.18.0">
+        <fix-replace
+            description="Change to 1.18.0"
+            family="Update versions"
+            oldString="1.17.0"
+            replacement="1.18.0"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="69"
+            column="18"
+            startOffset="1741"
+            endLine="69"
+            endColumn="49"
+            endOffset="1772"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.activity:activity-compose than 1.12.4 is available: 1.13.0">
+        <fix-replace
+            description="Change to 1.13.0"
+            family="Update versions"
+            oldString="1.12.4"
+            replacement="1.13.0"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="70"
+            column="18"
+            startOffset="1791"
+            endLine="70"
+            endColumn="61"
+            endOffset="1834"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.compose.ui:ui than 1.10.3 is available: 1.10.5">
+        <fix-replace
+            description="Change to 1.10.5"
+            family="Update versions"
+            oldString="1.10.3"
+            replacement="1.10.5"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="73"
+            column="18"
+            startOffset="1993"
+            endLine="73"
+            endColumn="49"
+            endOffset="2024"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.compose.ui:ui-tooling-preview than 1.10.3 is available: 1.10.5">
+        <fix-replace
+            description="Change to 1.10.5"
+            family="Update versions"
+            oldString="1.10.3"
+            replacement="1.10.5"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="74"
+            column="18"
+            startOffset="2043"
+            endLine="74"
+            endColumn="65"
+            endOffset="2090"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of com.google.android.libraries.places:places than 3.5.0 is available: 5.1.1">
+        <fix-replace
+            description="Change to 5.1.1"
+            family="Update versions"
+            oldString="3.5.0"
+            replacement="5.1.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="84"
+            column="18"
+            startOffset="2717"
+            endLine="84"
+            endColumn="68"
+            endOffset="2767"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.datastore:datastore-preferences than 1.2.0 is available: 1.2.1">
+        <fix-replace
+            description="Change to 1.2.1"
+            family="Update versions"
+            oldString="1.2.0"
+            replacement="1.2.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="85"
+            column="18"
+            startOffset="2786"
+            endLine="85"
+            endColumn="66"
+            endOffset="2834"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.camera:camera-camera2 than 1.3.4 is available: 1.5.3">
+        <fix-replace
+            description="Change to 1.5.3"
+            family="Update versions"
+            oldString="1.3.4"
+            replacement="1.5.3"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="94"
+            column="18"
+            startOffset="3257"
+            endLine="94"
+            endColumn="56"
+            endOffset="3295"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.camera:camera-lifecycle than 1.3.4 is available: 1.5.3">
+        <fix-replace
+            description="Change to 1.5.3"
+            family="Update versions"
+            oldString="1.3.4"
+            replacement="1.5.3"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="95"
+            column="18"
+            startOffset="3314"
+            endLine="95"
+            endColumn="58"
+            endOffset="3354"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.camera:camera-view than 1.3.4 is available: 1.5.3">
+        <fix-replace
+            description="Change to 1.5.3"
+            family="Update versions"
+            oldString="1.3.4"
+            replacement="1.5.3"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="96"
+            column="18"
+            startOffset="3373"
+            endLine="96"
+            endColumn="53"
+            endOffset="3408"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of com.google.mediapipe:tasks-vision than 0.10.14 is available: 0.20230731">
+        <fix-replace
+            description="Change to 0.20230731"
+            family="Update versions"
+            oldString="0.10.14"
+            replacement="0.20230731"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="99"
+            column="18"
+            startOffset="3471"
+            endLine="99"
+            endColumn="61"
+            endOffset="3514"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.compose.ui:ui-tooling than 1.10.3 is available: 1.10.5">
+        <fix-replace
+            description="Change to 1.10.5"
+            family="Update versions"
+            oldString="1.10.3"
+            replacement="1.10.5"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="101"
+            column="23"
+            startOffset="3539"
+            endLine="101"
+            endColumn="62"
+            endOffset="3578"/>
+    </incident>
+
+    <incident
+        id="GradleDependency"
+        severity="warning"
+        message="A newer version of androidx.compose.ui:ui-test-manifest than 1.10.3 is available: 1.10.5">
+        <fix-replace
+            description="Change to 1.10.5"
+            family="Update versions"
+            oldString="1.10.3"
+            replacement="1.10.5"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="102"
+            column="23"
+            startOffset="3602"
+            endLine="102"
+            endColumn="68"
+            endOffset="3647"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of com.google.maps.android:maps-compose than 8.1.0 is available: 8.2.2">
+        <fix-replace
+            description="Change to 8.2.2"
+            family="Update versions"
+            oldString="8.1.0"
+            replacement="8.2.2"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="83"
+            column="18"
+            startOffset="2654"
+            endLine="83"
+            endColumn="62"
+            endOffset="2698"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of io.ktor:ktor-client-core than 2.3.13 is available: 3.4.1">
+        <fix-replace
+            description="Change to 3.4.1"
+            family="Update versions"
+            oldString="2.3.13"
+            replacement="3.4.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="87"
+            column="18"
+            startOffset="2903"
+            endLine="87"
+            endColumn="51"
+            endOffset="2936"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of io.ktor:ktor-client-okhttp than 2.3.13 is available: 3.4.1">
+        <fix-replace
+            description="Change to 3.4.1"
+            family="Update versions"
+            oldString="2.3.13"
+            replacement="3.4.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="88"
+            column="18"
+            startOffset="2955"
+            endLine="88"
+            endColumn="53"
+            endOffset="2990"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of io.ktor:ktor-client-content-negotiation than 2.3.13 is available: 3.4.1">
+        <fix-replace
+            description="Change to 3.4.1"
+            family="Update versions"
+            oldString="2.3.13"
+            replacement="3.4.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="89"
+            column="18"
+            startOffset="3009"
+            endLine="89"
+            endColumn="66"
+            endOffset="3057"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of io.ktor:ktor-serialization-kotlinx-json than 2.3.13 is available: 3.4.1">
+        <fix-replace
+            description="Change to 3.4.1"
+            family="Update versions"
+            oldString="2.3.13"
+            replacement="3.4.1"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="90"
+            column="18"
+            startOffset="3076"
+            endLine="90"
+            endColumn="66"
+            endOffset="3124"/>
+    </incident>
+
+    <incident
+        id="NewerVersionAvailable"
+        severity="warning"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-serialization-json than 1.7.3 is available: 1.10.0">
+        <fix-replace
+            description="Change to 1.10.0"
+            family="Update versions"
+            oldString="1.7.3"
+            replacement="1.10.0"
+            priority="0"/>
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="91"
+            column="18"
+            startOffset="3143"
+            endLine="91"
+            endColumn="74"
+            endOffset="3199"/>
+    </incident>
+
+    <incident
+        id="Aligned16KB"
+        severity="warning"
+        message="The native library `arm64-v8a/libmediapipe_tasks_vision_jni.so` (from `com.google.mediapipe:tasks-vision:0.10.14`) is not 16 KB aligned">
+        <location
+            file="${:app*projectDir}/build.gradle.kts"
+            line="99"
+            column="18"
+            startOffset="3471"
+            endLine="99"
+            endColumn="61"
+            endOffset="3514"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+                startOffset="57451"
+                endOffset="57465"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+            line="1607"
+            column="28"
+            startOffset="57451"
+            endLine="1607"
+            endColumn="42"
+            endOffset="57465"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/ProfileScreen.kt"
+                startOffset="8024"
+                endOffset="8038"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/ProfileScreen.kt"
+            line="229"
+            column="48"
+            startOffset="8024"
+            endLine="229"
+            endColumn="62"
+            endOffset="8038"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/RegisterUserScreen.kt"
+                startOffset="3061"
+                endOffset="3075"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/RegisterUserScreen.kt"
+            line="66"
+            column="26"
+            startOffset="3061"
+            endLine="66"
+            endColumn="40"
+            endOffset="3075"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/RegisterVolunteerScreen.kt"
+                startOffset="3253"
+                endOffset="3267"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/RegisterVolunteerScreen.kt"
+            line="71"
+            column="26"
+            startOffset="3253"
+            endLine="71"
+            endColumn="40"
+            endOffset="3267"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+                startOffset="6912"
+                endOffset="6926"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+            line="173"
+            column="42"
+            startOffset="6912"
+            endLine="173"
+            endColumn="56"
+            endOffset="6926"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+                startOffset="7461"
+                endOffset="7475"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+            line="182"
+            column="46"
+            startOffset="7461"
+            endLine="182"
+            endColumn="60"
+            endOffset="7475"/>
+    </incident>
+
+    <incident
+        id="AutoboxingStateCreation"
+        severity="informational"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`">
+        <fix-replace
+            description="Replace with mutableIntStateOf"
+            replacement="androidx.compose.runtime.mutableIntStateOf"
+            shortenNames="true"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+                startOffset="55477"
+                endOffset="55491"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageTranslatorScreen.kt"
+            line="1402"
+            column="30"
+            startOffset="55477"
+            endLine="1402"
+            endColumn="44"
+            endOffset="55491"/>
+    </incident>
+
+    <incident
+        id="UseOfNonLambdaOffsetOverload"
+        severity="warning"
+        message="State backed values should use the lambda overload of Modifier.offset">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/components/ToggleSwitch.kt"
+            line="59"
+            column="10"
+            startOffset="1976"
+            endLine="59"
+            endColumn="16"
+            endOffset="1982"/>
+    </incident>
+
+    <incident
+        id="IconLocation"
+        severity="warning"
+        message="Found bitmap drawable `res/drawable/athar_logo.png` in densityless folder">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*resDir*0}/drawable/athar_logo.png"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;google.navigation:q=$encodedDestination&amp;mode=w&quot;)"
+            replacement="&quot;google.navigation:q=$encodedDestination&amp;mode=w&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                startOffset="10097"
+                endOffset="10156"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+            line="302"
+            column="9"
+            startOffset="10097"
+            endLine="302"
+            endColumn="68"
+            endOffset="10156"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;https://www.google.com/maps/dir/?api=1&amp;destination=$encodedDestination&amp;travelmode=walking&quot;)"
+            replacement="&quot;https://www.google.com/maps/dir/?api=1&amp;destination=$encodedDestination&amp;travelmode=walking&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                startOffset="10370"
+                endOffset="10472"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+            line="309"
+            column="9"
+            startOffset="10370"
+            endLine="309"
+            endColumn="111"
+            endOffset="10472"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;smsto:${Uri.encode(phoneNumber)}&quot;)"
+            replacement="&quot;smsto:${Uri.encode(phoneNumber)}&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                startOffset="11294"
+                endOffset="11339"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+            line="330"
+            column="9"
+            startOffset="11294"
+            endLine="330"
+            endColumn="54"
+            endOffset="11339"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;tel:${Uri.encode(phoneNumber)}&quot;)"
+            replacement="&quot;tel:${Uri.encode(phoneNumber)}&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+                startOffset="12062"
+                endOffset="12105"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/AtharVolunteerDashboard.kt"
+            line="352"
+            column="9"
+            startOffset="12062"
+            endLine="352"
+            endColumn="52"
+            endOffset="12105"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(rawUri)"
+            replacement="rawUri.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/data/BackendApiClient.kt"
+                startOffset="94474"
+                endOffset="94491"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/data/BackendApiClient.kt"
+            line="2719"
+            column="29"
+            startOffset="94474"
+            endLine="2719"
+            endColumn="46"
+            endOffset="94491"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;mailto:$email&quot;)"
+            replacement="&quot;mailto:$email&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+                startOffset="17182"
+                endOffset="17208"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+            line="492"
+            column="45"
+            startOffset="17182"
+            endLine="492"
+            endColumn="71"
+            endOffset="17208"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;tel:$phoneNumber&quot;)"
+            replacement="&quot;tel:$phoneNumber&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+                startOffset="17428"
+                endOffset="17457"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/HelpSupportScreen.kt"
+            line="499"
+            column="43"
+            startOffset="17428"
+            endLine="499"
+            endColumn="72"
+            endOffset="17457"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&quot;google.navigation:q=$destinationParam&amp;mode=w&quot;)"
+            replacement="&quot;google.navigation:q=$destinationParam&amp;mode=w&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+                startOffset="87764"
+                endOffset="87821"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+            line="2567"
+            column="5"
+            startOffset="87764"
+            endLine="2567"
+            endColumn="62"
+            endOffset="87821"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX extension function `String.toUri` instead?">
+        <fix-replace
+            description="Replace with the toUri extension function"
+            family="Replace with the toUri extension function"
+            robot="true"
+            independent="true"
+            oldString="Uri.parse(&#xA;      &quot;https://www.google.com/maps/dir/?api=1&amp;destination=$destinationParam&amp;travelmode=walking&quot;&#xA;    )"
+            replacement="&quot;https://www.google.com/maps/dir/?api=1&amp;destination=$destinationParam&amp;travelmode=walking&quot;.toUri()"
+            reformat="value"
+            imports="androidx.core.net.toUri"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+                startOffset="88013"
+                endOffset="88125"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/MapScreen.kt"
+            line="2574"
+            column="5"
+            startOffset="88013"
+            endLine="2576"
+            endColumn="6"
+            endOffset="88125"/>
+    </incident>
+
+    <incident
+        id="UseKtx"
+        severity="warning"
+        message="Use the KTX function `createBitmap` instead?">
+        <fix-replace
+            description="Replace with the createBitmap function"
+            family="Replace with the createBitmap function"
+            robot="true"
+            independent="true"
+            oldString="Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)"
+            replacement="createBitmap(width, height)"
+            reformat="value"
+            imports="androidx.core.graphics.createBitmap"
+            priority="0">
+            <range
+                file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageRecognition.kt"
+                startOffset="5770"
+                endOffset="5829"/>
+        </fix-replace>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/com/athar/accessibilitymapping/ui/screens/SignLanguageRecognition.kt"
+            line="159"
+            column="16"
+            startOffset="5770"
+            endLine="159"
+            endColumn="75"
+            endOffset="5829"/>
+    </incident>
+
+</incidents>
