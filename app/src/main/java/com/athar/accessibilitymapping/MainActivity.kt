@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -189,6 +190,7 @@ private fun AppRoot() {
             onRegister = { authView = "register" }
           )
         } else if (authView == "register") {
+          BackHandler { authView = "login" }
           RoleSelectionScreen(
             onComplete = { session ->
               currentUserId = session.userId
@@ -211,6 +213,7 @@ private fun AppRoot() {
           )
         }
       } else {
+        BackHandler(enabled = currentTab != MainTab.Map) { currentTab = MainTab.Map }
         Column(modifier = Modifier.fillMaxSize()) {
           Box(modifier = Modifier.weight(1f)) {
             // MapScreen stays composed always so Google Map is never destroyed

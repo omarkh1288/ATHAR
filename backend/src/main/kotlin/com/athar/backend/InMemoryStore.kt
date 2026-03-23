@@ -1193,14 +1193,23 @@ internal class InMemoryStore(
     ServiceResult.Success(HelpRequestMessageDto(message.id, message.senderId, message.senderName, message.message, message.createdAtEpochSeconds))
   }
 
-  fun checkoutCard(userId: String): ServiceResult<CheckoutResponseDto> = synchronized(lock) {
+  fun checkoutCard(userId: String, requestId: String?, amountEgp: Double?): ServiceResult<CheckoutResponseDto> = synchronized(lock) {
+    val resolvedAmount = resolveCheckoutAmount(userId, requestId, amountEgp)
+    val resolvedRequestId = requestId ?: findLatestPendingRequestId(userId)
+    if (resolvedRequestId != null) {
+      val request = requestsById[resolvedRequestId]
+      if (request != null && request.status in setOf("accepted", "pending_payment")) {
+        request.status = "pending_payment"
+        accountDatabase.upsertHelpRequest(request.toPersistence())
+      }
+    }
     val paymentId = "pay-${UUID.randomUUID()}"
     val checkoutUrl = "https://checkout.paymob.com/confirm/$paymentId"
     val payment = PaymentRecord(
       id = paymentId,
-      requestId = null,
+      requestId = resolvedRequestId,
       userId = userId,
-      amount = 0.0,
+      amount = resolvedAmount,
       currency = "EGP",
       paymentMethod = PaymentMethod.CARD,
       status = "pending",
@@ -1213,14 +1222,23 @@ internal class InMemoryStore(
     ServiceResult.Success(CheckoutResponseDto(checkoutUrl, paymentId))
   }
 
-  fun checkoutWallet(userId: String): ServiceResult<CheckoutResponseDto> = synchronized(lock) {
+  fun checkoutWallet(userId: String, requestId: String?, amountEgp: Double?): ServiceResult<CheckoutResponseDto> = synchronized(lock) {
+    val resolvedAmount = resolveCheckoutAmount(userId, requestId, amountEgp)
+    val resolvedRequestId = requestId ?: findLatestPendingRequestId(userId)
+    if (resolvedRequestId != null) {
+      val request = requestsById[resolvedRequestId]
+      if (request != null && request.status in setOf("accepted", "pending_payment")) {
+        request.status = "pending_payment"
+        accountDatabase.upsertHelpRequest(request.toPersistence())
+      }
+    }
     val paymentId = "pay-${UUID.randomUUID()}"
     val checkoutUrl = "https://checkout.paymob.com/wallet/$paymentId"
     val payment = PaymentRecord(
       id = paymentId,
-      requestId = null,
+      requestId = resolvedRequestId,
       userId = userId,
-      amount = 0.0,
+      amount = resolvedAmount,
       currency = "EGP",
       paymentMethod = PaymentMethod.WALLET,
       status = "pending",
@@ -1231,6 +1249,25 @@ internal class InMemoryStore(
     paymentsById[paymentId] = payment
     accountDatabase.upsertPayment(payment.toPersistence())
     ServiceResult.Success(CheckoutResponseDto(checkoutUrl, paymentId))
+  }
+
+  private fun resolveCheckoutAmount(userId: String, requestId: String?, amountEgp: Double?): Double {
+    if (amountEgp != null && amountEgp > 0.0) return amountEgp
+    if (requestId != null) {
+      val request = requestsById[requestId]
+      if (request != null) return request.serviceFee
+    }
+    val latestRequest = requestsById.values
+      .filter { it.userId == userId && it.status in setOf("accepted", "pending_payment") }
+      .maxByOrNull { it.createdAtEpochSeconds }
+    return latestRequest?.serviceFee ?: 0.0
+  }
+
+  private fun findLatestPendingRequestId(userId: String): String? {
+    return requestsById.values
+      .filter { it.userId == userId && it.status in setOf("accepted", "pending_payment") }
+      .maxByOrNull { it.createdAtEpochSeconds }
+      ?.id
   }
 
   fun getPaymentStatus(paymentId: String): ServiceResult<PaymentStatusDto> = synchronized(lock) {
@@ -1608,7 +1645,8 @@ internal class InMemoryStore(
       volunteerName = volunteerName,
       description = description,
       hours = hours,
-      price_per_hour = pricePerHour
+      price_per_hour = pricePerHour,
+      payment_method = paymentMethod.name.lowercase()
     )
   }
 
@@ -1625,7 +1663,8 @@ internal class InMemoryStore(
       requestTime = relativeRequestTime(),
       status = status,
       hours = hours,
-      price_per_hour = pricePerHour
+      price_per_hour = pricePerHour,
+      payment_method = paymentMethod.name.lowercase()
     )
   }
 

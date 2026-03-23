@@ -1,5 +1,9 @@
 package com.athar.accessibilitymapping.ui.request
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -17,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,7 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ATHAR COLOR PALETTE
@@ -89,6 +99,19 @@ fun AtharHelpRequestForm(
     var pricePerHour by remember { mutableIntStateOf(50) }
     var showHelpTypeDropdown by remember { mutableStateOf(false) }
 
+    // Search suggestions state
+    var locationSuggestions by remember { mutableStateOf(listOf<String>()) }
+    var destinationSuggestions by remember { mutableStateOf(listOf<String>()) }
+    var isSearchingLocation by remember { mutableStateOf(false) }
+    var isSearchingDestination by remember { mutableStateOf(false) }
+    var showLocationSuggestions by remember { mutableStateOf(false) }
+    var showDestinationSuggestions by remember { mutableStateOf(false) }
+    var isLocating by remember { mutableStateOf(false) }
+    var locationError by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val priceSteps = listOf(50, 75, 100, 125, 150, 175, 200)
     val maxHours = 8
     val total by remember { derivedStateOf { pricePerHour * hours } }
@@ -103,6 +126,60 @@ fun AtharHelpRequestForm(
     )
 
     val canSubmit = location.isNotBlank() && destination.isNotBlank() && helpType.isNotBlank()
+
+    // Debounced search for location field
+    LaunchedEffect(location) {
+        if (location.length < 2 || showLocationSuggestions && locationSuggestions.any { it == location }) return@LaunchedEffect
+        delay(350)
+        isSearchingLocation = true
+        locationSuggestions = fetchHelpRequestSuggestions(location)
+        isSearchingLocation = false
+        if (locationSuggestions.isNotEmpty()) showLocationSuggestions = true
+    }
+
+    // Debounced search for destination field
+    LaunchedEffect(destination) {
+        if (destination.length < 2 || showDestinationSuggestions && destinationSuggestions.any { it == destination }) return@LaunchedEffect
+        delay(350)
+        isSearchingDestination = true
+        destinationSuggestions = fetchHelpRequestSuggestions(destination)
+        isSearchingDestination = false
+        if (destinationSuggestions.isNotEmpty()) showDestinationSuggestions = true
+    }
+
+    fun useCurrentLocation(forDestination: Boolean = false) {
+        isLocating = true
+        locationError = ""
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            locationError = "Location permission not granted."
+            isLocating = false
+            return
+        }
+        LocationServices.getFusedLocationProviderClient(context).lastLocation
+            .addOnSuccessListener { loc ->
+                isLocating = false
+                if (loc == null) {
+                    locationError = "Unable to get location. Enable GPS and try again."
+                    return@addOnSuccessListener
+                }
+                coroutineScope.launch {
+                    val address = reverseGeocodeForForm(context, loc.latitude, loc.longitude)
+                    if (forDestination) {
+                        destination = address
+                        showDestinationSuggestions = false
+                    } else {
+                        location = address
+                        showLocationSuggestions = false
+                    }
+                }
+            }
+            .addOnFailureListener {
+                isLocating = false
+                locationError = "Unable to get location. Try again."
+            }
+    }
 
     LaunchedEffect(submitted) {
         if (submitted) {
@@ -151,8 +228,18 @@ fun AtharHelpRequestForm(
                     isSubmitting = isSubmitting,
                     errorMessage = errorMessage,
                     showHelpTypeDropdown = showHelpTypeDropdown,
-                    onLocationChange = { location = it },
-                    onDestinationChange = { destination = it },
+                    locationSuggestions = locationSuggestions,
+                    destinationSuggestions = destinationSuggestions,
+                    isSearchingLocation = isSearchingLocation,
+                    isSearchingDestination = isSearchingDestination,
+                    showLocationSuggestions = showLocationSuggestions,
+                    showDestinationSuggestions = showDestinationSuggestions,
+                    isLocating = isLocating,
+                    locationError = locationError,
+                    onLocationChange = { location = it; showLocationSuggestions = false },
+                    onLocationQueryChange = { location = it },
+                    onDestinationChange = { destination = it; showDestinationSuggestions = false },
+                    onDestinationQueryChange = { destination = it },
                     onHelpTypeChange = { helpType = it; showHelpTypeDropdown = false },
                     onUrgencyChange = { urgency = it },
                     onPaymentMethodChange = { paymentMethod = it },
@@ -160,6 +247,8 @@ fun AtharHelpRequestForm(
                     onHoursChange = { hours = it },
                     onPriceChange = { pricePerHour = it },
                     onToggleDropdown = { showHelpTypeDropdown = !showHelpTypeDropdown },
+                    onDismissLocationSuggestions = { showLocationSuggestions = false },
+                    onDismissDestinationSuggestions = { showDestinationSuggestions = false },
                     onSubmit = {
                         if (canSubmit && !isSubmitting) {
                             onSubmit(
@@ -178,7 +267,8 @@ fun AtharHelpRequestForm(
                         }
                     },
                     onClose = onClose,
-                    onUseCurrentLocation = { location = "Central Mall, Main Entrance" },
+                    onUseCurrentLocationForFrom = { useCurrentLocation(forDestination = false) },
+                    onUseCurrentLocationForTo = { useCurrentLocation(forDestination = true) },
                 )
             }
         }
@@ -209,8 +299,18 @@ private fun RequestFormScreen(
     isSubmitting: Boolean,
     errorMessage: String?,
     showHelpTypeDropdown: Boolean,
+    locationSuggestions: List<String>,
+    destinationSuggestions: List<String>,
+    isSearchingLocation: Boolean,
+    isSearchingDestination: Boolean,
+    showLocationSuggestions: Boolean,
+    showDestinationSuggestions: Boolean,
+    isLocating: Boolean,
+    locationError: String,
     onLocationChange: (String) -> Unit,
+    onLocationQueryChange: (String) -> Unit,
     onDestinationChange: (String) -> Unit,
+    onDestinationQueryChange: (String) -> Unit,
     onHelpTypeChange: (String) -> Unit,
     onUrgencyChange: (String) -> Unit,
     onPaymentMethodChange: (String) -> Unit,
@@ -218,9 +318,12 @@ private fun RequestFormScreen(
     onHoursChange: (Int) -> Unit,
     onPriceChange: (Int) -> Unit,
     onToggleDropdown: () -> Unit,
+    onDismissLocationSuggestions: () -> Unit,
+    onDismissDestinationSuggestions: () -> Unit,
     onSubmit: () -> Unit,
     onClose: () -> Unit,
-    onUseCurrentLocation: () -> Unit,
+    onUseCurrentLocationForFrom: () -> Unit,
+    onUseCurrentLocationForTo: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
 
@@ -308,28 +411,72 @@ private fun RequestFormScreen(
                     label = "Your Current Location *",
                     icon = Icons.Filled.LocationOn,
                 ) {
-                    OutlinedTextField(
-                        value = location,
-                        onValueChange = onLocationChange,
-                        placeholder = { Text("e.g., Central Mall entrance", color = AtharColors.TextLight, fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors(),
-                        leadingIcon = {
-                            Icon(Icons.Filled.LocationOn, null, tint = AtharColors.TextLight, modifier = Modifier.size(20.dp))
-                        },
-                    )
+                    Box {
+                        OutlinedTextField(
+                            value = location,
+                            onValueChange = onLocationQueryChange,
+                            placeholder = { Text("e.g., Central Mall entrance", color = AtharColors.TextLight, fontSize = 14.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors(),
+                            leadingIcon = {
+                                Icon(Icons.Filled.LocationOn, null, tint = AtharColors.TextLight, modifier = Modifier.size(20.dp))
+                            },
+                            trailingIcon = {
+                                if (isSearchingLocation) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AtharColors.Secondary)
+                                } else if (location.isNotEmpty()) {
+                                    IconButton(onClick = { onLocationQueryChange(""); onDismissLocationSuggestions() }) {
+                                        Icon(Icons.Filled.Close, null, tint = AtharColors.TextLight, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                        )
+                        if (showLocationSuggestions && locationSuggestions.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 8.dp,
+                                color = AtharColors.White,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AtharColors.Gray200),
+                            ) {
+                                Column {
+                                    locationSuggestions.forEachIndexed { index, suggestion ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onLocationChange(suggestion) }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            Icon(Icons.Filled.LocationOn, null, tint = AtharColors.AccentDark, modifier = Modifier.size(16.dp))
+                                            Text(suggestion, fontSize = 14.sp, color = AtharColors.Secondary)
+                                        }
+                                        if (index < locationSuggestions.lastIndex) {
+                                            HorizontalDivider(color = AtharColors.Gray200, thickness = 1.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     TextButton(
-                        onClick = onUseCurrentLocation,
+                        onClick = onUseCurrentLocationForFrom,
+                        enabled = !isLocating,
                         contentPadding = PaddingValues(horizontal = 0.dp),
                     ) {
-                        Text(
-                            "📍 Use my current location",
-                            color = AtharColors.AccentDark,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
+                        if (isLocating) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AtharColors.AccentDark)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Getting location…", color = AtharColors.AccentDark, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        } else {
+                            Text("📍 Use my current location", color = AtharColors.AccentDark, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    if (locationError.isNotBlank()) {
+                        Text(locationError, color = AtharColors.Error, fontSize = 12.sp)
                     }
                 }
 
@@ -338,18 +485,64 @@ private fun RequestFormScreen(
                     label = "Where do you need to go? *",
                     icon = Icons.Filled.Navigation,
                 ) {
-                    OutlinedTextField(
-                        value = destination,
-                        onValueChange = onDestinationChange,
-                        placeholder = { Text("e.g., Central Mall - Level 2, Store 45", color = AtharColors.TextLight, fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors(),
-                        leadingIcon = {
-                            Icon(Icons.Filled.Navigation, null, tint = AtharColors.TextLight, modifier = Modifier.size(20.dp))
-                        },
-                    )
+                    Box {
+                        OutlinedTextField(
+                            value = destination,
+                            onValueChange = onDestinationQueryChange,
+                            placeholder = { Text("e.g., Central Mall - Level 2, Store 45", color = AtharColors.TextLight, fontSize = 14.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors(),
+                            leadingIcon = {
+                                Icon(Icons.Filled.Navigation, null, tint = AtharColors.TextLight, modifier = Modifier.size(20.dp))
+                            },
+                            trailingIcon = {
+                                if (isSearchingDestination) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AtharColors.Secondary)
+                                } else if (destination.isNotEmpty()) {
+                                    IconButton(onClick = { onDestinationQueryChange(""); onDismissDestinationSuggestions() }) {
+                                        Icon(Icons.Filled.Close, null, tint = AtharColors.TextLight, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                        )
+                        if (showDestinationSuggestions && destinationSuggestions.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                shadowElevation = 8.dp,
+                                color = AtharColors.White,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AtharColors.Gray200),
+                            ) {
+                                Column {
+                                    destinationSuggestions.forEachIndexed { index, suggestion ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onDestinationChange(suggestion) }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            Icon(Icons.Filled.LocationOn, null, tint = AtharColors.AccentDark, modifier = Modifier.size(16.dp))
+                                            Text(suggestion, fontSize = 14.sp, color = AtharColors.Secondary)
+                                        }
+                                        if (index < destinationSuggestions.lastIndex) {
+                                            HorizontalDivider(color = AtharColors.Gray200, thickness = 1.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = onUseCurrentLocationForTo,
+                        enabled = !isLocating,
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                    ) {
+                        Text("📍 Use my current location", color = AtharColors.AccentDark, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
 
                 // ── Help Type ──
@@ -1035,6 +1228,98 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = AtharColors.Gray100,
     focusedContainerColor = AtharColors.White,
 )
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOCATION SEARCH HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+private suspend fun fetchHelpRequestSuggestions(query: String): List<String> = withContext(Dispatchers.IO) {
+    if (query.length < 2) return@withContext emptyList()
+    try {
+        val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "https://nominatim.openstreetmap.org/search?" +
+            "q=$encodedQuery&format=json&limit=6&countrycodes=eg&addressdetails=1&accept-language=en"
+        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        connection.setRequestProperty("User-Agent", "Athar-Accessibility-App/1.0")
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        if (connection.responseCode != 200) return@withContext emptyList()
+        val response = connection.inputStream.bufferedReader().use { it.readText() }
+        parseNominatimNames(response)
+    } catch (e: Exception) {
+        Log.e("HelpRequestForm", "Search error: ${e.message}")
+        emptyList()
+    }
+}
+
+private fun parseNominatimNames(json: String): List<String> {
+    return try {
+        val results = mutableListOf<String>()
+        val items = json.trim().removeSurrounding("[", "]").split("},{")
+        for (item in items) {
+            try {
+                val displayName = extractFormJsonField(item, "display_name") ?: continue
+                val name = extractFormJsonField(item, "name")
+                val parts = displayName.split(", ")
+                val label = if (!name.isNullOrBlank()) {
+                    val subtitle = parts.drop(1).take(2).joinToString(", ")
+                    if (subtitle.isNotBlank()) "$name, $subtitle" else name
+                } else {
+                    parts.take(3).joinToString(", ")
+                }
+                if (label.isNotBlank()) results.add(label)
+            } catch (_: Exception) { continue }
+        }
+        results.distinct().take(6)
+    } catch (e: Exception) {
+        Log.e("HelpRequestForm", "Parse error: ${e.message}")
+        emptyList()
+    }
+}
+
+private fun extractFormJsonField(json: String, key: String): String? {
+    val regex = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"")
+    return regex.find(json)?.groupValues?.get(1)
+}
+
+private suspend fun reverseGeocodeForForm(
+    context: android.content.Context,
+    lat: Double,
+    lng: Double
+): String = withContext(Dispatchers.IO) {
+    try {
+        val url = "https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=en"
+        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        connection.setRequestProperty("User-Agent", "Athar-Accessibility-App/1.0")
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        if (connection.responseCode == 200) {
+            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val name = extractFormJsonField(response, "name")
+            val displayName = extractFormJsonField(response, "display_name")
+            if (!name.isNullOrBlank()) return@withContext name
+            if (!displayName.isNullOrBlank()) return@withContext displayName.split(",").take(2).joinToString(",").trim()
+        }
+    } catch (e: Exception) {
+        Log.e("HelpRequestForm", "Reverse geocode error: ${e.message}")
+    }
+    try {
+        if (Geocoder.isPresent()) {
+            @Suppress("DEPRECATION")
+            val addresses = Geocoder(context, java.util.Locale.getDefault()).getFromLocation(lat, lng, 1)
+            val addr = addresses?.firstOrNull()
+            if (addr != null) {
+                return@withContext addr.featureName?.takeIf { it.isNotBlank() }
+                    ?: addr.locality?.takeIf { it.isNotBlank() }
+                    ?: addr.getAddressLine(0)?.takeIf { it.isNotBlank() }
+                    ?: "Current Location"
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("HelpRequestForm", "Geocoder error: ${e.message}")
+    }
+    "Current Location (${String.format("%.4f", lat)}, ${String.format("%.4f", lng)})"
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PREVIEW

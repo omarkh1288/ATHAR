@@ -232,7 +232,8 @@ data class ApiVolunteerRequest(
   val description: String,
   val hours: Int = 1,
   val pricePerHour: Int = 50,
-  val totalAmountEgp: Int? = null
+  val totalAmountEgp: Int? = null,
+  val paymentMethod: String = "cash"
 )
 
 @Serializable
@@ -1163,7 +1164,8 @@ class BackendApiClient(private val appContext: Context? = null) {
     val normalizedAmount = amountEgp.coerceAtLeast(1)
     val bodyContent = linkedMapOf<String, JsonElement>(
       "payment_method" to JsonPrimitive(paymentMethod.lowercase(Locale.getDefault())),
-      "amount_egp" to JsonPrimitive(normalizedAmount)
+      "amount_egp" to JsonPrimitive(normalizedAmount),
+      "currency" to JsonPrimitive("EGP")
     )
     customer?.let {
       bodyContent["first_name"] = JsonPrimitive(it.firstName)
@@ -1290,7 +1292,8 @@ class BackendApiClient(private val appContext: Context? = null) {
     val body = linkedMapOf<String, JsonElement>(
       "request_id" to JsonPrimitive(requestId),
       "help_request_id" to JsonPrimitive(requestId),
-      "amount_egp" to JsonPrimitive(normalizedAmount)
+      "amount_egp" to JsonPrimitive(normalizedAmount),
+      "currency" to JsonPrimitive("EGP")
     )
     customer?.let {
       body["first_name"] = JsonPrimitive(it.firstName)
@@ -1897,7 +1900,8 @@ class BackendApiClient(private val appContext: Context? = null) {
       ) ?: "",
       hours = pricing.hours,
       pricePerHour = pricing.pricePerHour,
-      totalAmountEgp = pricing.totalAmountEgp
+      totalAmountEgp = pricing.totalAmountEgp,
+      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash"
     )
   }
 
@@ -3060,7 +3064,8 @@ fun ApiVolunteerRequest.toDomainVolunteerRequest(): VolunteerRequest {
     description = description,
     hours = hours,
     pricePerHour = pricePerHour,
-    totalAmountEgp = totalAmountEgp
+    totalAmountEgp = totalAmountEgp,
+    paymentMethod = paymentMethod
   )
 }
 

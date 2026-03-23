@@ -1,5 +1,6 @@
 package com.athar.accessibilitymapping.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -130,6 +131,11 @@ fun RequestsScreen(
   var showPaymentFlow by remember { mutableStateOf(false) }
   var showReviewFlow by remember { mutableStateOf(false) }
   var activeRequestForFlow by remember { mutableStateOf<VolunteerRequest?>(null) }
+
+  BackHandler(enabled = showPaymentFlow || showReviewFlow) {
+    showPaymentFlow = false
+    showReviewFlow = false
+  }
 
   val pendingCount = requests.count { normalizeRequestStatus(it.status) == "pending" }
   val activeCount = requests.count { isActiveRequestStatus(it.status) }
@@ -498,7 +504,7 @@ fun RequestsScreen(
                     )
                   }
 
-                  if (requiresPayment(request.status)) {
+                  if (requiresPayment(request.status) && request.paymentMethod.lowercase() != "cash") {
                     val contactInteraction = remember(request.id + "_contact") { MutableInteractionSource() }
                     val isContactHovered by contactInteraction.collectIsHoveredAsState()
                     Spacer(modifier = Modifier.height(8.dp))
@@ -697,6 +703,7 @@ fun RequestsScreen(
         requestsViewModel.refreshNow()
         result
       },
+      skipNotification = true,
       onComplete = { showPaymentFlow = false },
       onTrackVolunteer = { showPaymentFlow = false },
       onBackToHome = { showPaymentFlow = false },

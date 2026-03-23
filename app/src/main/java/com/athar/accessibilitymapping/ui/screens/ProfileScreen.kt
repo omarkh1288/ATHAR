@@ -1,6 +1,7 @@
 package com.athar.accessibilitymapping.ui.screens
 
 import android.view.MotionEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -153,6 +154,10 @@ fun ProfileScreen(
   val profile by profileViewModel.profile.collectAsState()
   var activeScreen by remember { mutableStateOf("profile") }
   var showLogoutDialog by remember { mutableStateOf(false) }
+
+  BackHandler(enabled = activeScreen != "profile") {
+    activeScreen = if (activeScreen == "changePassword") "account" else "profile"
+  }
 
   if (activeScreen == "account") {
     AccountSettingsScreen(

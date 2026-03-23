@@ -89,8 +89,13 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import android.location.Geocoder
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 object AtharColors {
   val Secondary = Color(0xFF1F3C5B)
@@ -201,10 +206,9 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   val context = LocalContext.current
   val repository = remember(context) { AtharRepository(context) }
   val coroutineScope = rememberCoroutineScope()
+  var suggestions by remember { mutableStateOf(listOf<LocationSuggestion>()) }
+  var isSearching by remember { mutableStateOf(false) }
   val canSubmit = selectedLocation.isNotEmpty() && rating > 0 && selectedGovernorate != null && !isSubmitting
-  val suggestions = mockSuggestions.filter {
-    searchQuery.isNotEmpty() && it.name.lowercase().contains(searchQuery.lowercase())
-  }
   val mapLatLng = remember(mapCenter) { LatLng(mapCenter.first, mapCenter.second) }
   val markerState = remember { MarkerState(position = mapLatLng) }
   val cameraPositionState = rememberCameraPositionState {
@@ -218,6 +222,19 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   LaunchedEffect(mapLatLng) {
     markerState.position = mapLatLng
     cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(mapLatLng, 14f))
+  }
+
+  LaunchedEffect(searchQuery) {
+    if (searchQuery.length < 2 || searchQuery == selectedLocation) {
+      if (searchQuery.isEmpty()) suggestions = emptyList()
+      return@LaunchedEffect
+    }
+    delay(350)
+    isSearching = true
+    val results = fetchPlaceSuggestions(searchQuery, mapLatLng)
+    suggestions = results
+    isSearching = false
+    showSuggestions = results.isNotEmpty()
   }
 
   val locationCallback = remember {
@@ -464,12 +481,19 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 )
               },
               trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
+                if (isSearching) {
+                  androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = AtharColors.Secondary
+                  )
+                } else if (searchQuery.isNotEmpty()) {
                   IconButton(
                     onClick = {
                       searchQuery = ""
                       selectedLocation = ""
                       showSuggestions = false
+                      suggestions = emptyList()
                     }
                   ) {
                     Icon(
@@ -581,11 +605,13 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 myLocationButtonEnabled = hasFineLocationPermission
               ),
               onMapClick = { latLng ->
-                if (isPinning) {
-                  mapCenter = Pair(latLng.latitude, latLng.longitude)
-                  selectedLocation = "Pinned Location"
-                  searchQuery = "Pinned Location"
-                  showSuggestions = false
+                mapCenter = Pair(latLng.latitude, latLng.longitude)
+                showSuggestions = false
+                isPinning = false
+                coroutineScope.launch {
+                  val address = reverseGeocode(context, latLng.latitude, latLng.longitude)
+                  selectedLocation = address
+                  searchQuery = address
                 }
               }
             ) {
@@ -867,4 +893,126 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   }
 }
 
+private suspend fun fetchPlaceSuggestions(
+  query: String,
+  reference: LatLng
+): List<LocationSuggestion> = withContext(Dispatchers.IO) {
+  try {
+    val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+    val url = "https://nominatim.openstreetmap.org/search?" +
+      "q=$encodedQuery&" +
+      "format=json&" +
+      "limit=8&" +
+      "countrycodes=eg&" +
+      "addressdetails=1&" +
+      "accept-language=en"
 
+    val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+    connection.setRequestProperty("User-Agent", "Athar-Accessibility-App/1.0")
+    connection.connectTimeout = 5000
+    connection.readTimeout = 5000
+
+    if (connection.responseCode != 200) {
+      Log.e("AddPlaceReport", "Nominatim API returned ${connection.responseCode}")
+      return@withContext emptyList()
+    }
+
+    val response = connection.inputStream.bufferedReader().use { it.readText() }
+    parseNominatimToSuggestions(response, reference)
+  } catch (e: Exception) {
+    Log.e("AddPlaceReport", "Nominatim API error: ${e.message}", e)
+    emptyList()
+  }
+}
+
+private fun parseNominatimToSuggestions(json: String, reference: LatLng): List<LocationSuggestion> {
+  try {
+    val results = mutableListOf<LocationSuggestion>()
+    val items = json.trim().removeSurrounding("[", "]").split("},{")
+
+    for (item in items) {
+      try {
+        val lat = extractJsonField(item, "lat")?.toDoubleOrNull() ?: continue
+        val lon = extractJsonField(item, "lon")?.toDoubleOrNull() ?: continue
+        val displayName = extractJsonField(item, "display_name") ?: continue
+        val name = extractJsonField(item, "name")
+          ?: displayName.split(",").firstOrNull()?.trim()
+          ?: continue
+
+        val parts = displayName.split(", ")
+        val subtitle = if (parts.size > 1) parts.drop(1).take(2).joinToString(", ") else ""
+        val label = if (subtitle.isNotBlank()) "$name, $subtitle" else name
+
+        results.add(LocationSuggestion(label, lat, lon))
+      } catch (_: Exception) {
+        continue
+      }
+    }
+
+    return results
+      .sortedBy { placeDistanceMeters(reference, LatLng(it.lat, it.lng)) }
+      .distinctBy { it.name }
+  } catch (e: Exception) {
+    Log.e("AddPlaceReport", "Failed to parse Nominatim response: ${e.message}")
+    return emptyList()
+  }
+}
+
+private fun extractJsonField(json: String, key: String): String? {
+  val regex = Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"")
+  return regex.find(json)?.groupValues?.get(1)
+}
+
+private fun placeDistanceMeters(from: LatLng, to: LatLng): Float {
+  val result = FloatArray(1)
+  android.location.Location.distanceBetween(
+    from.latitude, from.longitude,
+    to.latitude, to.longitude,
+    result
+  )
+  return result[0]
+}
+
+private suspend fun reverseGeocode(
+  context: android.content.Context,
+  lat: Double,
+  lng: Double
+): String = withContext(Dispatchers.IO) {
+  try {
+    // Try Nominatim reverse geocoding first
+    val url = "https://nominatim.openstreetmap.org/reverse?" +
+      "lat=$lat&lon=$lng&format=json&accept-language=en"
+    val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+    connection.setRequestProperty("User-Agent", "Athar-Accessibility-App/1.0")
+    connection.connectTimeout = 5000
+    connection.readTimeout = 5000
+    if (connection.responseCode == 200) {
+      val response = connection.inputStream.bufferedReader().use { it.readText() }
+      val name = extractJsonField(response, "name")
+      val displayName = extractJsonField(response, "display_name")
+      if (!name.isNullOrBlank()) return@withContext name
+      if (!displayName.isNullOrBlank()) {
+        return@withContext displayName.split(",").take(2).joinToString(",").trim()
+      }
+    }
+  } catch (e: Exception) {
+    Log.e("AddPlaceReport", "Nominatim reverse geocode failed: ${e.message}")
+  }
+  // Fallback to Android Geocoder
+  try {
+    if (Geocoder.isPresent()) {
+      @Suppress("DEPRECATION")
+      val addresses = Geocoder(context, java.util.Locale.getDefault()).getFromLocation(lat, lng, 1)
+      val address = addresses?.firstOrNull()
+      if (address != null) {
+        val featureName = address.featureName?.takeIf { it.isNotBlank() }
+        val locality = address.locality?.takeIf { it.isNotBlank() }
+        val line = address.getAddressLine(0)?.takeIf { it.isNotBlank() }
+        return@withContext featureName ?: locality ?: line ?: "Pinned Location"
+      }
+    }
+  } catch (e: Exception) {
+    Log.e("AddPlaceReport", "Geocoder reverse failed: ${e.message}")
+  }
+  "Pinned Location (${String.format("%.4f", lat)}, ${String.format("%.4f", lng)})"
+}

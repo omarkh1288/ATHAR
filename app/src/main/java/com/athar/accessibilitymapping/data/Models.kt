@@ -51,7 +51,8 @@ data class VolunteerRequest(
   val description: String,
   val hours: Int = 1,
   val pricePerHour: Int = 50,
-  val totalAmountEgp: Int? = null
+  val totalAmountEgp: Int? = null,
+  val paymentMethod: String = "cash"
 )
 
 data class UserProfile(

@@ -186,7 +186,8 @@ data class VolunteerRequestDto(
   val volunteerName: String? = null,
   val description: String,
   val hours: Int = 1,
-  val price_per_hour: Int = 50
+  val price_per_hour: Int = 50,
+  val payment_method: String = "cash"
 )
 
 @Serializable
@@ -202,7 +203,8 @@ data class AssistanceRequestDto(
   val requestTime: String,
   val status: String,
   val hours: Int = 1,
-  val price_per_hour: Int = 50
+  val price_per_hour: Int = 50,
+  val payment_method: String = "cash"
 )
 
 @Serializable

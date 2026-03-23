@@ -10,5 +10,5 @@ public final class BuildConfig {
   public static final int VERSION_CODE = 1;
   public static final String VERSION_NAME = "1.0.0";
   // Field from default config.
-  public static final String BACKEND_BASE_URL = "https://dentists-threatening-direction-antivirus.trycloudflare.com/";
+  public static final String BACKEND_BASE_URL = "https://collapse-noon-improvement-wise.trycloudflare.com/";
 }

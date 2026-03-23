@@ -133,10 +133,11 @@ fun AtharPaymentFlow(
     onTrackVolunteer: () -> Unit,
     onBackToHome: () -> Unit,
     onClose: () -> Unit,
+    skipNotification: Boolean = false,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
-    var step by remember { mutableStateOf(PaymentStep.NOTIFICATION) }
+    var step by remember { mutableStateOf(if (skipNotification) PaymentStep.PAYMENT else PaymentStep.NOTIFICATION) }
     var selectedPaymentLabel by remember { mutableStateOf("Paymob") }
     var paymentMessage by remember { mutableStateOf<String?>(null) }
     var paymentError by remember { mutableStateOf<String?>(null) }

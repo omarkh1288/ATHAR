@@ -339,12 +339,18 @@ fun Application.module() {
         route("/payments") {
           post("/card/checkout") {
             val principal = call.currentPrincipal() ?: return@post call.respondUnauthorized()
-            call.respondResult(store.checkoutCard(principal.userId))
+            val body = call.receiveOrNull<JsonObject>()
+            val requestId = body.readString("request_id", "help_request_id", "requestId")
+            val amountEgp = body?.let { it.readDouble("amount_egp", "amount", "amountEgp") }
+            call.respondResult(store.checkoutCard(principal.userId, requestId, amountEgp))
           }
 
           post("/wallet/checkout") {
             val principal = call.currentPrincipal() ?: return@post call.respondUnauthorized()
-            call.respondResult(store.checkoutWallet(principal.userId))
+            val body = call.receiveOrNull<JsonObject>()
+            val requestId = body.readString("request_id", "help_request_id", "requestId")
+            val amountEgp = body?.let { it.readDouble("amount_egp", "amount", "amountEgp") }
+            call.respondResult(store.checkoutWallet(principal.userId, requestId, amountEgp))
           }
 
           get("/{id}") {
