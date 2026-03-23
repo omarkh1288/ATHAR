@@ -717,11 +717,11 @@ private fun RequestFormScreen(
                             fontSize = 14.sp,
                         )
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             PaymentMethodOption(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
                                 label = "Pay in Cash",
                                 caption = "Auto confirmed after volunteer accepts",
                                 icon = Icons.Filled.MonetizationOn,
@@ -729,7 +729,7 @@ private fun RequestFormScreen(
                                 onClick = { onPaymentMethodChange("cash") },
                             )
                             PaymentMethodOption(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
                                 label = "Visa",
                                 caption = "Opens Paymob after volunteer accepts",
                                 icon = Icons.Filled.CreditCard,
@@ -1132,11 +1132,11 @@ private fun PaymentMethodOption(
             .clickable(onClick = onClick)
             .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .clip(CircleShape)
                 .background(if (selected) AtharColors.Accent else AtharColors.Gray100),
             contentAlignment = Alignment.Center,
@@ -1145,16 +1145,18 @@ private fun PaymentMethodOption(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (selected) AtharColors.White else AtharColors.Secondary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = label,
             color = AtharColors.Secondary,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
             textAlign = TextAlign.Center,
         )
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = caption,
             color = AtharColors.TextLight,

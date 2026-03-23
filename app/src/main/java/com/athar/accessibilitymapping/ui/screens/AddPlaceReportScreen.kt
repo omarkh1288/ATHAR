@@ -36,7 +36,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
@@ -53,6 +55,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -197,6 +202,7 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   var selectedLocation by remember { mutableStateOf("") }
   var isLocating by remember { mutableStateOf(false) }
   var isPinning by remember { mutableStateOf(false) }
+  var showFullScreenMap by remember { mutableStateOf(false) }
   var locationError by remember { mutableStateOf("") }
   var submitted by remember { mutableStateOf(false) }
   var selectedGovernorate by remember { mutableStateOf<Governorate?>(null) }
@@ -368,6 +374,98 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
       }
     }
 
+    // Fullscreen map dialog for pin location
+    if (showFullScreenMap) {
+      Dialog(
+        onDismissRequest = {
+          showFullScreenMap = false
+          isPinning = false
+        },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+      ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+          val fullScreenCameraState = rememberCameraPositionState {
+            position = CameraPosition.fromLatLngZoom(
+              LatLng(mapCenter.first, mapCenter.second), 14f
+            )
+          }
+
+          GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = fullScreenCameraState,
+            properties = MapProperties(
+              isMyLocationEnabled = hasFineLocationPermission
+            ),
+            uiSettings = MapUiSettings(
+              zoomControlsEnabled = true,
+              myLocationButtonEnabled = hasFineLocationPermission
+            ),
+            onMapClick = { latLng ->
+              mapCenter = Pair(latLng.latitude, latLng.longitude)
+              showSuggestions = false
+              isPinning = false
+              showFullScreenMap = false
+              coroutineScope.launch {
+                val address = reverseGeocode(context, latLng.latitude, latLng.longitude)
+                selectedLocation = address
+                searchQuery = address
+              }
+            }
+          ) {
+            Marker(
+              state = MarkerState(position = LatLng(mapCenter.first, mapCenter.second)),
+              title = if (selectedLocation.isNotBlank()) selectedLocation else "Selected Location"
+            )
+          }
+
+          // Top bar with close button and instructions
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .statusBarsPadding()
+              .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Surface(
+              shape = RoundedCornerShape(12.dp),
+              color = AtharColors.Secondary.copy(alpha = 0.85f),
+              shadowElevation = 4.dp
+            ) {
+              Text(
+                text = "Tap on the map to pin a location",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+              )
+            }
+
+            Surface(
+              shape = CircleShape,
+              color = AtharColors.Secondary.copy(alpha = 0.85f),
+              shadowElevation = 4.dp,
+              modifier = Modifier
+                .size(40.dp)
+                .clickable {
+                  showFullScreenMap = false
+                  isPinning = false
+                }
+            ) {
+              Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                  imageVector = Icons.Default.Close,
+                  contentDescription = "Close",
+                  tint = Color.White,
+                  modifier = Modifier.size(22.dp)
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+
     LazyColumn(modifier = Modifier.fillMaxSize().background(AtharColors.BgPrimary)) {
       item {
         Column(
@@ -385,66 +483,76 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
           ) {
+            // Use my location button
             Button(
               onClick = { requestGpsLocation() },
               enabled = !isLocating,
-              modifier = Modifier.weight(1f).height(48.dp),
-              shape = RoundedCornerShape(16.dp),
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = RoundedCornerShape(14.dp),
               colors = ButtonDefaults.buttonColors(
                 containerColor = AtharColors.Secondary,
                 disabledContainerColor = AtharColors.SecondaryDark
               ),
-              border = BorderStroke(2.dp, AtharColors.SecondaryDark),
-              elevation = ButtonDefaults.buttonElevation(6.dp),
-              contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+              border = BorderStroke(1.5.dp, AtharColors.SecondaryDark),
+              elevation = ButtonDefaults.buttonElevation(4.dp),
+              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
-              Icon(
-                imageVector = Icons.Default.Navigation,
-                contentDescription = null,
-                tint = AtharColors.White,
-                modifier = Modifier.size(20.dp)
-              )
-              Spacer(Modifier.width(8.dp))
-              Text(
-                text = if (isLocating) "Locating…" else "Use My Location",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AtharColors.White,
-                maxLines = 1
-              )
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  imageVector = Icons.Default.MyLocation,
+                  contentDescription = null,
+                  tint = AtharColors.White,
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                  text = if (isLocating) "Locating…" else "Use my location",
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = AtharColors.White,
+                  maxLines = 1
+                )
+              }
             }
 
-            val pinBg = if (isPinning) AtharColors.Accent else AtharColors.White
-            val pinBorder = if (isPinning) AtharColors.AccentDark else AtharColors.Secondary
-            val pinText = if (isPinning) AtharColors.White else AtharColors.Secondary
-            val pinLabel = if (isPinning) "Tap the Map" else "Pin Location"
-
+            // Pin Location button
             Button(
               onClick = {
-                isPinning = !isPinning
+                isPinning = true
+                showFullScreenMap = true
                 locationError = ""
               },
-              modifier = Modifier.weight(1f).height(48.dp),
-              shape = RoundedCornerShape(16.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = pinBg),
-              border = BorderStroke(2.dp, pinBorder),
-              elevation = ButtonDefaults.buttonElevation(6.dp),
-              contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = RoundedCornerShape(14.dp),
+              colors = ButtonDefaults.buttonColors(containerColor = AtharColors.White),
+              border = BorderStroke(1.5.dp, AtharColors.Secondary),
+              elevation = ButtonDefaults.buttonElevation(4.dp),
+              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
-              Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = pinText,
-                modifier = Modifier.size(20.dp)
-              )
-              Spacer(Modifier.width(8.dp))
-              Text(
-                text = pinLabel,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = pinText,
-                maxLines = 1
-              )
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  imageVector = Icons.Default.PushPin,
+                  contentDescription = null,
+                  tint = AtharColors.Secondary,
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                  text = "Pin Location",
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = AtharColors.Secondary,
+                  maxLines = 1
+                )
+              }
             }
           }
 
@@ -605,13 +713,15 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 myLocationButtonEnabled = hasFineLocationPermission
               ),
               onMapClick = { latLng ->
-                mapCenter = Pair(latLng.latitude, latLng.longitude)
-                showSuggestions = false
-                isPinning = false
-                coroutineScope.launch {
-                  val address = reverseGeocode(context, latLng.latitude, latLng.longitude)
-                  selectedLocation = address
-                  searchQuery = address
+                if (isPinning) {
+                  mapCenter = Pair(latLng.latitude, latLng.longitude)
+                  showSuggestions = false
+                  isPinning = false
+                  coroutineScope.launch {
+                    val address = reverseGeocode(context, latLng.latitude, latLng.longitude)
+                    selectedLocation = address
+                    searchQuery = address
+                  }
                 }
               }
             ) {

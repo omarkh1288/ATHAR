@@ -85,6 +85,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Accessible
@@ -103,6 +104,9 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.LocalParking
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Search
@@ -290,6 +294,7 @@ fun MapScreen(
   var isSearching by remember { mutableStateOf(false) }
   var isSearchFieldFocused by remember { mutableStateOf(false) }
   var hasLoadedBefore by rememberSaveable { mutableStateOf(false) }
+  var placesExpanded by remember { mutableStateOf(true) }
   var mapLoaded by remember { mutableStateOf(false) }
   var mapLoadTimedOut by remember { mutableStateOf(false) }
   var showFilters by remember { mutableStateOf(false) }
@@ -1084,94 +1089,102 @@ fun MapScreen(
       Column(
         modifier = Modifier
           .align(Alignment.BottomEnd)
-          .padding(end = 12.dp, bottom = 12.dp),
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+          .padding(end = 14.dp, bottom = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
-        Row(
-          modifier = Modifier
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFF8FA2BC), RoundedCornerShape(10.dp))
-            .padding(horizontal = 4.dp)
+        // Zoom controls
+        Card(
+          shape = RoundedCornerShape(14.dp),
+          colors = CardDefaults.cardColors(containerColor = Color.White),
+          elevation = CardDefaults.cardElevation(6.dp)
         ) {
-          TextButton(
-            onClick = {
-              coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomIn()) }
-            },
-            modifier = Modifier
-              .width(60.dp)
-              .height(56.dp),
-            contentPadding = PaddingValues(0.dp)
+          Column(
+            horizontalAlignment = Alignment.CenterHorizontally
           ) {
-            Icon(
-              Icons.Outlined.ZoomIn,
-              contentDescription = "Zoom in",
-              tint = NavyPrimary,
-              modifier = Modifier.size(28.dp)
-            )
-          }
+            Box(
+              modifier = Modifier
+                .size(50.dp)
+                .clickable {
+                  coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomIn()) }
+                },
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.Filled.Add,
+                contentDescription = "Zoom in",
+                tint = NavyPrimary,
+                modifier = Modifier.size(26.dp)
+              )
+            }
 
-          Box(
-            modifier = Modifier
-              .width(1.dp)
-              .height(42.dp)
-              .align(Alignment.CenterVertically)
-              .background(Color(0xFFD4DAE4))
-          )
-
-          TextButton(
-            onClick = {
-              coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomOut()) }
-            },
-            modifier = Modifier
-              .width(60.dp)
-              .height(56.dp),
-            contentPadding = PaddingValues(0.dp)
-          ) {
-            Icon(
-              Icons.Outlined.ZoomOut,
-              contentDescription = "Zoom out",
-              tint = NavyPrimary,
-              modifier = Modifier.size(28.dp)
+            Box(
+              modifier = Modifier
+                .width(36.dp)
+                .height(1.dp)
+                .background(Color(0xFFE2E8F0))
             )
+
+            Box(
+              modifier = Modifier
+                .size(50.dp)
+                .clickable {
+                  coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomOut()) }
+                },
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.Filled.Remove,
+                contentDescription = "Zoom out",
+                tint = NavyPrimary,
+                modifier = Modifier.size(26.dp)
+              )
+            }
           }
         }
 
-        Button(
-          onClick = {
-            if (locationPermissionGranted) {
-              fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                  coroutineScope.launch {
-                    cameraPositionState.animate(
-                      CameraUpdateFactory.newLatLngZoom(
-                        LatLng(location.latitude, location.longitude),
-                        15f
+        // My location button
+        Card(
+          shape = CircleShape,
+          colors = CardDefaults.cardColors(containerColor = NavyPrimary),
+          elevation = CardDefaults.cardElevation(6.dp),
+          modifier = Modifier
+            .size(50.dp)
+            .clickable {
+              if (locationPermissionGranted) {
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                  if (location != null) {
+                    coroutineScope.launch {
+                      cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngZoom(
+                          LatLng(location.latitude, location.longitude),
+                          15f
+                        )
                       )
-                    )
+                    }
                   }
                 }
-              }
-            } else {
-              locationPermissionLauncher.launch(
-                arrayOf(
-                  Manifest.permission.ACCESS_FINE_LOCATION,
-                  Manifest.permission.ACCESS_COARSE_LOCATION
+              } else {
+                locationPermissionLauncher.launch(
+                  arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                  )
                 )
-              )
+              }
             }
-          },
-          shape = RoundedCornerShape(10.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8FA2BC)),
-          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
         ) {
-          Icon(
-            Icons.Outlined.Navigation,
-            contentDescription = "Recenter map",
-            tint = NavyPrimary,
-            modifier = Modifier.size(22.dp)
-          )
+          Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              Icons.Filled.MyLocation,
+              contentDescription = "My location",
+              tint = Color.White,
+              modifier = Modifier.size(24.dp)
+            )
+          }
         }
       }
 
@@ -1206,7 +1219,10 @@ fun MapScreen(
         modifier = Modifier
           .fillMaxWidth()
           .background(BlueSecondary)
-          .padding(horizontal = 14.dp, vertical = 10.dp)
+          .clickable { placesExpanded = !placesExpanded }
+          .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
           text = "${listLocations.size} Accessible ${if (listLocations.size == 1) "Place" else "Places"} Nearby",
@@ -1216,13 +1232,20 @@ fun MapScreen(
             fontSize = 18.sp
           )
         )
+        Icon(
+          imageVector = if (placesExpanded) Icons.Outlined.ArrowDropDown else Icons.Outlined.ArrowDropUp,
+          contentDescription = if (placesExpanded) "Collapse" else "Expand",
+          tint = NavyPrimary,
+          modifier = Modifier.size(28.dp)
+        )
       }
 
-      LazyColumn(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(220.dp)
-      ) {
+      AnimatedVisibility(visible = placesExpanded) {
+        LazyColumn(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+        ) {
         itemsIndexed(listLocations, key = { _, location -> location.id }) { index, location ->
           Row(
             modifier = Modifier
@@ -1289,6 +1312,7 @@ fun MapScreen(
             )
           }
         }
+      }
       }
     }
   }
