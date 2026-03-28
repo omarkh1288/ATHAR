@@ -11,8 +11,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,17 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.athar.accessibilitymapping.data.AnalyticsRecordStatus
-import com.athar.accessibilitymapping.data.AtharRepository
-import com.athar.accessibilitymapping.data.VolunteerAnalyticsSnapshot
-import com.athar.accessibilitymapping.data.VolunteerAnalyticsEarnings
-import com.athar.accessibilitymapping.data.VolunteerAnalyticsPerformance
-import com.athar.accessibilitymapping.data.VolunteerAnalyticsReviews
+import com.athar.accessibilitymapping.data.volunteer.VolunteerAnalyticsUiState
+import com.athar.accessibilitymapping.data.volunteer.VolunteerDashboardUiModel
 import com.athar.accessibilitymapping.ui.profile.VolunteerReview
 import com.composables.icons.lucide.*
 import com.composables.icons.lucide.Lucide
-import com.athar.accessibilitymapping.ui.profile.AtharVolunteerReviewsSection
 import com.athar.accessibilitymapping.ui.theme.*
+import java.text.NumberFormat
+import java.util.Locale
 
 private val AnalyticsTitleStyle = TextStyle(
   fontFamily = FontFamily.SansSerif,
@@ -89,9 +89,9 @@ private enum class AnalyticsTab(val label: String, val icon: ImageVector) {
 private enum class WithdrawalMethod { Bank, Wallet }
 private enum class RecordStatus { Completed, Pending }
 
-private data class MonthlyEarning(val month: String, val gross: Double, val net: Double, val fee: Double)
-private data class WeeklyRequest(val day: String, val completed: Int)
-private data class RequestTypeShare(val name: String, val value: Int, val color: Color)
+private data class MonthlyEarning(val month: String, val net: Double)
+private data class WeeklyRequest(val day: String, val completed: Int, val netAmount: Double)
+private data class RequestTypeShare(val name: String, val count: Int, val percent: Double, val color: Color)
 private data class PaymentRecord(
   val id: String,
   val date: String,
@@ -104,113 +104,93 @@ private data class PaymentRecord(
 private data class WithdrawalRecord(val id: String, val date: String, val amount: Double, val method: String, val status: RecordStatus)
 private data class ChartPoint(val label: String, val value: Float)
 
-private val monthlyEarnings = listOf(
-  MonthlyEarning("Oct", 1200.0, 840.0, 360.0),
-  MonthlyEarning("Nov", 1650.0, 1155.0, 495.0),
-  MonthlyEarning("Dec", 900.0, 630.0, 270.0),
-  MonthlyEarning("Jan", 2100.0, 1470.0, 630.0),
-  MonthlyEarning("Feb", 1800.0, 1260.0, 540.0),
-  MonthlyEarning("Mar", 2400.0, 1680.0, 720.0)
-)
-
-private val weeklyRequests = listOf(
-  WeeklyRequest("Sat", 3), WeeklyRequest("Sun", 5), WeeklyRequest("Mon", 2), WeeklyRequest("Tue", 4),
-  WeeklyRequest("Wed", 6), WeeklyRequest("Thu", 3), WeeklyRequest("Fri", 1)
-)
-
-private val requestTypes = listOf(
-  RequestTypeShare("Wheelchair assist", 38, NavyPrimary),
-  RequestTypeShare("Visual guidance", 25, AccentGold),
-  RequestTypeShare("Hearing support", 18, NavyDark),
-  RequestTypeShare("Mobility help", 12, AccentGoldDark),
-  RequestTypeShare("Other", 7, TextLight)
-)
-
-private val paymentHistory = listOf(
-  PaymentRecord("p1", "Mar 8, 2026", "Ahmed Al-Rashid", 2, 150.0, 105.0, RecordStatus.Completed),
-  PaymentRecord("p2", "Mar 7, 2026", "Nora Said", 1, 100.0, 70.0, RecordStatus.Completed),
-  PaymentRecord("p3", "Mar 6, 2026", "Hassan Mostafa", 3, 225.0, 157.5, RecordStatus.Completed),
-  PaymentRecord("p4", "Mar 5, 2026", "Fatima Hassan", 1, 75.0, 52.5, RecordStatus.Completed),
-  PaymentRecord("p5", "Mar 4, 2026", "Omar Khalil", 2, 200.0, 140.0, RecordStatus.Pending),
-  PaymentRecord("p6", "Mar 3, 2026", "Layla Abdullah", 2, 150.0, 105.0, RecordStatus.Completed),
-  PaymentRecord("p7", "Mar 1, 2026", "Youssef Adel", 4, 400.0, 280.0, RecordStatus.Completed)
-)
-
-private val withdrawalHistory = listOf(
-  WithdrawalRecord("w1", "Mar 1, 2026", 1260.0, "Bank Transfer", RecordStatus.Completed),
-  WithdrawalRecord("w2", "Feb 15, 2026", 840.0, "Paymob Wallet", RecordStatus.Completed),
-  WithdrawalRecord("w3", "Feb 1, 2026", 630.0, "Bank Transfer", RecordStatus.Completed)
-)
-
 @Composable
-fun VolunteerAnalyticsScreen(onBack: () -> Unit) {
+fun VolunteerAnalyticsScreen(
+  onBack: () -> Unit,
+  viewModel: VolunteerAnalyticsViewModel = viewModel()
+) {
   val context = LocalContext.current
-  val repository = remember(context) { AtharRepository(context) }
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   var activeTab by rememberSaveable { mutableStateOf(AnalyticsTab.Overview) }
-  var showWithdrawDialog by rememberSaveable { mutableStateOf(false) }
   var showFeeInfo by rememberSaveable { mutableStateOf(false) }
-  var withdrawAmount by rememberSaveable { mutableStateOf("") }
-  var withdrawMethod by rememberSaveable { mutableStateOf(WithdrawalMethod.Bank) }
   var expandedPaymentId by rememberSaveable { mutableStateOf<String?>(null) }
-  var analyticsSnapshot by remember { mutableStateOf(VolunteerAnalyticsSnapshot()) }
-  var isLoading by remember { mutableStateOf(true) }
-
-  val analyticsEarnings = analyticsSnapshot.earnings
-  val analyticsPerformance = analyticsSnapshot.performance
-  val analyticsReviews = analyticsSnapshot.reviews
-  val monthlyEarningsData = analyticsEarnings.monthlyEarnings.map { MonthlyEarning(it.month, it.gross, it.net, it.fee) }
-  val weeklyRequestsData = analyticsPerformance.weeklyActivity.map { WeeklyRequest(it.day, it.completed) }
-  val requestTypesData = analyticsPerformance.requestTypes.mapIndexed { index, item ->
-    RequestTypeShare(item.name, item.value, requestTypeColor(index))
+  val model = when (val state = uiState) {
+    is VolunteerAnalyticsUiState.Content -> state.model
+    is VolunteerAnalyticsUiState.Empty -> state.model
+    else -> VolunteerDashboardUiModel()
   }
-  val paymentHistoryData = analyticsEarnings.paymentHistory.map { record ->
-    PaymentRecord(
-      id = record.id,
-      date = record.date,
-      user = record.user,
-      hours = record.hours,
-      gross = record.gross,
-      net = record.net,
-      status = if (record.status == AnalyticsRecordStatus.Completed) RecordStatus.Completed else RecordStatus.Pending
-    )
-  }
-  val withdrawalHistoryData = analyticsEarnings.withdrawalHistory.map { record ->
-    WithdrawalRecord(
-      id = record.id,
-      date = record.date,
-      amount = record.amount,
-      method = record.method,
-      status = if (record.status == AnalyticsRecordStatus.Completed) RecordStatus.Completed else RecordStatus.Pending
-    )
-  }
-  val reviewItems = analyticsReviews.reviews.map { review ->
-    VolunteerReview(
-      id = review.id,
-      userName = review.userName,
-      rating = review.rating,
-      comment = review.comment,
-      date = review.date,
-      issues = review.issues
-    )
+  val warnings = when (val state = uiState) {
+    is VolunteerAnalyticsUiState.Content -> state.warnings
+    is VolunteerAnalyticsUiState.Empty -> state.warnings
+    else -> emptyList()
   }
 
-  LaunchedEffect(Unit) {
-    isLoading = true
-    analyticsSnapshot = repository.getVolunteerAnalyticsSnapshot(perPage = 100)
-    isLoading = false
+  val monthlyEarningsData = model.monthlyNetEarnings.map { MonthlyEarning(it.monthLabel, it.netAmount) }
+  val weeklyRequestsData = model.weeklyActivity.map { WeeklyRequest(it.dateLabel, it.requestsCount, it.netAmount) }
+  val requestTypesData = model.requestTypes.mapIndexed { index, item ->
+    RequestTypeShare(item.type, item.count, item.percent, requestTypeColor(index))
+  }
+  val paymentHistoryData = model.paymentHistory.map { record ->
+    PaymentRecord(record.id, record.dateLabel, record.userName, record.hours, record.amount, record.netAmount, record.status.toRecordStatus())
+  }
+  val withdrawalHistoryData = model.withdrawalHistory.map { record ->
+    WithdrawalRecord(record.id, record.dateLabel, record.amount, record.method, record.status.toRecordStatus())
+  }
+  val reviewItems = model.reviews.reviews.map { review ->
+    VolunteerReview(review.id, review.userName, review.rating, review.comment, review.dateLabel, review.issues)
   }
 
-  LaunchedEffect(analyticsSnapshot.warningMessage) {
-    val warning = analyticsSnapshot.warningMessage?.trim().orEmpty()
+  LaunchedEffect(warnings) {
+    val warning = warnings.joinToString(separator = "\n").trim()
     if (warning.isNotBlank()) {
       Toast.makeText(context, warning, Toast.LENGTH_LONG).show()
     }
   }
 
   Box(Modifier.fillMaxSize().background(BluePrimary)) {
+    if (uiState is VolunteerAnalyticsUiState.Error) {
+      AnalyticsErrorState(
+        onBack = onBack,
+        message = (uiState as VolunteerAnalyticsUiState.Error).message,
+        onRetry = viewModel::refresh
+      )
+      return@Box
+    }
+
     LazyColumn(Modifier.fillMaxSize()) {
       item { AnalyticsHeader(onBack) }
       item { AnalyticsTabs(activeTab = activeTab, onSelect = { activeTab = it }) }
+      if (uiState is VolunteerAnalyticsUiState.Empty) {
+        item {
+          SectionCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text((uiState as VolunteerAnalyticsUiState.Empty).message, color = NavyPrimary, style = AnalyticsBodyStyle)
+          }
+        }
+      }
+      if (warnings.isNotEmpty()) {
+        item {
+          Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, AccentGold),
+            colors = CardDefaults.cardColors(containerColor = AccentGold.copy(alpha = 0.12f))
+          ) {
+            Row(
+              Modifier.padding(12.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Icon(Lucide.TriangleAlert, null, tint = AccentGoldDark, modifier = Modifier.size(18.dp))
+              Text(
+                warnings.joinToString(separator = "\n"),
+                color = NavyPrimary,
+                style = AnalyticsBodyStyle,
+                modifier = Modifier.weight(1f)
+              )
+            }
+          }
+        }
+      }
       item { Spacer(Modifier.height(16.dp)) }
       item {
         Column(
@@ -219,59 +199,56 @@ fun VolunteerAnalyticsScreen(onBack: () -> Unit) {
         ) {
           when (activeTab) {
             AnalyticsTab.Overview -> OverviewTab(
-              totalNet = analyticsEarnings.totalNet,
-              currentMonthNet = analyticsEarnings.currentMonthNet,
-              currentMonthLabel = analyticsEarnings.currentMonthLabel,
-              monthlyChangePercent = analyticsEarnings.monthlyChangePercent,
-              completedCount = analyticsPerformance.completed,
-              averageRating = analyticsPerformance.averageRating,
-              reviewCount = analyticsPerformance.totalReviews,
-              pendingCount = analyticsPerformance.pending,
+              totalNet = model.totalNetEarnings,
+              currentMonthNet = model.currentMonthNet,
+              currentMonthLabel = model.currentMonthLabel,
+              monthlyChangePercent = model.monthlyChangePercent,
+              completedCount = model.completedCount,
+              averageRating = model.averageRating.toFloat(),
+              reviewCount = model.reviewCount,
+              pendingCount = model.pendingCount,
               weeklyRequests = weeklyRequestsData,
-              requestTypes = requestTypesData
+              requestTypes = requestTypesData,
+              reviewSummary = model.reviews
             )
             AnalyticsTab.Earnings -> EarningsTab(
-              availableBalance = analyticsEarnings.availableBalance,
-              pendingBalance = analyticsEarnings.pendingBalance,
-              totalGross = analyticsEarnings.totalGross,
-              totalFees = analyticsEarnings.totalFees,
-              totalNet = analyticsEarnings.totalNet,
+              availableBalance = model.availableFunds,
+              pendingBalance = model.pendingBalance,
+              totalGross = model.totalGross,
+              totalFees = model.totalFees,
+              totalNet = model.totalNetEarnings,
               monthlyEarnings = monthlyEarningsData,
               withdrawalHistory = withdrawalHistoryData,
               showFeeInfo = showFeeInfo,
               onToggleFeeInfo = { showFeeInfo = !showFeeInfo },
-              onWithdraw = { showWithdrawDialog = true }
+              onWithdraw = { Toast.makeText(context, "Withdrawals are not available from the allowed volunteer analytics endpoints.", Toast.LENGTH_LONG).show() }
             )
-            AnalyticsTab.Performance -> PerformanceTab(analyticsPerformance)
+            AnalyticsTab.Performance -> PerformanceTab(
+              performance = model.performance,
+              weeklyRequests = weeklyRequestsData,
+              requestTypes = requestTypesData
+            )
             AnalyticsTab.History -> HistoryTab(
-              thisWeekCompleted = analyticsPerformance.weeklyActivity.sumOf { it.completed },
-              thisMonthNet = analyticsEarnings.currentMonthNet,
+              thisWeekNet = model.historyThisWeekNet,
+              thisMonthNet = model.currentMonthNet,
               paymentHistory = paymentHistoryData,
               expandedPaymentId = expandedPaymentId
             ) { expandedPaymentId = if (expandedPaymentId == it) null else it }
-            AnalyticsTab.Reviews -> AtharVolunteerReviewsSection(reviews = reviewItems, isOwnProfile = true)
+            AnalyticsTab.Reviews -> ReviewsTab(
+              averageRating = model.reviews.averageRating,
+              totalReviews = model.reviews.totalReviews,
+              reviews = reviewItems
+            )
           }
         }
       }
       item { Spacer(Modifier.height(24.dp)) }
     }
 
-    if (isLoading) {
+    if (uiState is VolunteerAnalyticsUiState.Loading) {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = AccentGold)
       }
-    }
-
-    if (showWithdrawDialog) {
-      WithdrawDialog(
-        availableBalance = analyticsEarnings.availableBalance,
-        amount = withdrawAmount,
-        method = withdrawMethod,
-        onAmountChange = { withdrawAmount = it.filter(Char::isDigit) },
-        onMethodChange = { withdrawMethod = it },
-        onDismiss = { showWithdrawDialog = false; withdrawAmount = "" },
-        onConfirm = { showWithdrawDialog = false; withdrawAmount = "" }
-      )
     }
   }
 }
@@ -346,8 +323,8 @@ private fun SectionCard(modifier: Modifier = Modifier, content: @Composable Colu
   }
 }
 
-private fun formatAmount(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else String.format("%.1f", value)
-private fun formatFloat(value: Float): String = if (value % 1f == 0f) value.toInt().toString() else String.format("%.1f", value)
+private fun formatAmount(value: Double): String = currencyFormatter().format(value)
+private fun formatFloat(value: Float): String = if (value % 1f == 0f) value.toInt().toString() else String.format(Locale.getDefault(), "%.1f", value)
 private fun requestTypeColor(index: Int): Color = listOf(NavyPrimary, AccentGold, NavyDark, AccentGoldDark, TextLight)[index % 5]
 private fun analyticsTabWeight(tab: AnalyticsTab): Float = when (tab) {
   AnalyticsTab.Performance -> 1.3f
@@ -355,6 +332,56 @@ private fun analyticsTabWeight(tab: AnalyticsTab): Float = when (tab) {
   AnalyticsTab.Earnings -> 1f
   AnalyticsTab.History -> 0.85f
   AnalyticsTab.Reviews -> 0.9f
+}
+
+private fun currencyFormatter(): NumberFormat {
+  return NumberFormat.getNumberInstance(Locale.Builder().setLanguage("en").setRegion("EG").build()).apply {
+    minimumFractionDigits = 2
+    maximumFractionDigits = 2
+  }
+}
+
+private fun String.toRecordStatus(): RecordStatus {
+  return if (equals("completed", ignoreCase = true) || equals("captured", ignoreCase = true)) {
+    RecordStatus.Completed
+  } else {
+    RecordStatus.Pending
+  }
+}
+
+@Composable
+private fun AnalyticsErrorState(
+  onBack: () -> Unit,
+  message: String,
+  onRetry: () -> Unit
+) {
+  Box(Modifier.fillMaxSize().background(BluePrimary)) {
+    LazyColumn(Modifier.fillMaxSize()) {
+      item { AnalyticsHeader(onBack) }
+      item {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+          verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+          SectionCard {
+            Text("Unable to load analytics", color = NavyPrimary, style = AnalyticsSectionStyle)
+            Spacer(Modifier.height(8.dp))
+            Text(message, color = TextLight, style = AnalyticsBodyStyle)
+            Spacer(Modifier.height(16.dp))
+            FilledActionButton(
+              text = "Retry",
+              icon = Lucide.RefreshCw,
+              background = NavyPrimary,
+              borderColor = NavyPrimary,
+              onClick = onRetry
+            )
+          }
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -368,9 +395,23 @@ private fun OverviewTab(
   reviewCount: Int,
   pendingCount: Int,
   weeklyRequests: List<WeeklyRequest>,
-  requestTypes: List<RequestTypeShare>
+  requestTypes: List<RequestTypeShare>,
+  reviewSummary: com.athar.accessibilitymapping.data.volunteer.VolunteerReviewsUiModel
 ) {
+  val hasNoData = totalNet == 0.0 && completedCount == 0 && averageRating == 0f && pendingCount == 0
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    if (hasNoData) {
+      SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+          Icon(Lucide.Info, null, tint = NavyPrimary, modifier = Modifier.size(20.dp))
+          Text(
+            "Complete assistance requests to see your analytics here. Your earnings, performance, and activity will appear as you help users.",
+            color = NavyPrimary,
+            style = AnalyticsBodyStyle
+          )
+        }
+      }
+    }
     TwoColumnRow(
       { StatCard(Lucide.DollarSign, "Net Earnings", "${formatAmount(totalNet)} EGP", "All time", AccentGold) },
       { StatCard(Lucide.CircleCheck, "Completed", completedCount.toString(), "Requests", SuccessGreen) }
@@ -390,14 +431,14 @@ private fun OverviewTab(
       Spacer(Modifier.height(12.dp))
       Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(formatAmount(currentMonthNet), color = NavyPrimary, fontWeight = FontWeight.Bold, fontSize = 30.sp, lineHeight = 36.sp)
-        Text("EGP net", color = TextLight, style = AnalyticsBodyStyle, modifier = Modifier.padding(bottom = 4.dp))
+        Text("EGP", color = TextLight, style = AnalyticsBodyStyle, modifier = Modifier.padding(bottom = 4.dp))
       }
       Spacer(Modifier.height(4.dp))
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         val isPositive = monthlyChangePercent >= 0
         Icon(if (isPositive) Lucide.TrendingUp else Lucide.TrendingDown, null, tint = if (isPositive) SuccessGreen else ErrorRed, modifier = Modifier.size(16.dp))
         Text(
-          "${if (isPositive) "+" else ""}${formatAmount(monthlyChangePercent)}% vs last month",
+          "${if (isPositive) "+" else ""}${String.format(Locale.getDefault(), "%.2f", monthlyChangePercent)}% vs last month",
           color = if (isPositive) SuccessGreen else ErrorRed,
           style = AnalyticsBodyStyle
         )
@@ -411,6 +452,8 @@ private fun OverviewTab(
         Text("No weekly activity yet.", color = TextLight, style = AnalyticsBodyStyle)
       } else {
         BarChart(weeklyRequests.map { ChartPoint(it.day, it.completed.toFloat()) }, NavyPrimary, 160.dp, "")
+        Spacer(Modifier.height(12.dp))
+        WeeklyActivityBreakdown(weeklyRequests)
       }
     }
 
@@ -425,6 +468,43 @@ private fun OverviewTab(
         Text("No request type data yet.", color = TextLight, style = AnalyticsBodyStyle)
       } else {
         DonutChart(requestTypes)
+        Spacer(Modifier.height(12.dp))
+        RequestTypeBreakdown(requestTypes)
+      }
+    }
+
+    SectionCard {
+      Text("Recent Reviews", color = NavyPrimary, style = AnalyticsSectionStyle)
+      Spacer(Modifier.height(12.dp))
+      ReviewsSummaryHeader(
+        averageRating = reviewSummary.averageRating,
+        totalReviews = reviewSummary.totalReviews
+      )
+      Spacer(Modifier.height(12.dp))
+      if (reviewSummary.reviews.isEmpty()) {
+        Text("No reviews yet.", color = TextLight, style = AnalyticsBodyStyle)
+      } else {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          reviewSummary.reviews.take(2).forEach { review ->
+            ReviewCard(
+              review = VolunteerReview(
+                id = review.id,
+                userName = review.userName,
+                rating = review.rating,
+                comment = review.comment,
+                date = review.dateLabel,
+                issues = review.issues
+              )
+            )
+          }
+          if (reviewSummary.totalReviews > reviewSummary.reviews.size.coerceAtLeast(2)) {
+            Text(
+              "Open the Reviews tab to see all feedback.",
+              color = TextLight,
+              style = AnalyticsLabelStyle
+            )
+          }
+        }
       }
     }
   }
@@ -443,7 +523,20 @@ private fun EarningsTab(
   onToggleFeeInfo: () -> Unit,
   onWithdraw: () -> Unit
 ) {
+  val hasNoEarnings = totalGross == 0.0 && availableBalance == 0.0 && pendingBalance == 0.0
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    if (hasNoEarnings) {
+      SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+          Icon(Lucide.Info, null, tint = NavyPrimary, modifier = Modifier.size(20.dp))
+          Text(
+            "No earnings recorded yet. Complete assistance requests to start earning.",
+            color = NavyPrimary,
+            style = AnalyticsBodyStyle
+          )
+        }
+      }
+    }
     Card(
       modifier = Modifier.fillMaxWidth(),
       shape = RoundedCornerShape(16.dp),
@@ -574,7 +667,11 @@ private fun EarningsTab(
 }
 
 @Composable
-private fun PerformanceTab(performance: VolunteerAnalyticsPerformance) {
+private fun PerformanceTab(
+  performance: com.athar.accessibilitymapping.data.volunteer.VolunteerPerformanceUiModel,
+  weeklyRequests: List<WeeklyRequest>,
+  requestTypes: List<RequestTypeShare>
+) {
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     SectionCard {
       Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -646,12 +743,190 @@ private fun PerformanceTab(performance: VolunteerAnalyticsPerformance) {
         }
       }
     }
+    SectionCard {
+      Text("Weekly Activity", color = NavyPrimary, style = AnalyticsSectionStyle)
+      Spacer(Modifier.height(12.dp))
+      if (weeklyRequests.isEmpty()) {
+        Text("No weekly activity yet.", color = TextLight, style = AnalyticsBodyStyle)
+      } else {
+        BarChart(weeklyRequests.map { ChartPoint(it.day, it.completed.toFloat()) }, NavyPrimary, 160.dp, "")
+        Spacer(Modifier.height(12.dp))
+        WeeklyActivityBreakdown(weeklyRequests)
+      }
+    }
+    SectionCard {
+      Text("Request Types", color = NavyPrimary, style = AnalyticsSectionStyle)
+      Spacer(Modifier.height(12.dp))
+      if (requestTypes.isEmpty()) {
+        Text("No request type data yet.", color = TextLight, style = AnalyticsBodyStyle)
+      } else {
+        DonutChart(requestTypes)
+        Spacer(Modifier.height(12.dp))
+        RequestTypeBreakdown(requestTypes)
+      }
+    }
+  }
+}
+
+@Composable
+private fun ReviewsTab(
+  averageRating: Double,
+  totalReviews: Int,
+  reviews: List<VolunteerReview>
+) {
+  SectionCard {
+    Text("Reviews", color = NavyPrimary, style = AnalyticsSectionStyle)
+    Spacer(Modifier.height(12.dp))
+    ReviewsSummaryHeader(
+      averageRating = averageRating,
+      totalReviews = totalReviews
+    )
+    Spacer(Modifier.height(12.dp))
+    if (reviews.isEmpty()) {
+      Text("No reviews yet.", color = TextLight, style = AnalyticsBodyStyle)
+    } else {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        reviews.forEachIndexed { index, review ->
+          ReviewCard(review)
+          if (index < reviews.lastIndex) {
+            HorizontalDivider(color = Gray200, thickness = 1.dp)
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun WeeklyActivityBreakdown(weeklyRequests: List<WeeklyRequest>) {
+  FlowRow(
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp)
+  ) {
+    weeklyRequests.forEach { request ->
+      Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = BlueSecondary,
+        border = BorderStroke(1.dp, Gray200)
+      ) {
+        Text(
+          "${request.day}: ${request.completed} • ${formatAmount(request.netAmount)}",
+          color = NavyPrimary,
+          style = AnalyticsLabelStyle,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun RequestTypeBreakdown(requestTypes: List<RequestTypeShare>) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    requestTypes.forEach { type ->
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(
+          modifier = Modifier.weight(1f),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          Box(
+            modifier = Modifier
+              .size(10.dp)
+              .clip(CircleShape)
+              .background(type.color)
+          )
+          Text(type.name, color = NavyDark, style = AnalyticsBodyStyle)
+        }
+        Text("${type.count} • ${String.format(Locale.getDefault(), "%.0f", type.percent)}%", color = NavyPrimary, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Bold))
+      }
+    }
+  }
+}
+
+@Composable
+private fun ReviewsSummaryHeader(averageRating: Double, totalReviews: Int) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(12.dp)
+  ) {
+    SummaryInfoCard(
+      modifier = Modifier.weight(1f),
+      title = "Average Rating",
+      value = if (averageRating <= 0.0) "-" else String.format("%.1f/5", averageRating),
+      accent = AccentGoldDark
+    )
+    SummaryInfoCard(
+      modifier = Modifier.weight(1f),
+      title = "Total Reviews",
+      value = totalReviews.toString(),
+      accent = NavyPrimary
+    )
+  }
+}
+
+@Composable
+private fun SummaryInfoCard(modifier: Modifier = Modifier, title: String, value: String, accent: Color) {
+  Column(
+    modifier = modifier
+      .clip(RoundedCornerShape(12.dp))
+      .background(BlueSecondary)
+      .border(1.dp, Gray200, RoundedCornerShape(12.dp))
+      .padding(12.dp),
+    verticalArrangement = Arrangement.spacedBy(4.dp)
+  ) {
+    Text(title, color = TextLight, style = AnalyticsLabelStyle)
+    Text(value, color = accent, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Bold))
+  }
+}
+
+@Composable
+private fun ReviewCard(review: VolunteerReview) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(12.dp))
+      .background(BlueSecondary)
+      .padding(12.dp),
+    verticalArrangement = Arrangement.spacedBy(6.dp)
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(review.userName, color = NavyPrimary, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.SemiBold))
+      Text("${review.rating}/5", color = AccentGoldDark, style = AnalyticsLabelStyle.copy(fontWeight = FontWeight.Bold))
+    }
+    Text(review.comment, color = NavyDark, style = AnalyticsBodyStyle)
+    if (review.issues.isNotEmpty()) {
+      FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+      ) {
+        review.issues.forEach { issue ->
+          Surface(shape = RoundedCornerShape(999.dp), color = Color.White, border = BorderStroke(1.dp, Gray200)) {
+            Text(
+              issue,
+              color = NavyPrimary,
+              style = AnalyticsLabelStyle,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+          }
+        }
+      }
+    }
+    Text(review.date, color = TextLight, style = AnalyticsLabelStyle)
   }
 }
 
 @Composable
 private fun HistoryTab(
-  thisWeekCompleted: Int,
+  thisWeekNet: Double,
   thisMonthNet: Double,
   paymentHistory: List<PaymentRecord>,
   expandedPaymentId: String?,
@@ -659,7 +934,7 @@ private fun HistoryTab(
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     TwoColumnRow(
-      { SummaryCard(thisWeekCompleted.toString(), "This Week", NavyPrimary) },
+      { SummaryCard("${formatAmount(thisWeekNet)} EGP", "This Week Net", NavyPrimary) },
       { SummaryCard("${formatAmount(thisMonthNet)} EGP", "This Month Net", AccentGold) }
     )
     Card(
@@ -902,7 +1177,7 @@ private fun BarChart(data: List<ChartPoint>, color: Color, height: Dp, suffix: S
 
 @Composable
 private fun DonutChart(data: List<RequestTypeShare>) {
-  val total = data.sumOf { it.value }.coerceAtLeast(1)
+  val total = data.sumOf { it.count }.coerceAtLeast(1)
   val centerLabelSize = 112.dp
   Column(
     Modifier
@@ -918,7 +1193,7 @@ private fun DonutChart(data: List<RequestTypeShare>) {
         val arcSize = Size(size.width - ringThickness, size.height - ringThickness)
         var startAngle = -90f
         data.forEach { slice ->
-          val sweep = 360f * slice.value / total.toFloat()
+          val sweep = 360f * slice.count / total.toFloat()
           drawArc(
             color = slice.color,
             startAngle = startAngle,
@@ -932,14 +1207,17 @@ private fun DonutChart(data: List<RequestTypeShare>) {
         }
       }
       Box(Modifier.size(centerLabelSize).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-        Text("$total%", color = NavyPrimary, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Text(total.toString(), color = NavyPrimary, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp))
+          Text("Requests", color = TextLight, style = AnalyticsLabelStyle)
+        }
       }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       data.forEach { slice ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           Box(Modifier.size(10.dp).clip(CircleShape).background(slice.color))
-          Text("${slice.name} (${slice.value}%)", color = TextLight, style = AnalyticsLabelStyle.copy(fontSize = 12.sp, lineHeight = 14.sp))
+          Text("${slice.name} (${slice.count}, ${String.format(Locale.getDefault(), "%.0f", slice.percent)}%)", color = TextLight, style = AnalyticsLabelStyle.copy(fontSize = 12.sp, lineHeight = 14.sp))
         }
       }
     }

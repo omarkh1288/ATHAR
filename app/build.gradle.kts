@@ -1,7 +1,7 @@
 @file:Suppress("CyclomaticComplexityInspection")
 
-import java.io.FileInputStream
 import java.util.Properties
+import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -9,6 +9,12 @@ plugins {
   id("org.jetbrains.kotlin.android")
   id("org.jetbrains.kotlin.plugin.compose")
   id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+  localPropertiesFile.inputStream().use(localProperties::load)
 }
 
 
@@ -23,18 +29,16 @@ android {
     targetSdk = 34
     versionCode = 1
     versionName = "1.0.0"
+    multiDexEnabled = true
+    multiDexKeepProguard = file("multidex-config.pro")
+    // multiDexKeepFile removed (deprecated, using multiDexKeepProguard instead)
 
-    val localProperties = Properties()
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-      localProperties.load(FileInputStream(localPropertiesFile))
-    }
-    val mapsApiKey = localProperties.getProperty("MAPS_API_KEY")
-      ?: System.getenv("MAPS_API_KEY")
+    val mapsApiKey = System.getenv("MAPS_API_KEY")
+      ?: localProperties.getProperty("MAPS_API_KEY")
       ?: ""
-    val backendBaseUrl = localProperties.getProperty("BACKEND_BASE_URL")
-      ?: System.getenv("BACKEND_BASE_URL")
-      ?: "https://chairman-ranger-laptops-senators.trycloudflare.com/"
+    val backendBaseUrl = System.getenv("BACKEND_BASE_URL")
+      ?: localProperties.getProperty("BACKEND_BASE_URL")
+      ?: "https://lists-automotive-divide-events.trycloudflare.com/"
     manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
   }
@@ -42,6 +46,7 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+    // androidResources is enabled by default
   }
 
   compileOptions {
@@ -50,10 +55,27 @@ android {
     isCoreLibraryDesugaringEnabled = true
   }
 
+
   packaging {
     resources {
       excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+  }
+
+  // Force non-namespaced resources to avoid R.jar locking on Windows
+  bundle {
+    language.enableSplit = false
+  }
+
+}
+
+tasks.matching { task ->
+  task.name.startsWith("generate") && task.name.endsWith("BuildConfig")
+}.configureEach {
+  if (localPropertiesFile.exists()) {
+    inputs.file(localPropertiesFile)
+      .withPathSensitivity(PathSensitivity.RELATIVE)
+      .withPropertyName("localPropertiesFile")
   }
 }
 
@@ -78,6 +100,7 @@ dependencies {
   implementation("com.composables:icons-lucide-cmp:2.2.1")
   implementation("androidx.navigation:navigation-compose:2.9.7")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
   implementation("com.google.android.material:material:1.13.0")
   implementation("com.google.android.gms:play-services-maps:20.0.0")
   implementation("com.google.android.gms:play-services-location:21.3.0")
@@ -90,6 +113,9 @@ dependencies {
   implementation("io.ktor:ktor-client-content-negotiation:2.3.13")
   implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.13")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+  implementation("com.squareup.retrofit2:retrofit:2.11.0")
+  implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+  implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
   // CameraX for camera functionality
   implementation("androidx.camera:camera-camera2:1.3.4")
@@ -101,6 +127,9 @@ dependencies {
 
   debugImplementation("androidx.compose.ui:ui-tooling:1.10.3")
   debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")
+
+  testImplementation("junit:junit:4.13.2")
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
 val syncDebugApkMetadataForIde by tasks.registering(Copy::class) {
@@ -182,6 +211,25 @@ val prepareWindowsBuildDirectory by tasks.registering {
 
 tasks.matching { it.name == "preBuild" }.configureEach {
   dependsOn(prepareWindowsBuildDirectory)
+  doLast {
+    // Also clean R.jar if it exists
+    val rJarPath = layout.buildDirectory.dir(
+      "intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources"
+    ).get().asFile
+    removeWindowsDirectory(rJarPath)
+  }
+}
+
+// Handle R.jar locking issue on Windows before processDebugResources runs
+tasks.matching { it.name == "processDebugResources" }.configureEach {
+  doFirst {
+    val rJarPath = layout.buildDirectory.dir(
+      "intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources"
+    ).get().asFile
+    removeWindowsDirectory(rJarPath)
+    // Re-create the directory so AAPT2 can write R.jar into it
+    rJarPath.mkdirs()
+  }
 }
 
 val prepareDexBuilderWorkspace by tasks.registering {
