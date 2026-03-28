@@ -1,4 +1,7 @@
 package com.athar.accessibilitymapping.ui.payment
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -146,9 +149,10 @@ fun AtharPaymentFlow(
     var activePaymentStatus by remember { mutableStateOf<ApiPaymentStatus?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
     var hasOpenedCheckout by remember { mutableStateOf(false) }
-    val hours = initialHours
-    val pricePerHour = initialPricePerHour
-    val total = initialTotalAmountEgp?.coerceAtLeast(1) ?: (hours * pricePerHour).coerceAtLeast(1)
+    val hours = initialHours.coerceAtLeast(1)
+    val pricePerHour = normalizePaymentPricePerHour(hours, initialPricePerHour)
+    val total = normalizePaymentTotalAmount(hours, pricePerHour, initialTotalAmountEgp)
+        ?: (hours * pricePerHour).coerceAtLeast(1)
     val bookingRef = remember {
         "ATH-" + System.currentTimeMillis().toString(36).uppercase().takeLast(8)
     }
@@ -367,12 +371,12 @@ private fun NotificationScreen(
 ) {
     Card(
         modifier = Modifier
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 24.sdp)
             .fillMaxWidth()
             .clickable(remember { MutableInteractionSource() }, null) {},
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = AtharColors.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.sdp),
     ) {
         Column {
             // Header
@@ -380,50 +384,50 @@ private fun NotificationScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(AtharColors.Secondary)
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
+                    .padding(horizontal = 20.sdp, vertical = 24.sdp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(64.sdp)
                         .clip(CircleShape)
                         .background(AtharColors.Accent)
-                        .border(3.dp, AtharColors.AccentLight, CircleShape),
+                        .border(3.sdp, AtharColors.AccentLight, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, null, tint = AtharColors.White, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Filled.CheckCircle, null, tint = AtharColors.White, modifier = Modifier.size(32.sdp))
                 }
-                Spacer(Modifier.height(12.dp))
-                Text("Volunteer Accepted!", color = AtharColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("Please complete payment to confirm your booking.", color = AtharColors.Primary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.sdp))
+                Text("Volunteer Accepted!", color = AtharColors.White, fontSize = 20.ssp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.sdp))
+                Text("Please complete payment to confirm your booking.", color = AtharColors.Primary, fontSize = 14.ssp, textAlign = TextAlign.Center)
             }
 
             // Body
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(20.sdp),
+                verticalArrangement = Arrangement.spacedBy(14.sdp),
             ) {
                 // Volunteer info
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.sdp))
                         .background(AtharColors.Primary)
-                        .border(2.dp, AtharColors.Secondary, RoundedCornerShape(12.dp))
-                        .padding(14.dp),
+                        .border(2.sdp, AtharColors.Secondary, RoundedCornerShape(12.sdp))
+                        .padding(14.sdp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp),
                 ) {
                     Box(
-                        modifier = Modifier.size(44.dp).clip(CircleShape).background(AtharColors.Secondary),
+                        modifier = Modifier.size(44.sdp).clip(CircleShape).background(AtharColors.Secondary),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Person, null, tint = AtharColors.White, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Filled.Person, null, tint = AtharColors.White, modifier = Modifier.size(22.sdp))
                     }
                     Column {
-                        Text("Your Volunteer", color = AtharColors.TextLight, fontSize = 12.sp)
-                        Text(volunteerName, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text("Your Volunteer", color = AtharColors.TextLight, fontSize = 12.ssp)
+                        Text(volunteerName, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                     }
                 }
 
@@ -436,33 +440,33 @@ private fun NotificationScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.sdp))
                         .background(AtharColors.Primary)
-                        .border(2.dp, AtharColors.Secondary, RoundedCornerShape(12.dp))
-                        .padding(14.dp),
+                        .border(2.sdp, AtharColors.Secondary, RoundedCornerShape(12.sdp))
+                        .padding(14.sdp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("$hours ${if (hours == 1) "hour" else "hours"} × $pricePerHour EGP", color = AtharColors.Secondary, fontSize = 13.sp)
-                    Spacer(Modifier.height(4.dp))
+                    Text("$hours ${if (hours == 1) "hour" else "hours"} × $pricePerHour EGP", color = AtharColors.Secondary, fontSize = 13.ssp)
+                    Spacer(Modifier.height(4.sdp))
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("$total", color = AtharColors.Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(4.dp))
-                        Text("EGP", color = AtharColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                        Text("$total", color = AtharColors.Accent, fontSize = 30.ssp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(4.sdp))
+                        Text("EGP", color = AtharColors.Accent, fontSize = 16.ssp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.sdp))
                     }
                 }
 
                 Button(
                     onClick = onProceed,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.sdp),
                     colors = ButtonDefaults.buttonColors(containerColor = AtharColors.Accent),
-                    shape = RoundedCornerShape(14.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                    shape = RoundedCornerShape(14.sdp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.sdp),
                 ) {
-                    Text("Proceed to Payment", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text("Proceed to Payment", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                 }
 
                 TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
-                    Text("Remind me later", color = AtharColors.TextLight, fontSize = 14.sp)
+                    Text("Remind me later", color = AtharColors.TextLight, fontSize = 14.ssp)
                 }
             }
         }
@@ -471,11 +475,11 @@ private fun NotificationScreen(
 
 @Composable
 private fun DetailRow(icon: ImageVector, label: String, value: String) {
-    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(icon, null, tint = AtharColors.Accent, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.sdp)) {
+        Icon(icon, null, tint = AtharColors.Accent, modifier = Modifier.size(20.sdp).padding(top = 2.sdp))
         Column {
-            Text(label, color = AtharColors.TextLight, fontSize = 12.sp)
-            Text(value, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text(label, color = AtharColors.TextLight, fontSize = 12.ssp)
+            Text(value, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.ssp)
         }
     }
 }
@@ -508,87 +512,87 @@ private fun ReadOnlyPaymentScreen(
             .fillMaxWidth()
             .fillMaxHeight(0.9f)
             .clickable(remember { MutableInteractionSource() }, null) {},
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 24.sdp, topEnd = 24.sdp),
         colors = CardDefaults.cardColors(containerColor = AtharColors.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 16.sdp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
-            Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp)) {
+            Column(modifier = Modifier.padding(start = 24.sdp, end = 24.sdp, top = 16.sdp, bottom = 12.sdp)) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .width(40.dp).height(5.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .width(40.sdp).height(5.sdp)
+                        .clip(RoundedCornerShape(3.sdp))
                         .background(AtharColors.Gray200),
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.sdp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.sdp)) {
                         IconButton(
                             onClick = onBack,
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(AtharColors.Gray100),
+                            modifier = Modifier.size(36.sdp).clip(CircleShape).background(AtharColors.Gray100),
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = AtharColors.Secondary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = AtharColors.Secondary, modifier = Modifier.size(20.sdp))
                         }
-                        Text("Confirm Payment", color = AtharColors.Secondary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Confirm Payment", color = AtharColors.Secondary, fontSize = 20.ssp, fontWeight = FontWeight.Bold)
                     }
                     IconButton(
                         onClick = onClose,
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(AtharColors.Gray100),
+                        modifier = Modifier.size(36.sdp).clip(CircleShape).background(AtharColors.Gray100),
                     ) {
-                        Icon(Icons.Filled.Close, "Close", tint = AtharColors.Secondary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Filled.Close, "Close", tint = AtharColors.Secondary, modifier = Modifier.size(20.sdp))
                     }
                 }
             }
 
-            HorizontalDivider(color = AtharColors.Gray200, thickness = 2.dp)
+            HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
 
             // Scrollable READ-ONLY content
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(scrollState)
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                    .padding(24.sdp),
+                verticalArrangement = Arrangement.spacedBy(20.sdp),
             ) {
                 // Volunteer badge
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.sdp))
                         .background(AtharColors.Primary)
-                        .border(2.dp, AtharColors.Gray200, RoundedCornerShape(16.dp))
-                        .padding(16.dp),
+                        .border(2.sdp, AtharColors.Gray200, RoundedCornerShape(16.sdp))
+                        .padding(16.sdp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp).clip(CircleShape)
+                            .size(48.sdp).clip(CircleShape)
                             .background(Brush.linearGradient(listOf(AtharColors.Secondary, AtharColors.SecondaryDark)))
-                            .border(2.dp, AtharColors.SecondaryDark, CircleShape),
+                            .border(2.sdp, AtharColors.SecondaryDark, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Person, null, tint = AtharColors.White, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Filled.Person, null, tint = AtharColors.White, modifier = Modifier.size(24.sdp))
                     }
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(12.sdp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(volunteerName, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text(serviceName, color = AtharColors.TextLight, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(volunteerName, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
+                        Text(serviceName, color = AtharColors.TextLight, fontSize = 13.ssp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.sdp))
                     Text(
                         if (isRedirecting) "Paymob" else "Accepted",
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(AtharColors.SuccessLight)
-                            .border(2.dp, AtharColors.Success, RoundedCornerShape(50))
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        color = AtharColors.SuccessText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                            .border(2.sdp, AtharColors.Success, RoundedCornerShape(50))
+                            .padding(horizontal = 12.sdp, vertical = 4.sdp),
+                        color = AtharColors.SuccessText, fontSize = 11.ssp, fontWeight = FontWeight.SemiBold,
                     )
                 }
 
@@ -596,12 +600,12 @@ private fun ReadOnlyPaymentScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(2.dp, AtharColors.Gray200, RoundedCornerShape(16.dp))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                        .clip(RoundedCornerShape(16.sdp))
+                        .border(2.sdp, AtharColors.Gray200, RoundedCornerShape(16.sdp))
+                        .padding(16.sdp),
+                    verticalArrangement = Arrangement.spacedBy(12.sdp),
                 ) {
-                    Text("Order Details", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Order Details", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.ssp)
                     SummaryRow("From", location)
                     if (destination.isNotBlank()) SummaryRow("To", destination)
                     SummaryRow("Service", serviceName)
@@ -614,20 +618,20 @@ private fun ReadOnlyPaymentScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.sdp))
                         .background(AtharColors.Primary)
-                        .border(2.dp, AtharColors.Secondary, RoundedCornerShape(16.dp))
-                        .padding(20.dp),
+                        .border(2.sdp, AtharColors.Secondary, RoundedCornerShape(16.sdp))
+                        .padding(20.sdp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Total Amount", color = AtharColors.TextLight, fontSize = 13.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text("$hours ${if (hours == 1) "hour" else "hours"} × $pricePerHour EGP", color = AtharColors.Secondary, fontSize = 14.sp)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Total Amount", color = AtharColors.TextLight, fontSize = 13.ssp)
+                    Spacer(Modifier.height(4.sdp))
+                    Text("$hours ${if (hours == 1) "hour" else "hours"} × $pricePerHour EGP", color = AtharColors.Secondary, fontSize = 14.ssp)
+                    Spacer(Modifier.height(8.sdp))
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("$total", color = AtharColors.Accent, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(4.dp))
-                        Text("EGP", color = AtharColors.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                        Text("$total", color = AtharColors.Accent, fontSize = 36.ssp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(4.sdp))
+                        Text("EGP", color = AtharColors.Accent, fontSize = 18.ssp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.sdp))
                     }
                 }
 
@@ -635,30 +639,30 @@ private fun ReadOnlyPaymentScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.sdp))
                         .background(AtharColors.Gray100)
-                        .border(2.dp, AtharColors.Gray200, RoundedCornerShape(16.dp))
-                        .padding(14.dp),
+                        .border(2.sdp, AtharColors.Gray200, RoundedCornerShape(16.sdp))
+                        .padding(14.sdp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp),
                 ) {
                     Box(
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
+                        modifier = Modifier.size(40.sdp).clip(CircleShape)
                             .background(Brush.linearGradient(listOf(Color(0xFF0A2540), Color(0xFF1A3A5C)))),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Shield, null, tint = AtharColors.White, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Filled.Shield, null, tint = AtharColors.White, modifier = Modifier.size(20.sdp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Secured by Paymob", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Secured by Paymob", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.ssp)
                         Text(
                             if (isRedirecting) "Open the checkout, finish the payment, then confirm it below."
                             else "You'll be redirected to Paymob's secure checkout.",
                             color = AtharColors.TextLight,
-                            fontSize = 11.sp
+                            fontSize = 11.ssp
                         )
                     }
-                    Icon(Icons.Filled.Lock, null, tint = AtharColors.TextLight, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Lock, null, tint = AtharColors.TextLight, modifier = Modifier.size(16.sdp))
                 }
 
                 paymentMessage?.let { message ->
@@ -685,13 +689,13 @@ private fun ReadOnlyPaymentScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.sdp))
                             .background(AtharColors.White)
-                            .border(2.dp, AtharColors.Gray200, RoundedCornerShape(16.dp))
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .border(2.sdp, AtharColors.Gray200, RoundedCornerShape(16.sdp))
+                            .padding(16.sdp),
+                        verticalArrangement = Arrangement.spacedBy(8.sdp),
                     ) {
-                        Text("Payment Status", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Payment Status", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.ssp)
                         paymentId?.takeIf { it.isNotBlank() }?.let { SummaryRow("Payment ID", it) }
                         paymentStatus?.let { status ->
                             SummaryRow("Status", status.status.replaceFirstChar { it.uppercase() })
@@ -704,32 +708,32 @@ private fun ReadOnlyPaymentScreen(
                 Button(
                     onClick = if (isRedirecting) onOpenPaymobCheckout else onPayWithPaymob,
                     enabled = !isSubmitting,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.sdp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isRedirecting) AtharColors.SecondaryDark else AtharColors.Accent,
                         disabledContainerColor = AtharColors.Secondary,
                         disabledContentColor = AtharColors.White,
                     ),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
+                    shape = RoundedCornerShape(16.sdp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.sdp),
                 ) {
                     when {
                         isSubmitting -> {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = AtharColors.White, strokeWidth = 2.dp)
-                            Spacer(Modifier.width(10.dp))
-                            Text("Processing payment...", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.sdp), color = AtharColors.White, strokeWidth = 2.sdp)
+                            Spacer(Modifier.width(10.sdp))
+                            Text("Processing payment...", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                         }
                         isRedirecting -> {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Open Paymob Checkout", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(20.sdp))
+                            Spacer(Modifier.width(10.sdp))
+                            Text("Open Paymob Checkout", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                         }
                         else -> {
-                            Icon(Icons.Filled.CreditCard, null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Pay $total EGP with Paymob", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                            Spacer(Modifier.width(6.dp))
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(16.dp), tint = AtharColors.White.copy(alpha = 0.7f))
+                            Icon(Icons.Filled.CreditCard, null, modifier = Modifier.size(20.sdp))
+                            Spacer(Modifier.width(10.sdp))
+                            Text("Pay $total EGP with Paymob", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
+                            Spacer(Modifier.width(6.sdp))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(16.sdp), tint = AtharColors.White.copy(alpha = 0.7f))
                         }
                     }
                 }
@@ -738,51 +742,51 @@ private fun ReadOnlyPaymentScreen(
                     Button(
                         onClick = onConfirmPaymobPayment,
                         enabled = !isSubmitting && !paymentId.isNullOrBlank(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier.fillMaxWidth().height(56.sdp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = AtharColors.Accent,
                             disabledContainerColor = AtharColors.Gray200,
                             disabledContentColor = AtharColors.TextLight,
                         ),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                        shape = RoundedCornerShape(16.sdp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.sdp),
                     ) {
-                        Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("I've Completed Payment", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(20.sdp))
+                        Spacer(Modifier.width(10.sdp))
+                        Text("I've Completed Payment", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                     }
 
                     OutlinedButton(
                         onClick = onRefreshPaymentStatus,
                         enabled = !isSubmitting && !paymentId.isNullOrBlank(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier.fillMaxWidth().height(56.sdp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = AtharColors.Secondary,
                             disabledContentColor = AtharColors.TextLight,
                         ),
-                        border = BorderStroke(2.dp, AtharColors.Secondary),
-                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(2.sdp, AtharColors.Secondary),
+                        shape = RoundedCornerShape(16.sdp),
                     ) {
-                        Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Refresh Payment Status", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(20.sdp))
+                        Spacer(Modifier.width(10.sdp))
+                        Text("Refresh Payment Status", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                     }
                 }
 
                 // Payment method badges
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Text("VISA", modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF1A1F71)).padding(horizontal = 6.dp, vertical = 2.dp), color = AtharColors.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                    Spacer(Modifier.width(6.dp))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFFEB001B)).padding(horizontal = 6.dp, vertical = 2.dp), contentAlignment = Alignment.Center) {
-                        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color(0xFFFF5F00).copy(alpha = 0.8f)))
+                    Spacer(Modifier.width(6.sdp))
+                    Box(modifier = Modifier.clip(RoundedCornerShape(4.sdp)).background(Color(0xFFEB001B)).padding(horizontal = 6.sdp, vertical = 2.sdp), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(12.sdp).clip(CircleShape).background(Color(0xFFFF5F00).copy(alpha = 0.8f)))
                     }
-                    Spacer(Modifier.width(6.dp))
-                    Text("meeza", modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF003087)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color(0xFF009CDE), fontSize = 7.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(12.dp))
-                    Text("& more payment methods", color = AtharColors.TextLight, fontSize = 11.sp)
+                    Spacer(Modifier.width(6.sdp))
+                    Text("meeza", modifier = Modifier.clip(RoundedCornerShape(4.sdp)).background(Color(0xFF003087)).padding(horizontal = 6.sdp, vertical = 2.sdp), color = Color(0xFF009CDE), fontSize = 7.ssp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(12.sdp))
+                    Text("& more payment methods", color = AtharColors.TextLight, fontSize = 11.ssp)
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.sdp))
             }
         }
     }
@@ -804,56 +808,56 @@ private fun ConfirmationScreen(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(remember { MutableInteractionSource() }, null) {},
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 24.sdp, topEnd = 24.sdp),
         colors = CardDefaults.cardColors(containerColor = AtharColors.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 16.sdp),
     ) {
         Column(modifier = Modifier.verticalScroll(scrollState)) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(16.sdp))
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .width(40.dp).height(5.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .width(40.sdp).height(5.sdp)
+                    .clip(RoundedCornerShape(3.sdp))
                     .background(AtharColors.Gray200),
             )
 
             // Success
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.sdp, vertical = 24.sdp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
-                    modifier = Modifier.size(96.dp).clip(CircleShape)
+                    modifier = Modifier.size(96.sdp).clip(CircleShape)
                         .background(Brush.linearGradient(listOf(AtharColors.SuccessLight, Color(0xFFA7F3D0)))),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF059669), modifier = Modifier.size(48.dp))
+                    Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF059669), modifier = Modifier.size(48.sdp))
                 }
-                Spacer(Modifier.height(16.dp))
-                Text("Payment Confirmed!", color = AtharColors.Secondary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("Your volunteer is on the way.", color = AtharColors.TextLight, fontSize = 14.sp)
+                Spacer(Modifier.height(16.sdp))
+                Text("Payment Confirmed!", color = AtharColors.Secondary, fontSize = 22.ssp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.sdp))
+                Text("Your volunteer is on the way.", color = AtharColors.TextLight, fontSize = 14.ssp)
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(horizontal = 24.sdp),
+                verticalArrangement = Arrangement.spacedBy(16.sdp),
             ) {
                 // Booking reference
                 Column(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AtharColors.Primary).padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp)).background(AtharColors.Primary).padding(12.sdp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Booking Reference", color = AtharColors.TextLight, fontSize = 11.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(bookingRef, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Text("Booking Reference", color = AtharColors.TextLight, fontSize = 11.ssp)
+                    Spacer(Modifier.height(4.sdp))
+                    Text(bookingRef, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 14.ssp, fontFamily = FontFamily.Monospace, letterSpacing = 1.ssp)
                 }
 
                 // Summary
                 Column(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(2.dp, AtharColors.Gray200, RoundedCornerShape(16.dp)).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp)).border(2.sdp, AtharColors.Gray200, RoundedCornerShape(16.sdp)).padding(16.sdp),
+                    verticalArrangement = Arrangement.spacedBy(12.sdp),
                 ) {
                     SummaryRow("Volunteer", volunteerName)
                     SummaryRow("Date", date)
@@ -862,48 +866,48 @@ private fun ConfirmationScreen(
                     SummaryRow("Hours", "$hours ${if (hours == 1) "hour" else "hours"}")
                     SummaryRow("Rate", "$pricePerHour EGP/hr")
                     SummaryRow("Payment", paymentMethodLabel)
-                    HorizontalDivider(color = AtharColors.Gray200, thickness = 2.dp)
+                    HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Total Paid", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Text("$total EGP", color = AtharColors.Accent, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text("Total Paid", color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
+                        Text("$total EGP", color = AtharColors.Accent, fontWeight = FontWeight.Bold, fontSize = 20.ssp)
                     }
                 }
 
                 // Info note
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AtharColors.WarningBg).padding(12.dp),
-                    verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp)).background(AtharColors.WarningBg).padding(12.sdp),
+                    verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.sdp),
                 ) {
-                    Icon(Icons.Filled.Shield, null, tint = AtharColors.AccentDark, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                    Text("Your volunteer has been notified and is heading to your location now.", color = AtharColors.Secondary, fontSize = 13.sp)
+                    Icon(Icons.Filled.Shield, null, tint = AtharColors.AccentDark, modifier = Modifier.size(20.sdp).padding(top = 2.sdp))
+                    Text("Your volunteer has been notified and is heading to your location now.", color = AtharColors.Secondary, fontSize = 13.ssp)
                 }
 
                 // Action buttons
                 Button(
                     onClick = onTrackVolunteer,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.sdp),
                     colors = ButtonDefaults.buttonColors(containerColor = AtharColors.Secondary),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
+                    shape = RoundedCornerShape(16.sdp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.sdp),
                 ) {
-                    Icon(Icons.Filled.Navigation, null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Track Volunteer", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Icon(Icons.Filled.Navigation, null, modifier = Modifier.size(20.sdp))
+                    Spacer(Modifier.width(8.sdp))
+                    Text("Track Volunteer", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                 }
 
                 OutlinedButton(
                     onClick = onBackToHome,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.sdp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = AtharColors.Secondary),
-                    border = BorderStroke(2.dp, AtharColors.Secondary),
-                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(2.sdp, AtharColors.Secondary),
+                    shape = RoundedCornerShape(16.sdp),
                 ) {
-                    Icon(Icons.Filled.Home, null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Back to Home", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Icon(Icons.Filled.Home, null, modifier = Modifier.size(20.sdp))
+                    Spacer(Modifier.width(8.sdp))
+                    Text("Back to Home", fontWeight = FontWeight.SemiBold, fontSize = 16.ssp)
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.sdp))
             }
         }
     }
@@ -912,8 +916,8 @@ private fun ConfirmationScreen(
 @Composable
 private fun SummaryRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = AtharColors.TextLight, fontSize = 13.sp)
-        Text(value, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Text(label, color = AtharColors.TextLight, fontSize = 13.ssp)
+        Text(value, color = AtharColors.Secondary, fontWeight = FontWeight.SemiBold, fontSize = 13.ssp)
     }
 }
 
@@ -928,15 +932,15 @@ private fun PaymentFeedbackCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.sdp))
             .background(background)
-            .border(2.dp, border, RoundedCornerShape(16.dp))
-            .padding(14.dp),
+            .border(2.sdp, border, RoundedCornerShape(16.sdp))
+            .padding(14.sdp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.sdp),
     ) {
-        Icon(icon, null, tint = textColor, modifier = Modifier.size(20.dp))
-        Text(text, color = textColor, fontSize = 13.sp)
+        Icon(icon, null, tint = textColor, modifier = Modifier.size(20.sdp))
+        Text(text, color = textColor, fontSize = 13.ssp)
     }
 }
 
@@ -996,4 +1000,22 @@ private fun PreviewAtharPaymentFlow() {
         onBackToHome = {},
         onClose = {},
     )
+}
+
+private fun normalizePaymentPricePerHour(hours: Int, pricePerHour: Int): Int {
+    // Valid EGP pricePerHour: 50-200. Piaster values start at 5000.
+    return when {
+        pricePerHour > 200 && pricePerHour % 100 == 0 -> (pricePerHour / 100).coerceAtLeast(1)
+        else -> pricePerHour.coerceAtLeast(1)
+    }
+}
+
+private fun normalizePaymentTotalAmount(hours: Int, pricePerHour: Int, totalAmountEgp: Int?): Int? {
+    // Valid EGP total: max 200*8=1600. Piaster values start at 5000.
+    return totalAmountEgp?.let { total ->
+        when {
+            total > 1600 && total % 100 == 0 -> (total / 100).coerceAtLeast(1)
+            else -> total.coerceAtLeast(1)
+        }
+    }
 }

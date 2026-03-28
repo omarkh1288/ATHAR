@@ -3,6 +3,7 @@ package com.athar.accessibilitymapping.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import com.athar.accessibilitymapping.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -511,6 +512,8 @@ class BackendApiClient(private val appContext: Context? = null) {
   companion object {
     private const val DEFAULT_LAT = 30.0444
     private const val DEFAULT_LNG = 31.2357
+    // Max valid EGP total: 200 EGP/h * 8h = 1600. Anything above is likely piasters.
+    private const val MAX_VALID_TOTAL_EGP = 1600.0
   }
 
   private data class UploadFilePart(
@@ -540,14 +543,19 @@ class BackendApiClient(private val appContext: Context? = null) {
 
   private val baseUrl = BuildConfig.BACKEND_BASE_URL.trimEnd('/')
 
+  suspend fun isBackendReachable(): Boolean {
+    return when (get("/health")) {
+      is ApiCallResult.Success -> true
+      is ApiCallResult.Failure -> false
+    }
+  }
+
   suspend fun login(email: String, password: String): ApiCallResult<ApiAuthResponse> {
-    val body = JsonObject(
-      mapOf(
-        "email" to JsonPrimitive(email.trim()),
-        "password" to JsonPrimitive(password)
-      )
+    val fields = mapOf(
+      "email" to email.trim(),
+      "password" to password
     )
-    return when (val response = post("/auth/login", body)) {
+    return when (val response = postMultipart("/auth/login", fields, filePart = null)) {
       is ApiCallResult.Success -> parseAuthResponse(response.data)
       is ApiCallResult.Failure -> response
     }
@@ -555,24 +563,22 @@ class BackendApiClient(private val appContext: Context? = null) {
 
   suspend fun registerUser(request: UserRegistrationPayload): ApiCallResult<ApiAuthResponse> {
     val trimmedLocation = request.location.trim()
-    val body = JsonObject(
-      mapOf(
-        "name" to JsonPrimitive(request.fullName.trim()),
-        "full_name" to JsonPrimitive(request.fullName.trim()),
-        "email" to JsonPrimitive(request.email.trim()),
-        "password" to JsonPrimitive(request.password),
-        "password_confirmation" to JsonPrimitive(request.password),
-        "role" to JsonPrimitive("user"),
-        "phone" to JsonPrimitive(request.phone.trim()),
-        "city" to JsonPrimitive(trimmedLocation),
-        "location" to JsonPrimitive(trimmedLocation),
-        "disability_type" to JsonPrimitive(request.disabilityType.trim()),
-        "assistance_needs" to JsonPrimitive(request.disabilityType.trim()),
-        "emergency_contact_name" to JsonPrimitive(request.emergencyContactName.trim()),
-        "emergency_contact_phone" to JsonPrimitive(request.emergencyContactPhone.trim())
-      )
+    val fields = linkedMapOf(
+      "name" to request.fullName.trim(),
+      "full_name" to request.fullName.trim(),
+      "email" to request.email.trim(),
+      "password" to request.password,
+      "password_confirmation" to request.password,
+      "role" to "user",
+      "phone" to request.phone.trim(),
+      "city" to trimmedLocation,
+      "location" to trimmedLocation,
+      "disability_type" to request.disabilityType.trim(),
+      "assistance_needs" to request.disabilityType.trim(),
+      "emergency_contact_name" to request.emergencyContactName.trim(),
+      "emergency_contact_phone" to request.emergencyContactPhone.trim()
     )
-    return when (val response = post("/auth/register-user", body)) {
+    return when (val response = postMultipart("/auth/register-user", fields, filePart = null)) {
       is ApiCallResult.Success -> parseAuthResponse(response.data)
       is ApiCallResult.Failure -> response
     }
@@ -625,34 +631,7 @@ class BackendApiClient(private val appContext: Context? = null) {
       }
     }
 
-    val bodyContent = linkedMapOf<String, JsonElement>(
-      "name" to JsonPrimitive(request.fullName.trim()),
-      "full_name" to JsonPrimitive(request.fullName.trim()),
-      "email" to JsonPrimitive(request.email.trim()),
-      "password" to JsonPrimitive(request.password),
-      "password_confirmation" to JsonPrimitive(request.password),
-      "phone" to JsonPrimitive(request.phone.trim()),
-      "role" to JsonPrimitive("volunteer"),
-      "city" to JsonPrimitive(trimmedLocation),
-      "location" to JsonPrimitive(trimmedLocation),
-      "national_id" to JsonPrimitive(request.idNumber.trim()),
-      "date_of_birth" to JsonPrimitive(request.dateOfBirth.trim()),
-      "volunteer_motivation" to JsonPrimitive(request.motivation.trim()),
-      "motivation" to JsonPrimitive(request.motivation.trim()),
-      "volunteer_languages" to JsonArray(languages.map { JsonPrimitive(it) }),
-      "volunteer_availability" to JsonArray(availability.map { JsonPrimitive(it) })
-    )
-    languages.forEachIndexed { index, value ->
-      bodyContent["volunteer_languages[$index]"] = JsonPrimitive(value)
-    }
-    availability.forEachIndexed { index, value ->
-      bodyContent["volunteer_availability[$index]"] = JsonPrimitive(value)
-    }
-
-    val body = JsonObject(
-      bodyContent
-    )
-    return when (val response = post("/auth/register-volunteer", body)) {
+    return when (val response = postMultipart("/auth/register-volunteer", multipartFields, filePart = null)) {
       is ApiCallResult.Success -> parseAuthResponse(response.data)
       is ApiCallResult.Failure -> response
     }
@@ -666,7 +645,8 @@ class BackendApiClient(private val appContext: Context? = null) {
   }
 
   suspend fun logout(accessToken: String, refreshToken: String?): ApiCallResult<ApiActionResult> {
-    return when (val response = post("/auth/logout", body = null, token = accessToken)) {
+    val fields = if (refreshToken.isNullOrBlank()) emptyMap() else mapOf("refresh_token" to refreshToken)
+    return when (val response = postMultipart("/auth/logout", fields, filePart = null, token = accessToken)) {
       is ApiCallResult.Success -> ApiCallResult.Success(
         ApiActionResult(success = true, message = "Logged out.")
       )
@@ -935,13 +915,45 @@ class BackendApiClient(private val appContext: Context? = null) {
       )
     ) {
       is ApiCallResult.Success -> {
+        logApiPayload("GET /help-requests/mine", response.data)
         val root = response.data?.asObjectOrNull()
-        val genericItems = extractItems(response.data)
+        val payload = root?.get("data")?.asObjectOrNull() ?: root
+        val genericItems = extractVolunteerEndpointItems(response.data)
 
-        val userRequestItems = root.readObjectList("user_requests", "userRequests")
-          .ifEmpty { genericItems }
-        val volunteerRequestItems = root.readObjectList("volunteer_requests", "volunteerRequests")
-          .ifEmpty { genericItems }
+        val userRequestItems = payload.readObjectList(
+          "user_requests",
+          "userRequests",
+          "requests",
+          "help_requests",
+          "helpRequests",
+          "items",
+          "results"
+        ).ifEmpty {
+          root.readObjectList(
+            "user_requests",
+            "userRequests",
+            "requests",
+            "help_requests",
+            "helpRequests"
+          )
+        }.ifEmpty { genericItems }
+        val volunteerRequestItems = payload.readObjectList(
+          "volunteer_requests",
+          "volunteerRequests",
+          "requests",
+          "help_requests",
+          "helpRequests",
+          "items",
+          "results"
+        ).ifEmpty {
+          root.readObjectList(
+            "volunteer_requests",
+            "volunteerRequests",
+            "requests",
+            "help_requests",
+            "helpRequests"
+          )
+        }.ifEmpty { genericItems }
 
         ApiCallResult.Success(
           ApiMyRequestsResponse(
@@ -986,6 +998,7 @@ class BackendApiClient(private val appContext: Context? = null) {
     val path = "/volunteer/incoming?${queryParts.joinToString("&")}"
     return when (val response = get(path, token = accessToken)) {
       is ApiCallResult.Success -> {
+        logApiPayload("GET $path", response.data)
         val parsed = parseVolunteerIncomingResponse(response.data)
         ApiCallResult.Success(parsed)
       }
@@ -1021,7 +1034,7 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  suspend fun getVolunteerImpact(accessToken: String): ApiCallResult<ApiVolunteerImpactResponse> {
+  suspend fun getVolunteerImpact(accessToken: String? = null): ApiCallResult<ApiVolunteerImpactResponse> {
     return when (val response = get("/volunteer/impact", token = accessToken)) {
       is ApiCallResult.Success -> {
         val parsed = parseVolunteerImpactResponse(response.data)
@@ -1031,11 +1044,13 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  suspend fun getVolunteerAnalyticsEarnings(accessToken: String): ApiCallResult<ApiVolunteerAnalyticsEarningsResponse> {
+  suspend fun getVolunteerAnalyticsEarnings(accessToken: String? = null): ApiCallResult<ApiVolunteerAnalyticsEarningsResponse> {
     return when (val response = get("/volunteer/analytics/earnings", token = accessToken)) {
       is ApiCallResult.Success -> {
+        Log.d("VolunteerAnalyticsApi", "baseUrl=$baseUrl earningsRaw=${response.data}")
         val parsed = parseVolunteerAnalyticsEarningsResponse(response.data)
           ?: decodeApiModel<ApiVolunteerAnalyticsEarningsResponse>(response.data)
+        Log.d("VolunteerAnalyticsApi", "earningsParsed=$parsed")
         parsed?.let {
           ApiCallResult.Success(parsed)
         } ?: ApiCallResult.Failure("Invalid volunteer analytics earnings response.")
@@ -1044,11 +1059,13 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  suspend fun getVolunteerAnalyticsPerformance(accessToken: String): ApiCallResult<ApiVolunteerAnalyticsPerformanceResponse> {
+  suspend fun getVolunteerAnalyticsPerformance(accessToken: String? = null): ApiCallResult<ApiVolunteerAnalyticsPerformanceResponse> {
     return when (val response = get("/volunteer/analytics/performance", token = accessToken)) {
       is ApiCallResult.Success -> {
+        Log.d("VolunteerAnalyticsApi", "baseUrl=$baseUrl performanceRaw=${response.data}")
         val parsed = parseVolunteerAnalyticsPerformanceResponse(response.data)
           ?: decodeApiModel<ApiVolunteerAnalyticsPerformanceResponse>(response.data)
+        Log.d("VolunteerAnalyticsApi", "performanceParsed=$parsed")
         parsed?.let {
           ApiCallResult.Success(parsed)
         } ?: ApiCallResult.Failure("Invalid volunteer analytics performance response.")
@@ -1058,7 +1075,7 @@ class BackendApiClient(private val appContext: Context? = null) {
   }
 
   suspend fun getVolunteerAnalyticsReviews(
-    accessToken: String,
+    accessToken: String? = null,
     page: Int = 1,
     perPage: Int = 100,
     rating: Int? = null
@@ -1080,6 +1097,36 @@ class BackendApiClient(private val appContext: Context? = null) {
         } ?: ApiCallResult.Failure("Invalid volunteer analytics reviews response.")
       }
       is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun submitVolunteerAnalyticsWithdrawal(
+    accessToken: String? = null,
+    amountEgp: Int,
+    method: String
+  ): ApiCallResult<ApiActionResult> {
+    val body = JsonObject(
+      mapOf(
+        "amount_egp" to JsonPrimitive(amountEgp.coerceAtLeast(1)),
+        "method" to JsonPrimitive(method)
+      )
+    )
+    return if (accessToken.isNullOrBlank()) {
+      when (val response = post("/volunteer/analytics/withdrawals", body = body, token = null)) {
+        is ApiCallResult.Success -> {
+          val message = response.data?.asObjectOrNull()?.readString("message")
+            ?: "Withdrawal submitted successfully."
+          ApiCallResult.Success(ApiActionResult(success = true, message = message))
+        }
+        is ApiCallResult.Failure -> response
+      }
+    } else {
+      actionPost(
+        "/volunteer/analytics/withdrawals",
+        accessToken,
+        "Withdrawal submitted successfully.",
+        body
+      )
     }
   }
 
@@ -1127,6 +1174,7 @@ class BackendApiClient(private val appContext: Context? = null) {
 
     return when (val response = post("/help-requests", body = body, token = accessToken)) {
       is ApiCallResult.Success -> {
+        logApiPayload("POST /help-requests", response.data)
         val parsed = response.data?.asObjectOrNull()?.let { parseVolunteerRequest(it) }
         if (parsed != null) {
           ApiCallResult.Success(parsed)
@@ -1463,9 +1511,23 @@ class BackendApiClient(private val appContext: Context? = null) {
       "state"
     ).orEmpty()
 
-    val amount = payment.readDouble("amount", "value", "total")
-      ?: payment.readDouble("amount_cents", "amountCents")?.div(100.0)
-      ?: 0.0
+    val rawPaymentAmount = payment.readDouble(
+      "amount_egp",
+      "amountEgp",
+      "payable_amount_egp",
+      "payableAmountEgp",
+      "amount",
+      "value",
+      "total"
+    )
+    val paymentAmountCents = payment.readDouble("amount_cents", "amountCents")
+    val amount = when {
+      paymentAmountCents != null && paymentAmountCents > 0.0 -> paymentAmountCents / 100.0
+      rawPaymentAmount != null && rawPaymentAmount > MAX_VALID_TOTAL_EGP && rawPaymentAmount % 100.0 == 0.0 ->
+        rawPaymentAmount / 100.0
+      rawPaymentAmount != null -> rawPaymentAmount
+      else -> 0.0
+    }
 
     val currency = payment.readString("currency", "currency_code", "currencyCode").orEmpty()
 
@@ -1978,7 +2040,7 @@ class BackendApiClient(private val appContext: Context? = null) {
       "requestedHours"
     )?.coerceAtLeast(1) ?: 1
 
-    val totalAmountEgp = readDoubleFromCandidates(
+    val rawTotalAmount = readDoubleFromCandidates(
       "amount_egp",
       "total_amount_egp",
       "totalAmountEgp",
@@ -1992,10 +2054,11 @@ class BackendApiClient(private val appContext: Context? = null) {
       "grandTotal",
       "final_total",
       "finalTotal"
-    ) ?: readDoubleFromCandidates("service_fee", "serviceFee")
-      ?: readDoubleFromCandidates("amount_cents", "amountCents")?.div(100.0)
+    )
+    val rawServiceFee = readDoubleFromCandidates("service_fee", "serviceFee")
+    val amountCents = readDoubleFromCandidates("amount_cents", "amountCents")
 
-    val explicitPricePerHour = readDoubleFromCandidates(
+    val rawExplicitPricePerHour = readDoubleFromCandidates(
       "price_per_hour",
       "pricePerHour",
       "hourly_rate",
@@ -2004,14 +2067,46 @@ class BackendApiClient(private val appContext: Context? = null) {
       "ratePerHour"
     )
 
+    // --- Resolve raw values, converting piasters to EGP when detected ---
+    // Valid EGP range: pricePerHour 50-200, max total 200*8=1600.
+    // Backend may return values in piasters (EGP * 100). Any value above
+    // the valid EGP ceiling that is divisible by 100 is treated as piasters.
+
+    val rawPrice = amountCents?.let { cents ->
+      // If amount_cents is present and matches raw price * hours, raw price is in piasters
+      val rp = rawExplicitPricePerHour?.takeIf { it > 0.0 }
+      if (rp != null && cents > 0.0 && isApproximatelySameAmount(cents, rp * hours.toDouble())) {
+        rp / 100.0
+      } else {
+        rp
+      }
+    } ?: rawExplicitPricePerHour?.takeIf { it > 0.0 }
+
+    val pricePerHourEgp = when {
+      rawPrice != null && rawPrice > 200.0 && rawPrice % 100.0 == 0.0 -> rawPrice / 100.0
+      rawPrice != null -> rawPrice
+      else -> null
+    }
+
+    val rawTotal = amountCents?.takeIf { it > 0.0 }?.let { it / 100.0 }
+      ?: rawTotalAmount?.takeIf { it > 0.0 }
+      ?: rawServiceFee?.takeIf { it > 0.0 }
+
+    val maxValidTotalEgp = 200.0 * 8.0  // 1600
+    val totalEgp = when {
+      rawTotal != null && rawTotal > maxValidTotalEgp && rawTotal % 100.0 == 0.0 -> rawTotal / 100.0
+      rawTotal != null -> rawTotal
+      else -> null
+    }
+
     val resolvedPricePerHour = when {
-      explicitPricePerHour != null && explicitPricePerHour > 0.0 -> explicitPricePerHour.roundToInt()
-      totalAmountEgp != null && totalAmountEgp > 0.0 -> (totalAmountEgp / hours.toDouble()).roundToInt()
+      pricePerHourEgp != null && pricePerHourEgp > 0.0 -> pricePerHourEgp.roundToInt()
+      totalEgp != null && totalEgp > 0.0 -> (totalEgp / hours.toDouble()).roundToInt()
       else -> 50
     }.coerceAtLeast(1)
 
     val resolvedTotalAmount = when {
-      totalAmountEgp != null && totalAmountEgp > 0.0 -> totalAmountEgp.roundToInt()
+      totalEgp != null && totalEgp > 0.0 -> totalEgp.roundToInt()
       else -> (hours * resolvedPricePerHour).coerceAtLeast(1)
     }
 
@@ -2020,6 +2115,10 @@ class BackendApiClient(private val appContext: Context? = null) {
       pricePerHour = resolvedPricePerHour,
       totalAmountEgp = resolvedTotalAmount
     )
+  }
+
+  private fun isApproximatelySameAmount(left: Double, right: Double): Boolean {
+    return kotlin.math.abs(left - right) <= 0.99
   }
 
   private fun parseVolunteerIncomingResponse(data: JsonElement?): ApiVolunteerIncomingResponse {
@@ -2189,6 +2288,7 @@ class BackendApiClient(private val appContext: Context? = null) {
         "totalGross",
         "gross_total",
         "gross",
+        "gross_earnings",
         "total_earnings",
         "totalEarnings",
         "earnings_total"
@@ -2208,13 +2308,14 @@ class BackendApiClient(private val appContext: Context? = null) {
         "totalNet",
         "net_total",
         "net",
+        "net_earnings",
         "take_home_total",
         "takeHomeTotal"
       ) ?: 0.0,
-      thisWeekNet = earningsObject.readDouble("this_week_net", "thisWeekNet", "week_net") ?: 0.0,
-      currentMonthLabel = earningsObject.readString("current_month_label", "currentMonthLabel", "month_label").orEmpty(),
-      currentMonthNet = earningsObject.readDouble("current_month_net", "currentMonthNet", "this_month_net", "thisMonthNet") ?: 0.0,
-      lastMonthNet = earningsObject.readDouble("last_month_net", "lastMonthNet", "previous_month_net", "previousMonthNet") ?: 0.0,
+      thisWeekNet = earningsObject.readDouble("this_week_net", "thisWeekNet", "week_net", "weekly_net_earnings", "this_week_earnings") ?: 0.0,
+      currentMonthLabel = earningsObject.readString("current_month_label", "currentMonthLabel", "month_label", "current_month").orEmpty(),
+      currentMonthNet = earningsObject.readDouble("current_month_net", "currentMonthNet", "this_month_net", "thisMonthNet", "current_month_earnings", "this_month_earnings") ?: 0.0,
+      lastMonthNet = earningsObject.readDouble("last_month_net", "lastMonthNet", "previous_month_net", "previousMonthNet", "last_month_earnings", "previous_month_earnings") ?: 0.0,
       monthlyChangePercent = earningsObject.readDouble("monthly_change_percent", "monthlyChangePercent", "monthly_change") ?: 0.0,
       monthlyEarnings = monthlyEarnings,
       withdrawalHistory = withdrawalHistory,
@@ -2302,7 +2403,7 @@ class BackendApiClient(private val appContext: Context? = null) {
       averageRating = (performanceObject.readDouble("average_rating", "averageRating", "avg_rating", "avgRating") ?: 0.0).toFloat(),
       onTimeRate = (performanceObject.readDouble("on_time_rate", "onTimeRate", "on_time") ?: 0.0).toFloat(),
       completed = performanceObject.readInt("completed", "completed_count", "completed_requests", "completedRequests") ?: 0,
-      pending = performanceObject.readInt("pending", "pending_count") ?: 0,
+      pending = performanceObject.readInt("pending", "pending_count", "pending_requests", "pendingRequests") ?: 0,
       usersHelped = performanceObject.readInt("users_helped", "usersHelped", "helped_users") ?: 0,
       positiveReviews = performanceObject.readInt("positive_reviews", "positiveReviews") ?: 0,
       fiveStarRatings = performanceObject.readInt("five_star_ratings", "fiveStarRatings") ?: 0,
@@ -2749,6 +2850,17 @@ class BackendApiClient(private val appContext: Context? = null) {
     )
   }
 
+  private fun logApiPayload(label: String, payload: JsonElement?) {
+    if (!BuildConfig.DEBUG) return
+    val line = "$label => ${payload?.toString().orEmpty()}"
+    Log.d("AtharApiDebug", line)
+    runCatching {
+      appContext?.openFileOutput("api_debug_payloads.txt", Context.MODE_APPEND)?.bufferedWriter()?.use { writer ->
+        writer.appendLine(line)
+      }
+    }
+  }
+
   private fun resolveDocumentFileName(context: Context, uri: Uri): String {
     val fallback = uri.lastPathSegment?.substringAfterLast('/') ?: "id_document"
     return runCatching {
@@ -3052,6 +3164,11 @@ fun ApiLocation.toDomainLocation(): Location {
 }
 
 fun ApiVolunteerRequest.toDomainVolunteerRequest(): VolunteerRequest {
+  val normalizedMoney = normalizeDomainRequestMoney(
+    hours = hours,
+    pricePerHour = pricePerHour,
+    totalAmountEgp = totalAmountEgp
+  )
   return VolunteerRequest(
     id = id,
     userId = userId,
@@ -3063,13 +3180,18 @@ fun ApiVolunteerRequest.toDomainVolunteerRequest(): VolunteerRequest {
     volunteerName = volunteerName,
     description = description,
     hours = hours,
-    pricePerHour = pricePerHour,
-    totalAmountEgp = totalAmountEgp,
+    pricePerHour = normalizedMoney.pricePerHour,
+    totalAmountEgp = normalizedMoney.totalAmountEgp,
     paymentMethod = paymentMethod
   )
 }
 
 fun ApiAssistanceRequest.toDomainAssistanceRequest(): AssistanceRequest {
+  val normalizedMoney = normalizeDomainRequestMoney(
+    hours = hours,
+    pricePerHour = pricePerHour,
+    totalAmountEgp = totalAmountEgp
+  )
   return AssistanceRequest(
     id = id,
     userName = userName,
@@ -3092,8 +3214,36 @@ fun ApiAssistanceRequest.toDomainAssistanceRequest(): AssistanceRequest {
       else -> RequestStatus.Broadcasted
     },
     hours = hours,
-    pricePerHour = pricePerHour,
-    totalAmountEgp = totalAmountEgp
+    pricePerHour = normalizedMoney.pricePerHour,
+    totalAmountEgp = normalizedMoney.totalAmountEgp
+  )
+}
+
+private data class NormalizedDomainRequestMoney(
+  val pricePerHour: Int,
+  val totalAmountEgp: Int?
+)
+
+private fun normalizeDomainRequestMoney(
+  hours: Int,
+  pricePerHour: Int,
+  totalAmountEgp: Int?
+): NormalizedDomainRequestMoney {
+  // Valid EGP range: pricePerHour 50-200, max total 200*8=1600.
+  // Values above ceiling that are divisible by 100 are piasters.
+  val normalizedPricePerHour = when {
+    pricePerHour > 200 && pricePerHour % 100 == 0 -> (pricePerHour / 100).coerceAtLeast(1)
+    else -> pricePerHour.coerceAtLeast(1)
+  }
+  val normalizedTotalAmount = totalAmountEgp?.let { total ->
+    when {
+      total > 1600 && total % 100 == 0 -> (total / 100).coerceAtLeast(1)
+      else -> total.coerceAtLeast(1)
+    }
+  }
+  return NormalizedDomainRequestMoney(
+    pricePerHour = normalizedPricePerHour,
+    totalAmountEgp = normalizedTotalAmount
   )
 }
 

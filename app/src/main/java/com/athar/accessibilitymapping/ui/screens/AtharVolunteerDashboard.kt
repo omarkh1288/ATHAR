@@ -1,18 +1,18 @@
-package com.athar.accessibilitymapping.ui.screens
+﻿package com.athar.accessibilitymapping.ui.screens
 
 /**
- * ═══════════════════════════════════════════════════════════════════════════
+ * ---------------------------------------------------------------------------
  * ATHAR - Volunteer Dashboard (Jetpack Compose)
- * ═══════════════════════════════════════════════════════════════════════════
+ * ---------------------------------------------------------------------------
  *
  * A pixel-perfect Kotlin translation of the web VolunteerDashboard.tsx.
  * Self-contained — all colors, data models, mock data, and composables
  * are included in this single file.
  *
- * ── PLACEMENT ──
+ * -- PLACEMENT --
  *   app/src/main/java/com/athar/app/ui/dashboard/AtharVolunteerDashboard.kt
  *
- * ── DEPENDENCIES (build.gradle.kts :app) ──
+ * -- DEPENDENCIES (build.gradle.kts :app) --
  *   // Compose BOM
  *   implementation(platform("androidx.compose:compose-bom:2024.02.00"))
  *   implementation("androidx.compose.ui:ui")
@@ -25,7 +25,7 @@ package com.athar.accessibilitymapping.ui.screens
  *   implementation("androidx.activity:activity-compose:1.8.2")
  *   implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
  *
- * ── USAGE ──
+ * -- USAGE --
  *   AtharVolunteerDashboard(
  *       isVolunteerLive = true,    // from your state/viewmodel
  *       userName = "Sara Mohammed", // from your auth context
@@ -83,9 +83,9 @@ import com.athar.accessibilitymapping.data.VolunteerImpactDashboard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // ATHAR COLOR PALETTE
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 private object VolunteerDashboardColors {
     // Primary - Light Sky Blue
@@ -129,9 +129,9 @@ private object VolunteerDashboardColors {
     val White = Color.White
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // DATA MODELS
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 private enum class DashboardTab(val label: String) {
     INCOMING("Incoming"),
@@ -153,6 +153,7 @@ private data class AssistanceRequest(
     val requestTime: String,
     val hours: Int,
     val pricePerHour: Int,
+    val totalAmountEgp: Int? = null,
 )
 
 private enum class HistoryOutcome { COMPLETED, CANCELLED }
@@ -182,9 +183,9 @@ private data class UrgencyStyle(
     val icon: ImageVector,
 )
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // MOCK DATA
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 private val defaultVolunteerStats = VolunteerStats(
     totalAssists = 47,
@@ -193,9 +194,9 @@ private val defaultVolunteerStats = VolunteerStats(
     streak = 3,
 )
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 private fun getUrgencyStyle(urgency: Urgency): UrgencyStyle = when (urgency) {
     Urgency.HIGH -> UrgencyStyle(
@@ -237,6 +238,12 @@ private fun String.toUrgency(): Urgency {
 }
 
 private fun DomainAssistanceRequest.toDashboardRequest(): AssistanceRequest {
+    val normalizedPricePerHour = normalizeUiRequestPricePerHour(hours, pricePerHour)
+    val normalizedTotalAmount = normalizeUiRequestTotalAmount(
+        hours = hours,
+        pricePerHour = pricePerHour,
+        totalAmountEgp = totalAmountEgp
+    )
     return AssistanceRequest(
         id = id,
         userName = userName,
@@ -248,7 +255,8 @@ private fun DomainAssistanceRequest.toDashboardRequest(): AssistanceRequest {
         helpType = helpType,
         requestTime = requestTime,
         hours = hours,
-        pricePerHour = pricePerHour
+        pricePerHour = normalizedPricePerHour,
+        totalAmountEgp = normalizedTotalAmount
     )
 }
 
@@ -374,9 +382,9 @@ private fun extractPhoneNumber(vararg candidates: String): String? {
     return null
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // MAIN COMPOSABLE
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 fun AtharVolunteerDashboard(
@@ -561,9 +569,9 @@ fun AtharVolunteerDashboard(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // OFFLINE VIEW
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun OfflineView(
@@ -650,9 +658,9 @@ private fun OfflineView(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // LIVE DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun LiveDashboard(
@@ -675,7 +683,7 @@ private fun LiveDashboard(
             .fillMaxSize()
             .background(VolunteerDashboardColors.Primary)
     ) {
-        // ─── Header ───
+        // --- Header ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -733,7 +741,7 @@ private fun LiveDashboard(
                 Spacer(Modifier.height(8.dp))
             }
 
-            // ─── Tabs ───
+            // --- Tabs ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -786,7 +794,7 @@ private fun LiveDashboard(
             }
         }
 
-        // ─── Tab Content ───
+        // --- Tab Content ---
         when (activeTab) {
             DashboardTab.INCOMING -> IncomingRequestsTab(
                 requests = activeRequests,
@@ -804,9 +812,9 @@ private fun LiveDashboard(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // INCOMING REQUESTS TAB
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun IncomingRequestsTab(
@@ -861,9 +869,9 @@ private fun IncomingRequestsTab(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // SINGLE REQUEST CARD
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun RequestCard(
@@ -880,7 +888,7 @@ private fun RequestCard(
             .border(2.dp, VolunteerDashboardColors.Gray200, RoundedCornerShape(16.dp))
             .background(VolunteerDashboardColors.White)
     ) {
-        // ── Top section ──
+        // -- Top section --
         Column(modifier = Modifier.padding(16.dp)) {
             // User row + urgency badge
             Row(
@@ -988,14 +996,17 @@ private fun RequestCard(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
+                    val displayPricePerHour = request.pricePerHour.coerceAtLeast(1)
+                    val displayTotalAmount = request.totalAmountEgp
+                        ?: (request.hours.coerceAtLeast(1) * displayPricePerHour).coerceAtLeast(1)
                     Text(
-                        "${request.hours * request.pricePerHour} EGP",
+                        "$displayTotalAmount EGP",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = VolunteerDashboardColors.AccentDark
                     )
                     Text(
-                        "${request.hours}h × ${request.pricePerHour} EGP",
+                        "${request.hours}h x $displayPricePerHour EGP",
                         fontSize = 11.sp,
                         color = VolunteerDashboardColors.TextLight
                     )
@@ -1003,7 +1014,7 @@ private fun RequestCard(
             }
         }
 
-        // ── Action buttons ──
+        // -- Action buttons --
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1050,9 +1061,9 @@ private fun RequestCard(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // ACCEPTED (ACTIVE) TAB
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun AcceptedTab(
@@ -1272,9 +1283,9 @@ private fun AcceptedTab(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // HISTORY TAB
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Composable
 private fun HistoryTab(
@@ -1301,7 +1312,7 @@ private fun HistoryTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // ── Impact Summary Card ──
+        // -- Impact Summary Card --
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1348,7 +1359,7 @@ private fun HistoryTab(
 
         Spacer(Modifier.height(4.dp))
 
-        // ── History items ──
+        // -- History items --
         historyItems.forEach { item ->
             HistoryRow(item = item, onClick = { selectedItem = item })
         }
@@ -1439,7 +1450,7 @@ private fun HistoryRow(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 @Composable
 private fun HistoryDetailDialog(
     item: HistoryItem,
@@ -1477,7 +1488,7 @@ private fun HistoryDetailDialog(
 }
 
 // REUSABLE SUB-COMPOSABLES
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 /** Navy header bar with title + optional subtitle */
 @Composable
@@ -1648,9 +1659,9 @@ private fun EmptyState(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // MODIFIER EXTENSION - draw top border
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 private fun Modifier.drawTopBorder(color: Color, width: Float = 2f): Modifier = this.then(
     Modifier.drawWithContent {
@@ -1665,9 +1676,9 @@ private fun Modifier.drawTopBorder(color: Color, width: Float = 2f): Modifier = 
 )
 
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // PREVIEWS
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 @Preview(showBackground = true, widthDp = 400, heightDp = 800, name = "Offline")
 @Composable
@@ -1684,3 +1695,22 @@ private fun PreviewLive() {
         AtharVolunteerDashboard(isVolunteerLive = true, userName = "Sara Mohammed")
     }
 }
+
+private fun normalizeUiRequestPricePerHour(hours: Int, pricePerHour: Int): Int {
+    // Valid EGP pricePerHour: 50-200. Piaster values start at 5000.
+    return when {
+        pricePerHour > 200 && pricePerHour % 100 == 0 -> (pricePerHour / 100).coerceAtLeast(1)
+        else -> pricePerHour.coerceAtLeast(1)
+    }
+}
+
+private fun normalizeUiRequestTotalAmount(hours: Int, pricePerHour: Int, totalAmountEgp: Int?): Int? {
+    // Valid EGP total: max 200*8=1600. Piaster values start at 5000.
+    return totalAmountEgp?.let { total ->
+        when {
+            total > 1600 && total % 100 == 0 -> (total / 100).coerceAtLeast(1)
+            else -> total.coerceAtLeast(1)
+        }
+    }
+}
+

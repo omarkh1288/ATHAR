@@ -1,5 +1,6 @@
 package com.athar.accessibilitymapping.data
 
+import com.athar.accessibilitymapping.BuildConfig
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -22,6 +23,7 @@ class AuthSessionStore(private val context: Context) {
   private val phoneKey = stringPreferencesKey("phone")
   private val disabilityTypeKey = stringPreferencesKey("disability_type")
   private val volunteerLiveKey = booleanPreferencesKey("volunteer_live")
+  private val backendBaseUrlKey = stringPreferencesKey("backend_base_url")
 
   suspend fun saveSession(
     userId: String,
@@ -45,6 +47,7 @@ class AuthSessionStore(private val context: Context) {
       prefs[emailKey] = email
       prefs[phoneKey] = phone
       prefs[volunteerLiveKey] = volunteerLive
+      prefs[backendBaseUrlKey] = BuildConfig.BACKEND_BASE_URL.trim()
       if (disabilityType.isNullOrBlank()) {
         prefs.remove(disabilityTypeKey)
       } else {
@@ -75,8 +78,31 @@ class AuthSessionStore(private val context: Context) {
     return context.authDataStore.data.first()[refreshTokenKey]
   }
 
+  suspend fun getExpiresAtEpochSeconds(): Long? {
+    return context.authDataStore.data.first()[expiresAtKey]
+  }
+
+  suspend fun updateTokens(
+    accessToken: String,
+    refreshToken: String,
+    expiresAtEpochSeconds: Long
+  ) {
+    context.authDataStore.edit { prefs ->
+      prefs[accessTokenKey] = accessToken
+      prefs[refreshTokenKey] = refreshToken
+      prefs[expiresAtKey] = expiresAtEpochSeconds
+      prefs[backendBaseUrlKey] = BuildConfig.BACKEND_BASE_URL.trim()
+    }
+  }
+
   suspend fun readAuthSession(): AuthSession? {
     val prefs = context.authDataStore.data.first()
+    val savedBackendBaseUrl = prefs[backendBaseUrlKey]?.trim().orEmpty()
+    val currentBackendBaseUrl = BuildConfig.BACKEND_BASE_URL.trim()
+    if (savedBackendBaseUrl.isBlank() || !savedBackendBaseUrl.equals(currentBackendBaseUrl, ignoreCase = true)) {
+      clearSession()
+      return null
+    }
     val roleName = prefs[roleKey] ?: return null
     val role = runCatching { UserRole.valueOf(roleName) }.getOrNull() ?: return null
     val userId = prefs[userIdKey] ?: return null

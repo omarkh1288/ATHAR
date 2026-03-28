@@ -1,8 +1,10 @@
 package com.athar.accessibilitymapping.data
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 
 class AtharRepository(
   context: Context,
@@ -19,26 +21,32 @@ class AtharRepository(
   }
 
   suspend fun searchLocations(query: String): List<Location> = withContext(Dispatchers.IO) {
-    when (val result = api.searchLocations(query)) {
-      is ApiCallResult.Success -> result.data.results.map { it.toDomainLocation() }
-      is ApiCallResult.Failure -> {
-        getLocations().filter { location ->
-          location.name.contains(query, ignoreCase = true) ||
-            location.category.contains(query, ignoreCase = true)
-        }
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isBlank()) return@withContext emptyList()
+
+    val localMatches = searchLocalLocations(normalizedQuery, getLocations())
+
+    when (val result = api.searchLocations(normalizedQuery)) {
+      is ApiCallResult.Success -> {
+        val remoteMatches = result.data.results.map { it.toDomainLocation() }
+        mergeSearchLocations(remoteMatches, localMatches, normalizedQuery)
       }
+      is ApiCallResult.Failure -> localMatches
     }
   }
 
   suspend fun getRequests(): List<VolunteerRequest> = withContext(Dispatchers.IO) {
     when (val result = callAuthorized { token -> api.getMyRequests(token) }) {
-      is ApiCallResult.Success -> result.data.userRequests.map { it.toDomainVolunteerRequest() }
+      is ApiCallResult.Success -> result.data.userRequests
+        .map { it.toDomainVolunteerRequest() }
+        .map { it.normalizeMoney() }
       is ApiCallResult.Failure -> {
         if (result.statusCode == null && canUseLocalRequestFallback()) {
           val session = sessionStore.readAuthSession()
           if (session?.role == UserRole.User) {
             return@withContext localRequestStore.getUserRequests(session.userId)
               .map { it.toDomainVolunteerRequest() }
+              .map { it.normalizeMoney() }
           }
         }
         emptyList()
@@ -60,7 +68,9 @@ class AtharRepository(
         VolunteerIncomingDashboard(
           counts = result.data.counts.toDomainCounts(),
           incomingAlert = result.data.incomingAlert.toDomainIncomingAlert(),
-          requests = result.data.requests.map { it.toDomainAssistanceRequest() }
+          requests = result.data.requests
+            .map { it.toDomainAssistanceRequest() }
+            .map { it.normalizeMoney() }
         )
       }
       is ApiCallResult.Failure -> {
@@ -80,7 +90,7 @@ class AtharRepository(
                 count = count,
                 message = incomingAlertMessage(count)
               ),
-              requests = requests
+              requests = requests.map { it.normalizeMoney() }
             )
           }
         }
@@ -95,7 +105,9 @@ class AtharRepository(
         VolunteerActiveDashboard(
           counts = result.data.counts.toDomainCounts(),
           statusBanner = result.data.statusBanner,
-          requests = result.data.requests.map { it.toDomainAssistanceRequest() }
+          requests = result.data.requests
+            .map { it.toDomainAssistanceRequest() }
+            .map { it.normalizeMoney() }
         )
       }
       is ApiCallResult.Failure -> {
@@ -118,7 +130,7 @@ class AtharRepository(
               history = historyCount
             ),
             statusBanner = "Assistance in Progress",
-            requests = activeRequests
+            requests = activeRequests.map { it.normalizeMoney() }
           )
         }
         VolunteerActiveDashboard()
@@ -132,7 +144,9 @@ class AtharRepository(
         VolunteerHistoryDashboard(
           counts = result.data.counts.toDomainCounts(),
           impact = result.data.impact.toDomainVolunteerImpact(),
-          requests = result.data.requests.map { it.toDomainAssistanceRequest() }
+          requests = result.data.requests
+            .map { it.toDomainAssistanceRequest() }
+            .map { it.normalizeMoney() }
         )
       }
       is ApiCallResult.Failure -> {
@@ -161,7 +175,7 @@ class AtharRepository(
               avgRating = 0f,
               thisWeek = completedCount
             ),
-            requests = historyRequests
+            requests = historyRequests.map { it.normalizeMoney() }
           )
         }
         VolunteerHistoryDashboard()
@@ -212,6 +226,16 @@ class AtharRepository(
     }
   }
 
+  suspend fun submitVolunteerAnalyticsWithdrawal(
+    amountEgp: Int,
+    method: String
+  ): ApiCallResult<ApiActionResult> = withContext(Dispatchers.IO) {
+    when (val result = callAuthorized { token -> api.submitVolunteerAnalyticsWithdrawal(token, amountEgp = amountEgp, method = method) }) {
+      is ApiCallResult.Success -> result
+      is ApiCallResult.Failure -> result
+    }
+  }
+
   suspend fun getVolunteerAnalyticsSnapshot(
     page: Int = 1,
     perPage: Int = 100,
@@ -219,10 +243,6 @@ class AtharRepository(
   ): VolunteerAnalyticsSnapshot = withContext(Dispatchers.IO) {
     val warnings = linkedSetOf<String>()
     val isLocalSession = canUseLocalRequestFallback()
-
-    if (isLocalSession) {
-      warnings += "Analytics require a live backend session. Sign in with the online volunteer account."
-    }
 
     val accountResult = getCurrentAccount()
     val volunteer = when (accountResult) {
@@ -253,7 +273,7 @@ class AtharRepository(
         warnings += "Volunteer account was not approved for analytics access."
     }
 
-    val shouldFetchRemoteAnalytics = !isLocalSession
+    val shouldFetchRemoteAnalytics = true
 
     var impact = VolunteerImpactDashboard()
     var earnings = VolunteerAnalyticsEarnings()
@@ -268,26 +288,51 @@ class AtharRepository(
             impact = result.data.impact.toDomainVolunteerImpact()
           )
         }
-        is ApiCallResult.Failure -> warnings += result.message
+        is ApiCallResult.Failure -> {
+          Log.w("VolunteerAnalytics", "Impact endpoint failed: ${result.message} (status=${result.statusCode})")
+          warnings += result.message
+        }
       }
 
       when (val result = callAuthorized { token -> api.getVolunteerAnalyticsEarnings(token) }) {
         is ApiCallResult.Success -> earnings = result.data.toDomainVolunteerAnalyticsEarnings()
-        is ApiCallResult.Failure -> warnings += result.message
+        is ApiCallResult.Failure -> {
+          Log.w("VolunteerAnalytics", "Earnings endpoint failed: ${result.message} (status=${result.statusCode})")
+          warnings += result.message
+        }
       }
 
       when (val result = callAuthorized { token -> api.getVolunteerAnalyticsPerformance(token) }) {
         is ApiCallResult.Success -> performance = result.data.toDomainVolunteerAnalyticsPerformance()
-        is ApiCallResult.Failure -> warnings += result.message
+        is ApiCallResult.Failure -> {
+          Log.w("VolunteerAnalytics", "Performance endpoint failed: ${result.message} (status=${result.statusCode})")
+          warnings += result.message
+        }
       }
 
-      when (
-        val result = callAuthorized {
-          token -> api.getVolunteerAnalyticsReviews(token, page = page, perPage = perPage, rating = rating)
-        }
-      ) {
+      when (val result = callAuthorized { token -> api.getVolunteerAnalyticsReviews(token, page = page, perPage = perPage, rating = rating) }) {
         is ApiCallResult.Success -> reviews = result.data.toDomainVolunteerAnalyticsReviews()
-        is ApiCallResult.Failure -> warnings += result.message
+        is ApiCallResult.Failure -> {
+          Log.w("VolunteerAnalytics", "Reviews endpoint failed: ${result.message} (status=${result.statusCode})")
+          warnings += result.message
+        }
+      }
+    }
+
+    val needsFallbackAnalytics = earnings.needsFallbackData() || performance.needsFallbackData()
+    if (needsFallbackAnalytics) {
+      Log.w("VolunteerAnalytics", "Remote analytics data is partial or empty, computing fallback from request history")
+      val fallback = computeAnalyticsFallbackFromHistory()
+      if (fallback != null) {
+        if (impact == VolunteerImpactDashboard()) impact = fallback.impact
+        val mergedEarnings = earnings.mergeMissingFrom(fallback.earnings)
+        val mergedPerformance = performance.mergeMissingFrom(fallback.performance)
+        val mergedAnything = mergedEarnings != earnings || mergedPerformance != performance
+        earnings = mergedEarnings
+        performance = mergedPerformance
+        if (mergedAnything) {
+          warnings += "Some analytics were rebuilt from request history."
+        }
       }
     }
 
@@ -297,7 +342,7 @@ class AtharRepository(
       earnings = earnings,
       performance = performance,
       reviews = reviews,
-      isRemoteConnected = !isLocalSession,
+      isRemoteConnected = shouldFetchRemoteAnalytics && !earnings.needsFallbackData() && !performance.needsFallbackData(),
       warningMessage = warnings
         .map { it.trim() }
         .filter { it.isNotBlank() }
@@ -305,6 +350,216 @@ class AtharRepository(
         .joinToString(" ")
         .ifBlank { null }
     )
+  }
+
+  private data class AnalyticsFallback(
+    val impact: VolunteerImpactDashboard,
+    val earnings: VolunteerAnalyticsEarnings,
+    val performance: VolunteerAnalyticsPerformance
+  )
+
+  private fun VolunteerAnalyticsEarnings.needsFallbackData(): Boolean {
+    return totalGross <= 0.0 &&
+      totalNet <= 0.0 &&
+      availableBalance <= 0.0 &&
+      pendingBalance <= 0.0 &&
+      monthlyEarnings.isEmpty() &&
+      paymentHistory.isEmpty()
+  }
+
+  private fun VolunteerAnalyticsPerformance.needsFallbackData(): Boolean {
+    return completed <= 0 &&
+      pending <= 0 &&
+      weeklyActivity.isEmpty() &&
+      requestTypes.isEmpty()
+  }
+
+  private fun VolunteerAnalyticsEarnings.mergeMissingFrom(
+    fallback: VolunteerAnalyticsEarnings
+  ): VolunteerAnalyticsEarnings {
+    return copy(
+      availableBalance = availableBalance.takeUnless { it <= 0.0 } ?: fallback.availableBalance,
+      pendingBalance = pendingBalance.takeUnless { it <= 0.0 } ?: fallback.pendingBalance,
+      totalGross = totalGross.takeUnless { it <= 0.0 } ?: fallback.totalGross,
+      totalFees = totalFees.takeUnless { it <= 0.0 } ?: fallback.totalFees,
+      totalNet = totalNet.takeUnless { it <= 0.0 } ?: fallback.totalNet,
+      thisWeekNet = thisWeekNet.takeUnless { it <= 0.0 } ?: fallback.thisWeekNet,
+      currentMonthLabel = currentMonthLabel.ifBlank { fallback.currentMonthLabel },
+      currentMonthNet = currentMonthNet.takeUnless { it <= 0.0 } ?: fallback.currentMonthNet,
+      lastMonthNet = lastMonthNet.takeUnless { it <= 0.0 } ?: fallback.lastMonthNet,
+      monthlyChangePercent = monthlyChangePercent.takeUnless { it == 0.0 } ?: fallback.monthlyChangePercent,
+      monthlyEarnings = monthlyEarnings.ifEmpty { fallback.monthlyEarnings },
+      withdrawalHistory = withdrawalHistory.ifEmpty { fallback.withdrawalHistory },
+      paymentHistory = paymentHistory.ifEmpty { fallback.paymentHistory }
+    )
+  }
+
+  private fun VolunteerAnalyticsPerformance.mergeMissingFrom(
+    fallback: VolunteerAnalyticsPerformance
+  ): VolunteerAnalyticsPerformance {
+    return copy(
+      grade = grade.ifBlank { fallback.grade },
+      headline = headline.ifBlank { fallback.headline },
+      percentile = percentile.takeUnless { it == 50 } ?: fallback.percentile,
+      responseRate = responseRate.takeUnless { it <= 0f } ?: fallback.responseRate,
+      completionRate = completionRate.takeUnless { it <= 0f } ?: fallback.completionRate,
+      averageRating = averageRating.takeUnless { it <= 0f } ?: fallback.averageRating,
+      onTimeRate = onTimeRate.takeUnless { it <= 0f } ?: fallback.onTimeRate,
+      completed = completed.takeUnless { it <= 0 } ?: fallback.completed,
+      pending = pending.takeUnless { it <= 0 } ?: fallback.pending,
+      usersHelped = usersHelped.takeUnless { it <= 0 } ?: fallback.usersHelped,
+      positiveReviews = positiveReviews.takeUnless { it <= 0 } ?: fallback.positiveReviews,
+      fiveStarRatings = fiveStarRatings.takeUnless { it <= 0 } ?: fallback.fiveStarRatings,
+      totalReviews = totalReviews.takeUnless { it <= 0 } ?: fallback.totalReviews,
+      badges = badges.ifEmpty { fallback.badges },
+      weeklyActivity = weeklyActivity.ifEmpty { fallback.weeklyActivity },
+      requestTypes = requestTypes.ifEmpty { fallback.requestTypes }
+    )
+  }
+
+  private suspend fun computeAnalyticsFallbackFromHistory(): AnalyticsFallback? {
+    return try {
+      val history = getVolunteerHistoryDashboard(perPage = 100)
+      val active = getVolunteerActiveDashboard(perPage = 100)
+      val allRequests = (history.requests + active.requests).distinctBy { it.id }
+      if (allRequests.isEmpty()) return null
+
+      val completedRequests = allRequests.filter {
+        it.status == RequestStatus.Completed ||
+          it.status == RequestStatus.Rated ||
+          it.status == RequestStatus.Archived
+      }
+      val pendingRequests = allRequests.filter {
+        it.status == RequestStatus.Accepted ||
+          it.status == RequestStatus.InProgress ||
+          it.status == RequestStatus.Broadcasted ||
+          it.status == RequestStatus.Created
+      }
+      val cancelledRequests = allRequests.filter {
+        it.status == RequestStatus.Cancelled ||
+          it.status == RequestStatus.NoVolunteer
+      }
+
+      val totalGross = completedRequests.sumOf { req ->
+        (req.totalAmountEgp ?: (req.hours * req.pricePerHour)).toDouble()
+      }
+      val totalFees = totalGross * 0.30
+      val totalNet = totalGross - totalFees
+      val pendingGross = pendingRequests.sumOf { req ->
+        (req.totalAmountEgp ?: (req.hours * req.pricePerHour)).toDouble()
+      }
+
+      val paymentHistory = completedRequests.map { req ->
+        val gross = (req.totalAmountEgp ?: (req.hours * req.pricePerHour)).toDouble()
+        val net = gross * 0.70
+        VolunteerAnalyticsPaymentRecord(
+          id = req.id,
+          date = req.requestTime,
+          user = req.userName,
+          hours = req.hours,
+          gross = gross,
+          net = net,
+          status = AnalyticsRecordStatus.Completed
+        )
+      }
+
+      val completedCount = completedRequests.size
+      val pendingCount = pendingRequests.size
+      val totalCount = completedCount + pendingCount + cancelledRequests.size
+      val completionRate = if (totalCount > 0) {
+        (completedCount.toFloat() / totalCount * 100f)
+      } else 0f
+
+      val requestTypeCounts = completedRequests
+        .groupBy { it.helpType.ifBlank { "General" } }
+        .map { (type, reqs) -> VolunteerAnalyticsRequestTypeShare(name = type, value = reqs.size) }
+
+      val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+      val weeklyCounts = completedRequests
+        .groupingBy { request ->
+          request.requestTime.take(3).replaceFirstChar { char -> char.uppercase() }
+        }
+        .eachCount()
+      val weeklyActivity = dayNames.map { day ->
+        VolunteerAnalyticsWeeklyActivity(day = day, completed = weeklyCounts[day] ?: 0)
+      }
+      val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+      val monthlyEarnings = completedRequests
+        .groupBy { request ->
+          request.requestTime.take(3).replaceFirstChar { char -> char.uppercase() }
+        }
+        .map { (month, requestsForMonth) ->
+          val gross = requestsForMonth.sumOf { req ->
+            (req.totalAmountEgp ?: (req.hours * req.pricePerHour)).toDouble()
+          }
+          val fee = gross * 0.30
+          VolunteerAnalyticsMonthlyEarning(
+            month = month,
+            gross = gross,
+            net = gross - fee,
+            fee = fee
+          )
+        }
+        .sortedBy { entry -> monthNames.indexOf(entry.month).takeIf { it >= 0 } ?: Int.MAX_VALUE }
+
+      val grade = when {
+        completionRate >= 90f -> "A"
+        completionRate >= 75f -> "B"
+        completionRate >= 50f -> "C"
+        completionRate >= 25f -> "D"
+        else -> "F"
+      }
+
+      val earnings = VolunteerAnalyticsEarnings(
+        availableBalance = totalNet,
+        pendingBalance = pendingGross * 0.70,
+        totalGross = totalGross,
+        totalFees = totalFees,
+        totalNet = totalNet,
+        thisWeekNet = weeklyActivity.sumOf { activity ->
+          if (activity.completed > 0 && completedCount > 0) totalNet / completedCount * activity.completed else 0.0
+        },
+        currentMonthLabel = monthlyEarnings.lastOrNull()?.month.orEmpty(),
+        currentMonthNet = monthlyEarnings.lastOrNull()?.net ?: totalNet,
+        monthlyEarnings = monthlyEarnings,
+        paymentHistory = paymentHistory
+      )
+
+      val performance = VolunteerAnalyticsPerformance(
+        grade = grade,
+        headline = when (grade) {
+          "A" -> "Outstanding volunteer!"
+          "B" -> "Great performance!"
+          "C" -> "Good progress, keep going!"
+          else -> "Complete more requests to improve"
+        },
+        percentile = (completionRate * 0.9f).toInt().coerceIn(1, 99),
+        completionRate = completionRate,
+        averageRating = history.impact.avgRating,
+        completed = completedCount,
+        pending = pendingCount,
+        usersHelped = completedRequests.map { it.userName }.distinct().size,
+        totalReviews = 0,
+        weeklyActivity = weeklyActivity,
+        requestTypes = requestTypeCounts
+      )
+
+      AnalyticsFallback(
+        impact = VolunteerImpactDashboard(
+          counts = VolunteerDashboardCounts(
+            incoming = 0,
+            active = pendingCount,
+            history = completedCount
+          ),
+          impact = history.impact
+        ),
+        earnings = earnings,
+        performance = performance
+      )
+    } catch (e: Exception) {
+      Log.w("VolunteerAnalytics", "Fallback computation failed: ${e.message}")
+      null
+    }
   }
 
   suspend fun getIncomingRequests(): List<AssistanceRequest> = withContext(Dispatchers.IO) {
@@ -487,7 +742,7 @@ class AtharRepository(
     amountEgp: Int
   ): ApiCallResult<ApiPayRequestResponse> = withContext(Dispatchers.IO) {
     val normalizedMethod = paymentMethod.trim().uppercase()
-    val normalizedAmount = amountEgp.coerceAtLeast(1)
+    val normalizedAmount = normalizeMoneyAmount(amountEgp).coerceAtLeast(1)
     val session = sessionStore.readAuthSession()
     var fullName = session?.fullName.orEmpty()
     var email = session?.email.orEmpty()
@@ -596,7 +851,7 @@ class AtharRepository(
 
   suspend fun getPaymentStatus(paymentId: String): ApiCallResult<ApiPaymentStatus> = withContext(Dispatchers.IO) {
     when (val result = callAuthorized { token -> api.getPaymentStatus(token, paymentId) }) {
-      is ApiCallResult.Success -> result
+      is ApiCallResult.Success -> ApiCallResult.Success(result.data.normalizeMoney())
       is ApiCallResult.Failure -> {
         if (result.statusCode != null) return@withContext result
         ApiCallResult.Failure("Payments require a live backend connection.")
@@ -606,7 +861,7 @@ class AtharRepository(
 
   suspend fun refreshPayment(paymentId: String): ApiCallResult<ApiPaymentStatus> = withContext(Dispatchers.IO) {
     when (val result = callAuthorized { token -> api.refreshPayment(token, paymentId) }) {
-      is ApiCallResult.Success -> result
+      is ApiCallResult.Success -> ApiCallResult.Success(result.data.normalizeMoney())
       is ApiCallResult.Failure -> {
         if (result.statusCode != null) return@withContext result
         ApiCallResult.Failure("Payments require a live backend connection.")
@@ -832,17 +1087,52 @@ class AtharRepository(
   private suspend fun <T> callAuthorized(
     apiCall: suspend (accessToken: String) -> ApiCallResult<T>
   ): ApiCallResult<T> {
-    val accessToken = sessionStore.getAccessToken()
+    val accessToken = ensureValidAccessToken()
       ?: return ApiCallResult.Failure("You are not logged in.")
-    if (accessToken.startsWith("local-")) {
-      return ApiCallResult.Failure("Local session mode.", statusCode = null)
-    }
     val firstAttempt = apiCall(accessToken)
     if (firstAttempt is ApiCallResult.Failure && firstAttempt.statusCode == 401) {
+      val refreshedAccessToken = refreshAuthorizedSession()
+      if (!refreshedAccessToken.isNullOrBlank()) {
+        return apiCall(refreshedAccessToken)
+      }
       sessionStore.clearSession()
       return ApiCallResult.Failure("Session expired. Please sign in again.", 401)
     }
     return firstAttempt
+  }
+
+  private suspend fun ensureValidAccessToken(): String? {
+    val accessToken = sessionStore.getAccessToken() ?: return null
+    if (accessToken.startsWith("local-")) return accessToken
+    val expiresAt = sessionStore.getExpiresAtEpochSeconds()
+    val now = Instant.now().epochSecond
+    return if (expiresAt != null && expiresAt <= now + 30) {
+      refreshAuthorizedSession() ?: accessToken
+    } else {
+      accessToken
+    }
+  }
+
+  private suspend fun refreshAuthorizedSession(): String? {
+    val currentAccessToken = sessionStore.getAccessToken() ?: return null
+    if (currentAccessToken.startsWith("local-")) return currentAccessToken
+    val refreshToken = sessionStore.getRefreshToken() ?: return null
+    return when (val refreshResult = api.refresh(refreshToken)) {
+      is ApiCallResult.Success -> {
+        sessionStore.updateTokens(
+          accessToken = refreshResult.data.tokens.accessToken,
+          refreshToken = refreshResult.data.tokens.refreshToken,
+          expiresAtEpochSeconds = refreshResult.data.tokens.expiresAtEpochSeconds
+        )
+        sessionStore.updateVolunteerLive(refreshResult.data.user.volunteerLive)
+        refreshResult.data.tokens.accessToken
+      }
+      is ApiCallResult.Failure -> {
+        Log.w("AtharRepository", "Token refresh failed: ${refreshResult.message}")
+        sessionStore.clearSession()
+        null
+      }
+    }
   }
 
   private suspend fun canUseLocalRequestFallback(): Boolean {
@@ -924,5 +1214,102 @@ class AtharRepository(
       email = normalizedEmail,
       phoneNumber = normalizedPhone
     )
+  }
+
+  private fun searchLocalLocations(query: String, locations: List<Location>): List<Location> {
+    val normalizedQuery = query.normalizedSearchText()
+    val queryTokens = normalizedQuery.split(' ').filter { it.isNotBlank() }
+
+    return locations
+      .mapNotNull { location ->
+        val searchable = listOf(location.name, location.category)
+        val rank = searchable.minOfOrNull { candidate ->
+          rankSearchCandidate(candidate, normalizedQuery, queryTokens)
+        } ?: Int.MAX_VALUE
+
+        if (rank == Int.MAX_VALUE) null else location to rank
+      }
+      .sortedWith(
+        compareBy<Pair<Location, Int>> { it.second }
+          .thenBy { it.first.name.length }
+      )
+      .map { it.first }
+  }
+
+  private fun mergeSearchLocations(
+    remoteMatches: List<Location>,
+    localMatches: List<Location>,
+    query: String
+  ): List<Location> {
+    val normalizedQuery = query.normalizedSearchText()
+    val queryTokens = normalizedQuery.split(' ').filter { it.isNotBlank() }
+
+    return (remoteMatches + localMatches)
+      .distinctBy { location ->
+        listOf(location.id, location.name.normalizedSearchText()).firstOrNull { it.isNotBlank() }.orEmpty()
+      }
+      .map { location ->
+        val rank = listOf(location.name, location.category).minOfOrNull { candidate ->
+          rankSearchCandidate(candidate, normalizedQuery, queryTokens)
+        } ?: Int.MAX_VALUE
+        location to rank
+      }
+      .sortedWith(
+        compareBy<Pair<Location, Int>> { it.second }
+          .thenBy { it.first.name.length }
+      )
+      .map { it.first }
+  }
+
+  private fun rankSearchCandidate(candidate: String, normalizedQuery: String, queryTokens: List<String>): Int {
+    val normalizedCandidate = candidate.normalizedSearchText()
+    val candidateWords = normalizedCandidate.split(' ').filter { it.isNotBlank() }
+
+    return when {
+      normalizedCandidate.isBlank() -> Int.MAX_VALUE
+      normalizedCandidate == normalizedQuery -> 0
+      normalizedCandidate.startsWith(normalizedQuery) -> 1
+      candidateWords.any { it.startsWith(normalizedQuery) } -> 2
+      normalizedCandidate.contains(normalizedQuery) -> 3
+      queryTokens.isNotEmpty() && queryTokens.all { token -> candidateWords.any { it.startsWith(token) } } -> 4
+      queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedCandidate.contains(token) } -> 5
+      queryTokens.isNotEmpty() && queryTokens.any { token -> normalizedCandidate.contains(token) } -> 6
+      else -> Int.MAX_VALUE
+    }
+  }
+
+  private fun String.normalizedSearchText(): String {
+    return trim()
+      .lowercase()
+      .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+      .replace(Regex("\\s+"), " ")
+      .trim()
+  }
+
+  private fun VolunteerRequest.normalizeMoney(): VolunteerRequest {
+    return copy(
+      pricePerHour = normalizeMoneyAmount(pricePerHour),
+      totalAmountEgp = totalAmountEgp?.let { normalizeMoneyAmount(it) }
+    )
+  }
+
+  private fun AssistanceRequest.normalizeMoney(): AssistanceRequest {
+    return copy(
+      pricePerHour = normalizeMoneyAmount(pricePerHour),
+      totalAmountEgp = totalAmountEgp?.let { normalizeMoneyAmount(it) }
+    )
+  }
+
+  private fun ApiPaymentStatus.normalizeMoney(): ApiPaymentStatus {
+    return copy(amount = normalizeMoneyAmount(amount.toInt()).toDouble())
+  }
+
+  private fun normalizeMoneyAmount(amount: Int): Int {
+    // Valid EGP range: pricePerHour 50-200, max total 200*8=1600.
+    // Piaster values start at 5000 (50 EGP * 100), so > 1600 safely catches them.
+    return when {
+      amount > 1600 && amount % 100 == 0 -> (amount / 100).coerceAtLeast(1)
+      else -> amount.coerceAtLeast(1)
+    }
   }
 }

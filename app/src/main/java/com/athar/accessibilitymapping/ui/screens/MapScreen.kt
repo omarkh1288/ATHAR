@@ -82,7 +82,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -141,6 +143,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -168,63 +171,65 @@ import com.athar.accessibilitymapping.ui.theme.BlueSecondary
 import com.athar.accessibilitymapping.ui.theme.Gray200
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.payment.AtharPaymentFlow
 import com.athar.accessibilitymapping.util.resolveMapsApiKey
 
-private val MapHeaderStyle = TextStyle(
+private val MapHeaderStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.Bold,
-  fontSize = 30.sp,
-  lineHeight = 36.sp
+  fontSize = 30.ssp,
+  lineHeight = 36.ssp
 )
 
-private val MapTitleLargeStyle = TextStyle(
+private val MapTitleLargeStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.SemiBold,
-  fontSize = 20.sp,
-  lineHeight = 28.sp
+  fontSize = 20.ssp,
+  lineHeight = 28.ssp
 )
 
-private val MapTitleMediumStyle = TextStyle(
+private val MapTitleMediumStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.SemiBold,
-  fontSize = 20.sp,
-  lineHeight = 28.sp
+  fontSize = 20.ssp,
+  lineHeight = 28.ssp
 )
 
-private val MapTitleSmallStyle = TextStyle(
+private val MapTitleSmallStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.SemiBold,
-  fontSize = 16.sp,
-  lineHeight = 24.sp
+  fontSize = 16.ssp,
+  lineHeight = 24.ssp
 )
 
-private val MapBodyMediumStyle = TextStyle(
+private val MapBodyMediumStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.Normal,
-  fontSize = 16.sp,
-  lineHeight = 24.sp
+  fontSize = 16.ssp,
+  lineHeight = 24.ssp
 )
 
-private val MapBodySmallStyle = TextStyle(
+private val MapBodySmallStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.Normal,
-  fontSize = 14.sp,
-  lineHeight = 20.sp
+  fontSize = 14.ssp,
+  lineHeight = 20.ssp
 )
 
-private val MapLabelMediumStyle = TextStyle(
+private val MapLabelMediumStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.Medium,
-  fontSize = 14.sp,
-  lineHeight = 20.sp
+  fontSize = 14.ssp,
+  lineHeight = 20.ssp
 )
 
-private val MapLabelSmallStyle = TextStyle(
+private val MapLabelSmallStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
   fontWeight = FontWeight.Medium,
-  fontSize = 12.sp,
-  lineHeight = 16.sp
+  fontSize = 12.ssp,
+  lineHeight = 16.ssp
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,7 +302,6 @@ fun MapScreen(
   var placesExpanded by remember { mutableStateOf(true) }
   var mapLoaded by remember { mutableStateOf(false) }
   var mapLoadTimedOut by remember { mutableStateOf(false) }
-  var showFilters by remember { mutableStateOf(false) }
   var activeFilters by remember { mutableStateOf(setOf<String>()) }
   var selectedLocation by remember { mutableStateOf<Location?>(null) }
   var showVolunteerRequest by remember { mutableStateOf(false) }
@@ -315,7 +319,6 @@ fun MapScreen(
     // Disable Places API client to use free Geocoder fallback instead
     // To enable Google Places: set up billing at https://console.cloud.google.com
     placesClient = null
-    Log.d("MapScreen", "Using free Geocoder fallback (Google Places billing not enabled)")
 
     /* Uncomment this block after enabling billing on Google Cloud Console:
     if (mapsApiKey.isNotBlank() && !Places.isInitialized()) {
@@ -364,7 +367,7 @@ fun MapScreen(
       } catch (_: SecurityException) { }
     }
   }
-  LaunchedEffect(searchQuery, placesClient, locations) {
+  LaunchedEffect(searchQuery, locations) {
     val query = searchQuery.trim()
     val normalizedQuery = query.lowercase(Locale.getDefault())
     if (query.isBlank()) {
@@ -379,51 +382,50 @@ fun MapScreen(
     isAutocompleteLoading = true
     autocompleteError = null
     delay(300)
-    if (query != searchQuery.trim()) {
-      return@LaunchedEffect
-    }
-    val origin = cameraPositionState.position.target
-    val localSuggestions = buildLocalFallbackSuggestions(query, locations, origin)
-    val client = placesClient
-    if (client == null) {
-      val geocoderSuggestions = fetchGeocoderFallbackSuggestions(context, query, origin)
-      val mergedFallback = mergeFallbackSuggestions(localSuggestions, geocoderSuggestions)
-      autocompletePredictions = emptyList()
-      fallbackSuggestions = mergedFallback
-      showAutocomplete = fallbackSuggestions.isNotEmpty()
-      activeSuggestionQuery = normalizedQuery
-      isAutocompleteLoading = false
-      return@LaunchedEffect
-    }
+    if (query != searchQuery.trim()) return@LaunchedEffect
 
-    val autocompleteResult = fetchAutocompletePredictions(
-      client = client,
-      query = query,
-      token = sessionToken,
-      origin = origin
-    )
-    if (query != searchQuery.trim()) {
-      return@LaunchedEffect
+    val origin = cameraPositionState.position.target
+
+    // 1. Search loaded locations (case-insensitive)
+    val localSuggestions = buildLocalFallbackSuggestions(query, locations, origin)
+
+    // 2. Search backend DB
+    val backendSuggestions = try {
+      withContext(Dispatchers.IO) {
+        val backendResults = mapViewModel.repository.searchLocations(query)
+        backendResults.map { location ->
+          val target = LatLng(location.lat, location.lng)
+          val distance = formatDistance(distanceMeters(origin, target))
+          FallbackSuggestion(
+            id = "backend:${location.id}",
+            title = location.name,
+            subtitle = "${location.category} • $distance away",
+            latLng = target
+          )
+        }
+      }
+    } catch (e: Exception) {
+      emptyList<FallbackSuggestion>()
     }
-    val predictions = autocompleteResult.predictions
-      .distinctBy { prediction -> prediction.placeId }
-      .take(8)
-    val fallbackResults = if (predictions.isEmpty()) {
+    if (query != searchQuery.trim()) return@LaunchedEffect
+
+    // 3. Merge local + backend results (local first)
+    val dbSuggestions = mergeFallbackSuggestions(localSuggestions, backendSuggestions)
+
+    // 4. Try Nominatim/Geocoder as supplement (non-blocking)
+    val geocoderSuggestions = try {
       fetchGeocoderFallbackSuggestions(context, query, origin)
-    } else {
-      emptyList()
+    } catch (e: Exception) {
+      emptyList<FallbackSuggestion>()
     }
-    if (query != searchQuery.trim()) {
-      return@LaunchedEffect
-    }
-    autocompletePredictions = predictions
-    fallbackSuggestions = if (predictions.isEmpty()) {
-      mergeFallbackSuggestions(localSuggestions, fallbackResults)
-    } else {
-      emptyList()
-    }
-    autocompleteError = if (predictions.isEmpty()) autocompleteResult.errorMessage else null
-    showAutocomplete = predictions.isNotEmpty() || fallbackSuggestions.isNotEmpty()
+    if (query != searchQuery.trim()) return@LaunchedEffect
+
+    val allSuggestions = mergeFallbackSuggestions(dbSuggestions, geocoderSuggestions)
+
+    autocompletePredictions = emptyList()
+    fallbackSuggestions = allSuggestions
+    showAutocomplete = allSuggestions.isNotEmpty()
+    autocompleteError = if (allSuggestions.isEmpty()) "No places found for \"$query\"" else null
     activeSuggestionQuery = normalizedQuery
     isAutocompleteLoading = false
   }
@@ -437,7 +439,8 @@ fun MapScreen(
     "elevator" to "Elevators",
     "parking" to "Accessible Parking",
     "braille" to "Braille",
-    "audioGuide" to "Audio Guides"
+    "toilet" to "Accessible Toilet",
+    "wideEntrance" to "Wide Entrance"
   )
 
   val filteredLocations by remember {
@@ -450,6 +453,8 @@ fun MapScreen(
             "elevator" -> location.features.elevator
             "parking" -> location.features.accessibleParking
             "braille" -> location.features.brailleSignage
+            "toilet" -> location.features.accessibleToilet
+            "wideEntrance" -> location.features.wideEntrance
             else -> false
           }
         }
@@ -613,57 +618,133 @@ fun MapScreen(
 
   val listLocations = filteredLocations.sortedBy { parseDistanceMeters(it.distance) }
 
-  Column(
+  Box(
     modifier = Modifier
       .fillMaxSize()
       .background(BluePrimary)
   ) {
+    // ── MAP (full background) ──
+    GoogleMap(
+      modifier = Modifier.fillMaxSize(),
+      cameraPositionState = cameraPositionState,
+      properties = MapProperties(isMyLocationEnabled = locationPermissionGranted),
+      uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false),
+      onMapLoaded = { mapLoaded = true; hasLoadedBefore = true }
+    ) {
+      searchResult?.let { target ->
+        Marker(
+          state = MarkerState(position = target),
+          title = searchQuery.ifBlank { "Search result" },
+          snippet = "Lat: ${target.latitude}, Lng: ${target.longitude}"
+        )
+      }
+
+      filteredLocations.forEach { location ->
+        val position = LatLng(location.lat, location.lng)
+        Marker(
+          state = MarkerState(position = position),
+          title = location.name,
+          snippet = "${location.category} • Rating: ${location.rating}",
+          icon = if (activeFilters.isNotEmpty()) {
+            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+          } else {
+            BitmapDescriptorFactory.defaultMarker()
+          },
+          onClick = {
+            selectedLocation = location
+            true
+          }
+        )
+      }
+    }
+
+    // ── TOP OVERLAY ──
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .background(NavyPrimary)
+        .align(Alignment.TopCenter)
         .statusBarsPadding()
-        .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp)
+        .padding(top = 12.sdp),
+      verticalArrangement = Arrangement.spacedBy(6.sdp)
     ) {
+      // ── Athar title + action button row (no card, floating) ──
       Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 18.sdp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Text(
-          "Athar",
-          color = Color.White,
-          style = MapHeaderStyle
-        )
+        Box(
+          modifier = Modifier
+            .background(
+              brush = Brush.linearGradient(
+                colors = listOf(
+                  Color.White.copy(alpha = 0.28f),
+                  Color.White.copy(alpha = 0.08f),
+                  Color.White.copy(alpha = 0.18f)
+                )
+              ),
+              shape = RoundedCornerShape(24.sdp)
+            )
+            .border(
+              width = 1.dp,
+              color = Color.White.copy(alpha = 0.72f),
+              shape = RoundedCornerShape(24.sdp)
+            )
+            .padding(horizontal = 20.sdp, vertical = 10.sdp)
+        ) {
+          Text(
+            "Athar",
+            color = NavyPrimary,
+            style = MapHeaderStyle.copy(
+              fontSize = 30.sp,
+              lineHeight = 36.sp,
+              fontWeight = FontWeight.SemiBold
+            )
+          )
+        }
 
         if (userRole == UserRole.User) {
-          Button(
-            onClick = {
+          Card(
+            shape = RoundedCornerShape(28.sdp),
+            colors = CardDefaults.cardColors(containerColor = NavyPrimary),
+            elevation = CardDefaults.cardElevation(6.dp),
+            modifier = Modifier.clickable {
               volunteerRequestError = null
               volunteerRequestSubmitted = false
               showVolunteerRequest = true
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = NavyPrimary),
-            shape = RoundedCornerShape(10.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD4DAE4)),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+            }
           ) {
-            Icon(
-              Icons.Outlined.Add,
-              contentDescription = null,
-              modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              "Get Help",
-              style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
-            )
+            Row(
+              modifier = Modifier.padding(horizontal = 16.sdp, vertical = 10.sdp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.sdp)
+            ) {
+              Icon(
+                Icons.Outlined.Add,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.sdp)
+              )
+              Text(
+                "Get Help",
+                color = Color.White,
+                style = MapLabelMediumStyle.copy(fontWeight = FontWeight.Bold)
+              )
+            }
           }
         } else {
           if (isVolunteerVerified) {
-            Button(
-              onClick = {
+            Card(
+              shape = RoundedCornerShape(28.sdp),
+              colors = CardDefaults.cardColors(
+                containerColor = if (isVolunteerLive) Color(0xFF2E9E57) else Color(0xFF0F2747)
+              ),
+              elevation = CardDefaults.cardElevation(6.dp),
+              modifier = Modifier
+                .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(28.sdp))
+                .clickable(enabled = !isUpdatingVolunteerLive) {
                 volunteerLiveError = null
                 isUpdatingVolunteerLive = true
                 val nextState = !isVolunteerLive
@@ -678,46 +759,39 @@ fun MapScreen(
                   }
                   isUpdatingVolunteerLive = false
                 }
-              },
-              colors = ButtonDefaults.buttonColors(
-                containerColor = if (isVolunteerLive) Color(0xFF84CC16) else Color.White,
-                contentColor = if (isVolunteerLive) Color.White else NavyPrimary
-              ),
-              enabled = !isUpdatingVolunteerLive,
-              shape = RoundedCornerShape(10.dp),
-              border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                if (isVolunteerLive) Color(0xFF65A30D) else Color(0xFFD4DAE4)
-              ),
-              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+              }
             ) {
-              Icon(
-                Icons.Outlined.PowerSettingsNew,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                if (isUpdatingVolunteerLive) {
-                  "Saving..."
-                } else if (isVolunteerLive) {
-                  "Live"
-                } else {
-                  "Go Live"
-                },
-                style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
-              )
+              Row(
+                modifier = Modifier.padding(horizontal = 16.sdp, vertical = 10.sdp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.sdp)
+              ) {
+                Icon(
+                  Icons.Outlined.PowerSettingsNew,
+                  contentDescription = null,
+                  tint = Color.White,
+                  modifier = Modifier.size(18.sdp)
+                )
+                Text(
+                  if (isUpdatingVolunteerLive) "Saving..."
+                  else if (isVolunteerLive) "Live"
+                  else "Go Live",
+                  color = Color.White,
+                  style = MapLabelMediumStyle.copy(fontWeight = FontWeight.Bold)
+                )
+              }
             }
           } else {
-            Box(
-              modifier = Modifier
-                .background(AccentGold, RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+            Card(
+              shape = RoundedCornerShape(28.sdp),
+              colors = CardDefaults.cardColors(containerColor = AccentGold),
+              elevation = CardDefaults.cardElevation(6.dp)
             ) {
               Text(
                 "Pending Verification",
                 color = Color.White,
-                style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
+                style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.padding(horizontal = 16.sdp, vertical = 10.sdp)
               )
             }
           }
@@ -727,83 +801,115 @@ fun MapScreen(
       if (volunteerLiveError != null && userRole == UserRole.Volunteer) {
         Text(
           volunteerLiveError ?: "",
-          color = Color(0xFFFFE4E6),
-          style = MapBodySmallStyle
+          color = Color(0xFFDC2626),
+          style = MapBodySmallStyle,
+          modifier = Modifier.padding(horizontal = 18.sdp)
         )
       }
 
-      OutlinedTextField(
-        value = searchQuery,
-        onValueChange = { value ->
-          searchQuery = value
-          if (value.isBlank()) {
-            autocompletePredictions = emptyList()
-            fallbackSuggestions = emptyList()
-            showAutocomplete = false
-            autocompleteError = null
-            sessionToken = AutocompleteSessionToken.newInstance()
-          }
-        },
-        leadingIcon = {
-          Icon(
-            Icons.Outlined.Search,
-            contentDescription = null,
-            tint = NavyPrimary,
-            modifier = Modifier.size(24.dp)
-          )
-        },
-        placeholder = {
-          Text(
-            "Search for accessible places...",
-            color = Color(0xFF9CA9BC),
-            style = MapBodySmallStyle
-          )
-        },
-        textStyle = MapBodySmallStyle.copy(
-          color = NavyPrimary,
-          fontWeight = FontWeight.Medium
-        ),
-        modifier = Modifier
-          .fillMaxWidth()
-          .onFocusChanged { focusState ->
-            isSearchFieldFocused = focusState.isFocused
-            if (!focusState.isFocused) {
+      // ── Search bar (separate card) ──
+      Card(
+        shape = RoundedCornerShape(28.sdp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(8.dp),
+        modifier = Modifier.padding(horizontal = 16.sdp)
+      ) {
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = { value ->
+            searchQuery = value
+            if (value.isBlank()) {
+              autocompletePredictions = emptyList()
+              fallbackSuggestions = emptyList()
               showAutocomplete = false
+              autocompleteError = null
+              sessionToken = AutocompleteSessionToken.newInstance()
             }
           },
-        colors = OutlinedTextFieldDefaults.colors(
-          focusedBorderColor = Color(0xFFD4DAE4),
-          unfocusedBorderColor = Color(0xFFD4DAE4),
-          focusedContainerColor = Color.White,
-          unfocusedContainerColor = Color.White
-        ),
-        shape = RoundedCornerShape(8.dp),
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(
-          onSearch = {
-            keyboardController?.hide()
-            focusManager.clearFocus(force = true)
-            runSearch()
-          }
+          leadingIcon = {
+            Icon(
+              Icons.Outlined.Search,
+              contentDescription = null,
+              tint = NavyPrimary,
+              modifier = Modifier.size(22.sdp)
+            )
+          },
+          trailingIcon = {
+            if (searchQuery.isNotEmpty() || isSearchFieldFocused) {
+              Icon(
+                Icons.Outlined.Close,
+                contentDescription = "Clear search",
+                tint = NavyPrimary,
+                modifier = Modifier
+                  .size(20.sdp)
+                  .clickable {
+                    searchQuery = ""
+                    autocompletePredictions = emptyList()
+                    fallbackSuggestions = emptyList()
+                    showAutocomplete = false
+                    autocompleteError = null
+                    searchResult = null
+                    sessionToken = AutocompleteSessionToken.newInstance()
+                    keyboardController?.hide()
+                    focusManager.clearFocus(force = true)
+                  }
+              )
+            }
+          },
+          placeholder = {
+            Text(
+              "Search for accessible places...",
+              color = NavyPrimary,
+              style = MapBodySmallStyle
+            )
+          },
+          textStyle = MapBodySmallStyle.copy(
+            color = NavyPrimary,
+            fontWeight = FontWeight.Medium
+          ),
+          modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focusState ->
+              isSearchFieldFocused = focusState.isFocused
+              if (!focusState.isFocused) {
+                showAutocomplete = false
+              }
+            },
+          colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color.Transparent,
+            unfocusedBorderColor = Color.Transparent,
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White
+          ),
+          shape = RoundedCornerShape(28.sdp),
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          keyboardActions = KeyboardActions(
+            onSearch = {
+              keyboardController?.hide()
+              focusManager.clearFocus(force = true)
+              runSearch()
+            }
+          )
         )
-      )
+      }
 
+      // ── Autocomplete dropdown ──
       if (isSearchFieldFocused && showAutocomplete) {
         Card(
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp),
           colors = CardDefaults.cardColors(containerColor = Color.White),
-          shape = RoundedCornerShape(10.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD4DAE4))
+          shape = RoundedCornerShape(16.sdp),
+          elevation = CardDefaults.cardElevation(6.dp)
         ) {
-          LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
+          LazyColumn(modifier = Modifier.heightIn(max = 220.sdp)) {
             if (isAutocompleteLoading) {
               item {
                 Text(
                   "Loading suggestions...",
                   color = NavyPrimary,
                   style = MapBodySmallStyle,
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                  modifier = Modifier.padding(horizontal = 12.sdp, vertical = 10.sdp)
                 )
               }
             }
@@ -818,7 +924,7 @@ fun MapScreen(
                 modifier = Modifier
                   .fillMaxWidth()
                   .clickable { onPredictionSelected(prediction) }
-                  .padding(horizontal = 12.dp, vertical = 10.dp)
+                  .padding(horizontal = 12.sdp, vertical = 10.sdp)
               ) {
                 Text(
                   title,
@@ -826,7 +932,7 @@ fun MapScreen(
                   style = MapBodySmallStyle.copy(fontWeight = FontWeight.SemiBold)
                 )
                 if (subtitle.isNotBlank()) {
-                  Spacer(modifier = Modifier.height(2.dp))
+                  Spacer(modifier = Modifier.height(2.sdp))
                   Text(
                     subtitle,
                     color = NavyPrimary.copy(alpha = 0.7f),
@@ -845,7 +951,7 @@ fun MapScreen(
                 modifier = Modifier
                   .fillMaxWidth()
                   .clickable { onFallbackSuggestionSelected(suggestion) }
-                  .padding(horizontal = 12.dp, vertical = 10.dp)
+                  .padding(horizontal = 12.sdp, vertical = 10.sdp)
               ) {
                 Text(
                   suggestion.title,
@@ -853,7 +959,7 @@ fun MapScreen(
                   style = MapBodySmallStyle.copy(fontWeight = FontWeight.SemiBold)
                 )
                 if (suggestion.subtitle.isNotBlank()) {
-                  Spacer(modifier = Modifier.height(2.dp))
+                  Spacer(modifier = Modifier.height(2.sdp))
                   Text(
                     suggestion.subtitle,
                     color = NavyPrimary.copy(alpha = 0.7f),
@@ -870,7 +976,7 @@ fun MapScreen(
                   autocompleteError ?: "No suggestions found.",
                   color = NavyPrimary.copy(alpha = 0.8f),
                   style = MapBodySmallStyle,
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                  modifier = Modifier.padding(horizontal = 12.sdp, vertical = 10.sdp)
                 )
               }
             } else if (autocompleteError != null) {
@@ -879,7 +985,7 @@ fun MapScreen(
                   autocompleteError ?: "",
                   color = NavyPrimary.copy(alpha = 0.8f),
                   style = MapBodySmallStyle,
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                  modifier = Modifier.padding(horizontal = 12.sdp, vertical = 10.sdp)
                 )
               }
             }
@@ -890,150 +996,110 @@ fun MapScreen(
       if (isSearching) {
         Text(
           "Searching...",
-          color = Color(0xFFE7EDF7),
-          style = MapBodySmallStyle
+          color = NavyPrimary.copy(alpha = 0.6f),
+          style = MapBodySmallStyle,
+          modifier = Modifier.padding(horizontal = 18.sdp)
         )
       } else if (searchError != null) {
         Text(
           searchError ?: "",
-          color = Color(0xFFFFE4E6),
-          style = MapBodySmallStyle
+          color = Color(0xFFDC2626),
+          style = MapBodySmallStyle,
+          modifier = Modifier.padding(horizontal = 18.sdp)
         )
       }
 
       if (searchResult != null && !isSearching) {
-        Button(
-          onClick = {
-            searchResult?.let { destination ->
-              openDirections(context, destination)
+        Card(
+          shape = RoundedCornerShape(28.sdp),
+          colors = CardDefaults.cardColors(containerColor = NavyPrimary),
+          elevation = CardDefaults.cardElevation(4.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.sdp)
+            .clickable {
+              searchResult?.let { destination ->
+                openDirections(context, destination)
+              }
             }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = NavyPrimary, contentColor = Color.White),
-          shape = RoundedCornerShape(10.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD4DAE4)),
-          modifier = Modifier.fillMaxWidth(),
-          contentPadding = PaddingValues(vertical = 10.dp)
         ) {
-          Icon(
-            Icons.Outlined.Navigation,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            "Directions to search result",
-            style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
-          )
+          Row(
+            modifier = Modifier.padding(horizontal = 16.sdp, vertical = 12.sdp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+          ) {
+            Icon(
+              Icons.Outlined.Navigation,
+              contentDescription = null,
+              tint = Color.White,
+              modifier = Modifier.size(18.sdp)
+            )
+            Spacer(modifier = Modifier.width(6.sdp))
+            Text(
+              "Directions to search result",
+              color = Color.White,
+              style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
+            )
+          }
         }
       }
 
-      val filterButtonInteraction = remember { MutableInteractionSource() }
-      val filterHovered by filterButtonInteraction.collectIsHoveredAsState()
-      val filterButtonColor = when {
-        showFilters -> AccentGold
-        filterHovered -> AccentGold
-        else -> NavyDark
-      }
-
-      Button(
-        onClick = { showFilters = !showFilters },
-        interactionSource = filterButtonInteraction,
-        colors = ButtonDefaults.buttonColors(
-          containerColor = filterButtonColor,
-          contentColor = Color.White
-        ),
-        border = androidx.compose.foundation.BorderStroke(2.dp, NavyPrimary),
-        shape = RoundedCornerShape(8.dp),
+      // ── Accessibility feature chips (Google Maps style) ──
+      Row(
         modifier = Modifier
           .fillMaxWidth()
-          .height(42.dp)
+          .horizontalScroll(rememberScrollState())
+          .padding(horizontal = 16.sdp),
+        horizontalArrangement = Arrangement.spacedBy(8.sdp)
       ) {
-        Icon(
-          Icons.Outlined.FilterAlt,
-          contentDescription = null,
-          tint = Color.White,
-          modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          "Filters",
-          color = Color.White,
-          style = MapLabelMediumStyle.copy(fontWeight = FontWeight.SemiBold)
-        )
-      }
-
-      AnimatedVisibility(
-        visible = showFilters,
-        enter = fadeIn(tween(150)) + expandVertically(tween(150)),
-        exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
-      ) {
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFFD6E0EC), RoundedCornerShape(10.dp))
-            .padding(10.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          filterOptions.chunked(2).forEach { row ->
+        filterOptions.forEach { (id, label) ->
+          val selected = activeFilters.contains(id)
+          val chipIcon: ImageVector = when (id) {
+            "ramp" -> Icons.AutoMirrored.Outlined.Accessible
+            "elevator" -> Icons.Outlined.Elevator
+            "parking" -> Icons.Outlined.LocalParking
+            "braille" -> Icons.Outlined.TouchApp
+            "toilet" -> Icons.Outlined.Wc
+            "wideEntrance" -> Icons.Outlined.DoorFront
+            else -> Icons.Outlined.CheckCircle
+          }
+          Card(
+            shape = RoundedCornerShape(24.sdp),
+            colors = CardDefaults.cardColors(
+              containerColor = if (selected) NavyPrimary else Color.White
+            ),
+            elevation = CardDefaults.cardElevation(4.dp),
+            modifier = Modifier.clickable {
+              activeFilters = if (selected) activeFilters - id else activeFilters + id
+            }
+          ) {
             Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
+              modifier = Modifier.padding(horizontal = 14.sdp, vertical = 8.sdp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.sdp)
             ) {
-              row.forEach { (id, label) ->
-                val selected = remember(activeFilters) { activeFilters.contains(id) }
-                FilterChipButton(
-                  label = label,
-                  selected = selected,
-                  onClick = {
-                    activeFilters = if (selected) activeFilters - id else activeFilters + id
-                  }
-                )
-              }
-              if (row.size < 2) {
-                Spacer(modifier = Modifier.weight(1f))
-              }
+              Icon(
+                chipIcon,
+                contentDescription = null,
+                tint = if (selected) Color.White else NavyPrimary,
+                modifier = Modifier.size(16.sdp)
+              )
+              Text(
+                label,
+                color = if (selected) Color.White else NavyPrimary,
+                style = MapLabelSmallStyle.copy(fontWeight = FontWeight.SemiBold)
+              )
             }
           }
         }
       }
-    }
+    } // end top overlay Column
+
+    // ── MAP OVERLAY NOTICES ──
     Box(
       modifier = Modifier
-        .weight(1f)
-        .fillMaxWidth()
+        .fillMaxSize()
     ) {
-      GoogleMap(
-        modifier = Modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        properties = MapProperties(isMyLocationEnabled = locationPermissionGranted),
-        uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false),
-        onMapLoaded = { mapLoaded = true; hasLoadedBefore = true }
-      ) {
-        searchResult?.let { target ->
-          Marker(
-            state = MarkerState(position = target),
-            title = searchQuery.ifBlank { "Search Result" },
-            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
-          )
-        }
-        filteredLocations.forEach { location ->
-          val isSaved = savedIds.contains(location.id)
-          Marker(
-            state = MarkerState(position = LatLng(location.lat, location.lng)),
-            title = location.name,
-            snippet = "${location.category} - ${location.distance}",
-            icon = BitmapDescriptorFactory.defaultMarker(
-              if (isSaved) BitmapDescriptorFactory.HUE_YELLOW else BitmapDescriptorFactory.HUE_AZURE
-            ),
-            onClick = {
-              selectedLocation = location
-              true
-            }
-          )
-        }
-      }
-
       if (!playServicesOk) {
         Card(
           modifier = Modifier
@@ -1086,107 +1152,7 @@ fun MapScreen(
         }
       }
 
-      Column(
-        modifier = Modifier
-          .align(Alignment.BottomEnd)
-          .padding(end = 14.dp, bottom = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-      ) {
-        // Zoom controls
-        Card(
-          shape = RoundedCornerShape(14.dp),
-          colors = CardDefaults.cardColors(containerColor = Color.White),
-          elevation = CardDefaults.cardElevation(6.dp)
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-          ) {
-            Box(
-              modifier = Modifier
-                .size(50.dp)
-                .clickable {
-                  coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomIn()) }
-                },
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                Icons.Filled.Add,
-                contentDescription = "Zoom in",
-                tint = NavyPrimary,
-                modifier = Modifier.size(26.dp)
-              )
-            }
-
-            Box(
-              modifier = Modifier
-                .width(36.dp)
-                .height(1.dp)
-                .background(Color(0xFFE2E8F0))
-            )
-
-            Box(
-              modifier = Modifier
-                .size(50.dp)
-                .clickable {
-                  coroutineScope.launch { cameraPositionState.animate(CameraUpdateFactory.zoomOut()) }
-                },
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                Icons.Filled.Remove,
-                contentDescription = "Zoom out",
-                tint = NavyPrimary,
-                modifier = Modifier.size(26.dp)
-              )
-            }
-          }
-        }
-
-        // My location button
-        Card(
-          shape = CircleShape,
-          colors = CardDefaults.cardColors(containerColor = NavyPrimary),
-          elevation = CardDefaults.cardElevation(6.dp),
-          modifier = Modifier
-            .size(50.dp)
-            .clickable {
-              if (locationPermissionGranted) {
-                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                  if (location != null) {
-                    coroutineScope.launch {
-                      cameraPositionState.animate(
-                        CameraUpdateFactory.newLatLngZoom(
-                          LatLng(location.latitude, location.longitude),
-                          15f
-                        )
-                      )
-                    }
-                  }
-                }
-              } else {
-                locationPermissionLauncher.launch(
-                  arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                  )
-                )
-              }
-            }
-        ) {
-          Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              Icons.Filled.MyLocation,
-              contentDescription = "My location",
-              tint = Color.White,
-              modifier = Modifier.size(24.dp)
-            )
-          }
-        }
-      }
+      // (zoom and location controls removed – geolocation is now part of bottom panel)
 
       if (filteredLocations.isEmpty()) {
         Card(
@@ -1204,118 +1170,164 @@ fun MapScreen(
       }
     }
 
+    // ── BOTTOM PLACES PANEL + GEO BUTTON ──
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .background(Color.White)
+        .align(Alignment.BottomCenter),
+      horizontalAlignment = Alignment.End
     ) {
-      Box(
+      // Geolocation button above the panel
+      Card(
+        shape = CircleShape,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(6.dp),
         modifier = Modifier
-          .fillMaxWidth()
-          .height(2.dp)
-          .background(NavyPrimary)
-      )
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .background(BlueSecondary)
-          .clickable { placesExpanded = !placesExpanded }
-          .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+          .padding(end = 14.dp, bottom = 10.dp)
+          .size(48.dp)
+          .clickable {
+            if (locationPermissionGranted) {
+              fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                  coroutineScope.launch {
+                    cameraPositionState.animate(
+                      CameraUpdateFactory.newLatLngZoom(
+                        LatLng(location.latitude, location.longitude),
+                        15f
+                      )
+                    )
+                  }
+                }
+              }
+            } else {
+              locationPermissionLauncher.launch(
+                arrayOf(
+                  Manifest.permission.ACCESS_FINE_LOCATION,
+                  Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+              )
+            }
+          }
       ) {
-        Text(
-          text = "${listLocations.size} Accessible ${if (listLocations.size == 1) "Place" else "Places"} Nearby",
-          color = NavyPrimary,
-          style = MapTitleSmallStyle.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 18.sp
-          )
-        )
-        Icon(
-          imageVector = if (placesExpanded) Icons.Outlined.ArrowDropDown else Icons.Outlined.ArrowDropUp,
-          contentDescription = if (placesExpanded) "Collapse" else "Expand",
-          tint = NavyPrimary,
-          modifier = Modifier.size(28.dp)
-        )
-      }
-
-      AnimatedVisibility(visible = placesExpanded) {
-        LazyColumn(
-          modifier = Modifier
-            .fillMaxWidth()
-            .height(220.dp)
+        Box(
+          modifier = Modifier.fillMaxSize(),
+          contentAlignment = Alignment.Center
         ) {
-        itemsIndexed(listLocations, key = { _, location -> location.id }) { index, location ->
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .clickable { selectedLocation = location }
-              .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.Top
-          ) {
-            Column(
-              modifier = Modifier.weight(1f),
-              verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-              Text(
-                location.name,
-                color = NavyPrimary,
-                style = MapTitleSmallStyle.copy(fontWeight = FontWeight.SemiBold)
-              )
-              Text(
-                "${location.category} • ${location.distance}",
-                color = NavyPrimary.copy(alpha = 0.75f),
-                style = MapBodySmallStyle
-              )
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-              ) {
-                Icon(
-                  Icons.Outlined.Star,
-                  contentDescription = null,
-                  tint = AccentGold,
-                  modifier = Modifier.size(14.dp)
-                )
-                Text(
-                  location.rating.toString(),
-                  color = NavyPrimary.copy(alpha = 0.9f),
-                  style = MapLabelSmallStyle
-                )
-                Text(
-                  "(${location.totalRatings})",
-                  color = NavyPrimary.copy(alpha = 0.65f),
-                  style = MapLabelSmallStyle
-                )
-              }
-            }
-            Column(
-              horizontalAlignment = Alignment.Start,
-              verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-              if (location.features.ramp) {
-                MapFeatureChip("Ramp")
-              }
-              if (location.features.elevator) {
-                MapFeatureChip("Elevator")
-              }
-            }
-          }
-
-          if (index < listLocations.lastIndex) {
-            Box(
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(Gray200)
-            )
-          }
+          Icon(
+            Icons.Filled.MyLocation,
+            contentDescription = "My location",
+            tint = NavyPrimary,
+            modifier = Modifier.size(24.dp)
+          )
         }
       }
-      }
-    }
-  }
+
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+          .background(Color.White)
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .background(BlueSecondary)
+            .clickable { placesExpanded = !placesExpanded }
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "${listLocations.size} Accessible ${if (listLocations.size == 1) "Place" else "Places"} Nearby",
+            color = NavyPrimary,
+            style = MapTitleSmallStyle.copy(
+              fontWeight = FontWeight.SemiBold,
+              fontSize = 16.sp
+            )
+          )
+          Icon(
+            imageVector = if (placesExpanded) Icons.Outlined.ArrowDropDown else Icons.Outlined.ArrowDropUp,
+            contentDescription = if (placesExpanded) "Collapse" else "Expand",
+            tint = NavyPrimary,
+            modifier = Modifier.size(28.dp)
+          )
+        }
+
+        AnimatedVisibility(visible = placesExpanded) {
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(220.dp)
+          ) {
+            itemsIndexed(listLocations, key = { _, location -> location.id }) { index, location ->
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable { selectedLocation = location }
+                  .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.Top
+              ) {
+                Column(
+                  modifier = Modifier.weight(1f),
+                  verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                  Text(
+                    location.name,
+                    color = NavyPrimary,
+                    style = MapTitleSmallStyle.copy(fontWeight = FontWeight.SemiBold)
+                  )
+                  Text(
+                    "${location.category} • ${location.distance}",
+                    color = NavyPrimary.copy(alpha = 0.75f),
+                    style = MapBodySmallStyle
+                  )
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                  ) {
+                    Icon(
+                      Icons.Outlined.Star,
+                      contentDescription = null,
+                      tint = AccentGold,
+                      modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                      location.rating.toString(),
+                      color = NavyPrimary.copy(alpha = 0.9f),
+                      style = MapLabelSmallStyle
+                    )
+                    Text(
+                      "(${location.totalRatings})",
+                      color = NavyPrimary.copy(alpha = 0.65f),
+                      style = MapLabelSmallStyle
+                    )
+                  }
+                }
+                Column(
+                  horizontalAlignment = Alignment.Start,
+                  verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                  if (location.features.ramp) MapFeatureChip("Ramp")
+                  if (location.features.elevator) MapFeatureChip("Elevator")
+                }
+              }
+
+              if (index < listLocations.lastIndex) {
+                Box(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Gray200)
+                )
+              }
+            }
+          }
+        }
+      } // end bottom panel
+    } // end bottom Column wrapper
+
+  } // end parent Box
 
   if (selectedLocation != null) {
     val location = selectedLocation!!
@@ -2602,7 +2614,6 @@ private suspend fun fetchAutocompletePredictions(
     .build()
   client.findAutocompletePredictions(request)
     .addOnSuccessListener { response ->
-      Log.d("MapScreen", "Places API Success: ${response.autocompletePredictions.size} predictions")
       continuation.resume(AutocompleteFetchResult(response.autocompletePredictions))
     }
     .addOnFailureListener { exception ->
@@ -2787,12 +2798,3 @@ private fun RowScope.FilterChipButton(
     )
   }
 }
-
-
-
-
-
-
-
-
-

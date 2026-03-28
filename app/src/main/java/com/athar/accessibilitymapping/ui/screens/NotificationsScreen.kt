@@ -42,6 +42,8 @@ import com.athar.accessibilitymapping.ui.theme.BluePrimary
 import com.athar.accessibilitymapping.ui.theme.BlueSecondary
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 
 @Composable
 fun NotificationsScreen(onBack: () -> Unit) {

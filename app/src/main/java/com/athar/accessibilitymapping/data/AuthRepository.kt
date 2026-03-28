@@ -1,6 +1,7 @@
 package com.athar.accessibilitymapping.data
 
 import android.content.Context
+import com.athar.accessibilitymapping.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,7 +23,7 @@ class AuthRepository(
         if (result.statusCode == 401) {
           return@withContext AuthOperationResult.Error("Email or password is wrong.")
         }
-        if (result.statusCode == null) {
+        if (shouldAllowOfflineAuthFallback(result)) {
           return@withContext when (val fallback = localAccounts.login(email, password)) {
             is AuthOperationResult.Success -> {
               saveLocalSession(fallback.session)
@@ -31,7 +32,7 @@ class AuthRepository(
             is AuthOperationResult.Error -> fallback
           }
         }
-        AuthOperationResult.Error(result.message)
+        AuthOperationResult.Error(resolveAuthFailureMessage(result.message))
       }
     }
   }
@@ -57,7 +58,7 @@ class AuthRepository(
         AuthOperationResult.Success(session)
       }
       is ApiCallResult.Failure -> {
-        if (result.statusCode == null) {
+        if (shouldAllowOfflineAuthFallback(result)) {
           return@withContext when (val fallback = localAccounts.registerUser(payload)) {
             is AuthOperationResult.Success -> {
               saveLocalSession(fallback.session)
@@ -66,7 +67,7 @@ class AuthRepository(
             is AuthOperationResult.Error -> fallback
           }
         }
-        AuthOperationResult.Error(result.message)
+        AuthOperationResult.Error(resolveAuthFailureMessage(result.message))
       }
     }
   }
@@ -86,7 +87,7 @@ class AuthRepository(
         AuthOperationResult.Success(session)
       }
       is ApiCallResult.Failure -> {
-        if (result.statusCode == null) {
+        if (shouldAllowOfflineAuthFallback(result)) {
           return@withContext when (val fallback = localAccounts.registerVolunteer(payload)) {
             is AuthOperationResult.Success -> {
               saveLocalSession(fallback.session)
@@ -95,13 +96,25 @@ class AuthRepository(
             is AuthOperationResult.Error -> fallback
           }
         }
-        AuthOperationResult.Error(result.message)
+        AuthOperationResult.Error(resolveAuthFailureMessage(result.message))
       }
     }
   }
 
   suspend fun restoreSession(): AuthSession? = withContext(Dispatchers.IO) {
     sessionStore.readAuthSession()
+  }
+
+  suspend fun hasLocalSession(): Boolean = withContext(Dispatchers.IO) {
+    sessionStore.getAccessToken()?.startsWith("local-") == true
+  }
+
+  suspend fun isBackendReachable(): Boolean = withContext(Dispatchers.IO) {
+    api.isBackendReachable()
+  }
+
+  suspend fun clearStoredSession() = withContext(Dispatchers.IO) {
+    sessionStore.clearSession()
   }
 
   suspend fun logout() = withContext(Dispatchers.IO) {
@@ -144,5 +157,23 @@ class AuthRepository(
       disabilityType = session.disabilityType,
       volunteerLive = session.volunteerLive
     )
+  }
+
+  private suspend fun shouldAllowOfflineAuthFallback(result: ApiCallResult.Failure): Boolean {
+    if (result.statusCode != null) return false
+    val configuredBaseUrl = BuildConfig.BACKEND_BASE_URL.trim().lowercase()
+    if ("127.0.0.1" in configuredBaseUrl || "localhost" in configuredBaseUrl) {
+      return false
+    }
+    return !api.isBackendReachable()
+  }
+
+  private fun resolveAuthFailureMessage(defaultMessage: String): String {
+    val configuredBaseUrl = BuildConfig.BACKEND_BASE_URL.trim().lowercase()
+    return if ("127.0.0.1" in configuredBaseUrl || "localhost" in configuredBaseUrl) {
+      "Cannot reach the local backend. Keep the backend running and launch the app with run-app.bat."
+    } else {
+      defaultMessage
+    }
   }
 }

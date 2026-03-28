@@ -1,4 +1,7 @@
 ﻿package com.athar.accessibilitymapping.ui.components
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -108,30 +111,30 @@ fun GovernorateSelector(
 
   Box(
     modifier = Modifier
-      .padding(horizontal = 16.dp)
-      .padding(bottom = 16.dp)
+      .padding(horizontal = 16.sdp)
+      .padding(bottom = 16.sdp)
   ) {
     Surface(
       modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(16.dp),
+      shape = RoundedCornerShape(16.sdp),
       color = AtharColors.White,
-      shadowElevation = 8.dp,
-      border = BorderStroke(2.dp, AtharColors.Gray200)
+      shadowElevation = 8.sdp,
+      border = BorderStroke(2.sdp, AtharColors.Gray200)
     ) {
-      Column(modifier = Modifier.padding(20.dp)) {
+      Column(modifier = Modifier.padding(20.sdp)) {
         Text(
           text = "Governorate",
-          fontSize = 20.sp,
+          fontSize = 20.ssp,
           fontWeight = FontWeight.SemiBold,
           color = AtharColors.Secondary,
-          modifier = Modifier.padding(bottom = 4.dp)
+          modifier = Modifier.padding(bottom = 4.sdp)
         )
 
         Text(
           text = "Select the governorate where this place is located.",
-          fontSize = 14.sp,
+          fontSize = 14.ssp,
           color = AtharColors.Secondary.copy(alpha = 0.7f),
-          modifier = Modifier.padding(bottom = 12.dp)
+          modifier = Modifier.padding(bottom = 12.sdp)
         )
 
         GovernorateSelectorButton(
@@ -178,61 +181,61 @@ private fun GovernorateSelectorButton(
   Surface(
     onClick = onClick,
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(12.dp),
+    shape = RoundedCornerShape(12.sdp),
     color = bgColor,
-    border = BorderStroke(2.dp, borderColor),
+    border = BorderStroke(2.sdp, borderColor),
     interactionSource = interactionSource
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+        .padding(horizontal = 16.sdp, vertical = 12.sdp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceBetween
     ) {
       Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.sdp),
         modifier = Modifier.weight(1f)
       ) {
         Icon(
           imageVector = Icons.Default.Business,
           contentDescription = null,
           tint = iconTint,
-          modifier = Modifier.size(20.dp)
+          modifier = Modifier.size(20.sdp)
         )
 
         if (selected != null) {
           Column {
             Text(
               text = selected.name,
-              fontSize = 14.sp,
+              fontSize = 14.ssp,
               fontWeight = FontWeight.SemiBold,
               color = AtharColors.White
             )
             Text(
               text = selected.arabicName,
-              fontSize = 12.sp,
+              fontSize = 12.ssp,
               color = AtharColors.White.copy(alpha = 0.8f)
             )
           }
         } else {
           Text(
             text = "Select Governorate",
-            fontSize = 14.sp,
+            fontSize = 14.ssp,
             fontWeight = FontWeight.SemiBold,
             color = AtharColors.Secondary
           )
         }
       }
 
-      Spacer(Modifier.width(8.dp))
+      Spacer(Modifier.width(8.sdp))
 
       Icon(
         imageVector = Icons.Default.KeyboardArrowDown,
         contentDescription = null,
         tint = iconTint,
-        modifier = Modifier.size(20.dp)
+        modifier = Modifier.size(20.sdp)
       )
     }
   }
@@ -247,53 +250,53 @@ private fun GovernorateDropdownPanel(
   Surface(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(top = 12.dp),
-    shape = RoundedCornerShape(14.dp),
+      .padding(top = 12.sdp),
+    shape = RoundedCornerShape(14.sdp),
     color = AtharColors.White,
-    shadowElevation = 6.dp,
-    border = BorderStroke(2.dp, AtharColors.Gray200)
+    shadowElevation = 6.sdp,
+    border = BorderStroke(2.sdp, AtharColors.Gray200)
   ) {
     Column {
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 14.dp, vertical = 12.dp),
+          .padding(horizontal = 14.sdp, vertical = 12.sdp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
         Text(
           text = "Select Governorate",
-          fontSize = 15.sp,
+          fontSize = 15.ssp,
           fontWeight = FontWeight.SemiBold,
           color = AtharColors.Secondary
         )
 
         Surface(
           onClick = onDismiss,
-          shape = RoundedCornerShape(8.dp),
+          shape = RoundedCornerShape(8.sdp),
           color = AtharColors.BgSecondary,
-          border = BorderStroke(2.dp, AtharColors.Secondary)
+          border = BorderStroke(2.sdp, AtharColors.Secondary)
         ) {
           Box(
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(28.sdp),
             contentAlignment = Alignment.Center
           ) {
             Icon(
               imageVector = Icons.Default.Close,
               contentDescription = "Close",
               tint = AtharColors.Secondary,
-              modifier = Modifier.size(16.dp)
+              modifier = Modifier.size(16.sdp)
             )
           }
         }
       }
 
-      HorizontalDivider(color = AtharColors.Gray200, thickness = 1.dp)
+      HorizontalDivider(color = AtharColors.Gray200, thickness = 1.sdp)
 
       LazyColumn(
         modifier = Modifier
           .fillMaxWidth()
-          .heightIn(max = 320.dp)
+          .heightIn(max = 320.sdp)
       ) {
         items(items = egyptGovernorates, key = { it.id }) { gov ->
           GovernorateRow(
@@ -302,7 +305,7 @@ private fun GovernorateDropdownPanel(
             onSelect = { onGovernorateSelected(gov) }
           )
           if (gov.id < egyptGovernorates.size) {
-            HorizontalDivider(color = AtharColors.Gray200, thickness = 1.dp)
+            HorizontalDivider(color = AtharColors.Gray200, thickness = 1.sdp)
           }
         }
       }
@@ -321,7 +324,7 @@ private fun GovernorateBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
-    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    shape = RoundedCornerShape(topStart = 24.sdp, topEnd = 24.sdp),
     containerColor = AtharColors.BgPrimary,
     scrimColor = Color(0x8C1F3C5B),
     dragHandle = {
@@ -329,12 +332,12 @@ private fun GovernorateBottomSheet(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
           .fillMaxWidth()
-          .padding(top = 12.dp, bottom = 4.dp)
+          .padding(top = 12.sdp, bottom = 4.sdp)
       ) {
         Box(
           modifier = Modifier
-            .width(40.dp)
-            .height(4.dp)
+            .width(40.sdp)
+            .height(4.sdp)
             .clip(CircleShape)
             .background(AtharColors.Gray200)
         )
@@ -345,41 +348,41 @@ private fun GovernorateBottomSheet(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 16.dp),
+        .padding(horizontal = 16.sdp, vertical = 16.sdp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceBetween
     ) {
       Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.sdp),
         modifier = Modifier.weight(1f)
       ) {
         Box(
           modifier = Modifier
-            .size(40.dp)
+            .size(40.sdp)
             .clip(CircleShape)
             .background(AtharColors.Secondary)
-            .border(2.dp, AtharColors.SecondaryDark, CircleShape),
+            .border(2.sdp, AtharColors.SecondaryDark, CircleShape),
           contentAlignment = Alignment.Center
         ) {
           Icon(
             imageVector = Icons.Default.Business,
             contentDescription = null,
             tint = AtharColors.White,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.sdp)
           )
         }
 
         Column {
           Text(
             text = "Select Governorate",
-            fontSize = 20.sp,
+            fontSize = 20.ssp,
             fontWeight = FontWeight.SemiBold,
             color = AtharColors.Secondary
           )
           Text(
             text = "27 governorates of Egypt",
-            fontSize = 14.sp,
+            fontSize = 14.ssp,
             color = AtharColors.Secondary.copy(alpha = 0.65f)
           )
         }
@@ -390,24 +393,24 @@ private fun GovernorateBottomSheet(
 
       Surface(
         onClick = onDismiss,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(12.sdp),
         color = if (closePressed) AtharColors.Secondary else AtharColors.BgSecondary,
-        border = BorderStroke(2.dp, AtharColors.Secondary),
+        border = BorderStroke(2.sdp, AtharColors.Secondary),
         interactionSource = closeInteraction,
-        modifier = Modifier.size(40.dp)
+        modifier = Modifier.size(40.sdp)
       ) {
         Box(contentAlignment = Alignment.Center) {
           Icon(
             imageVector = Icons.Default.Close,
             contentDescription = "Close",
             tint = if (closePressed) AtharColors.White else AtharColors.Secondary,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.sdp)
           )
         }
       }
     }
 
-    HorizontalDivider(color = AtharColors.Gray200, thickness = 2.dp)
+    HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
       items(items = egyptGovernorates, key = { it.id }) { gov ->
@@ -418,7 +421,7 @@ private fun GovernorateBottomSheet(
         )
 
         if (gov.id < egyptGovernorates.size) {
-          HorizontalDivider(color = AtharColors.Gray200, thickness = 2.dp)
+          HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
         }
       }
     }
@@ -448,13 +451,13 @@ private fun GovernorateRow(
         indication = null,
         onClick = onSelect
       )
-      .padding(horizontal = 16.dp, vertical = 12.dp),
+      .padding(horizontal = 16.sdp, vertical = 12.sdp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.SpaceBetween
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      horizontalArrangement = Arrangement.spacedBy(12.sdp),
       modifier = Modifier.weight(1f)
     ) {
       val badgeBg = if (isSelected) AtharColors.Secondary else AtharColors.BgSecondary
@@ -463,15 +466,15 @@ private fun GovernorateRow(
 
       Box(
         modifier = Modifier
-          .size(32.dp)
+          .size(32.sdp)
           .clip(CircleShape)
           .background(badgeBg)
-          .border(2.dp, badgeBorder, CircleShape),
+          .border(2.sdp, badgeBorder, CircleShape),
         contentAlignment = Alignment.Center
       ) {
         Text(
           text = governorate.id.toString(),
-          fontSize = 12.sp,
+          fontSize = 12.ssp,
           fontWeight = FontWeight.Bold,
           color = badgeText,
           textAlign = TextAlign.Center
@@ -481,13 +484,13 @@ private fun GovernorateRow(
       Column {
         Text(
           text = governorate.name,
-          fontSize = 14.sp,
+          fontSize = 14.ssp,
           fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
           color = AtharColors.Secondary
         )
         Text(
           text = governorate.arabicName,
-          fontSize = 12.sp,
+          fontSize = 12.ssp,
           color = AtharColors.Secondary.copy(alpha = 0.6f)
         )
       }
@@ -500,7 +503,7 @@ private fun GovernorateRow(
     ) {
       Box(
         modifier = Modifier
-          .size(24.dp)
+          .size(24.sdp)
           .clip(CircleShape)
           .background(AtharColors.Accent),
         contentAlignment = Alignment.Center
@@ -509,7 +512,7 @@ private fun GovernorateRow(
           imageVector = Icons.Default.Check,
           contentDescription = "Selected",
           tint = AtharColors.White,
-          modifier = Modifier.size(16.dp)
+          modifier = Modifier.size(16.sdp)
         )
       }
     }

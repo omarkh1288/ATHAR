@@ -43,7 +43,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.outlined.DoorFront
+import androidx.compose.material.icons.outlined.Wc
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -76,6 +77,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import androidx.core.app.ActivityCompat
 import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.ApiLocationReportRequest
@@ -121,7 +124,8 @@ val accessibilityFeatures = listOf(
   AccessibilityFeature("elevator", "Elevators", Icons.Default.SwapVert),
   AccessibilityFeature("parking", "Accessible Parking", Icons.Default.DirectionsCar),
   AccessibilityFeature("braille", "Braille", Icons.Default.Fingerprint),
-  AccessibilityFeature("audioGuide", "Audio Guides", Icons.Default.VolumeUp)
+  AccessibilityFeature("toilet", "Accessible Toilet", Icons.Outlined.Wc),
+  AccessibilityFeature("wideEntrance", "Wide Entrance", Icons.Outlined.DoorFront)
 )
 
 data class LocationSuggestion(val name: String, val lat: Double, val lng: Double)
@@ -820,6 +824,7 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
         }
       }
 
+
       item {
         Card(
           modifier = Modifier
@@ -933,8 +938,8 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 elevatorAvailable = selectedFeatures.contains("elevator"),
                 parking = selectedFeatures.contains("parking"),
                 wheelchairAccessible = selectedFeatures.contains("ramp") || selectedFeatures.contains("elevator"),
-                wideEntrance = false,
-                accessibleToilet = false,
+                wideEntrance = selectedFeatures.contains("wideEntrance"),
+                accessibleToilet = selectedFeatures.contains("toilet"),
                 notes = buildString {
                   append("Submitted from Add Place Report screen")
                   if (selectedLabels.isNotBlank()) {

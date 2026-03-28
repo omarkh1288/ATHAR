@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.athar.accessibilitymapping.ui.components.PrimaryButton
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.theme.BluePrimary
 

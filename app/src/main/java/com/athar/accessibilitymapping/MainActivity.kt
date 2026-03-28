@@ -1,6 +1,7 @@
 ﻿package com.athar.accessibilitymapping
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import com.athar.accessibilitymapping.data.AuthOperationResult
 import com.athar.accessibilitymapping.data.AppPreferencesStore
 import com.athar.accessibilitymapping.data.AuthRepository
+import com.athar.accessibilitymapping.data.AtharRepository
+import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.UserRole
 import com.athar.accessibilitymapping.ui.screens.LoginScreen
 import com.athar.accessibilitymapping.ui.screens.MapScreen
@@ -57,7 +60,7 @@ import com.athar.accessibilitymapping.util.resolveMapsApiKey
 import com.google.android.libraries.places.api.Places
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+open class AtharActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
@@ -104,6 +107,7 @@ private enum class MainTab {
 private fun AppRoot() {
   val context = LocalContext.current
   val authRepository = remember(context) { AuthRepository(context) }
+  val repository = remember(context) { AtharRepository(context) }
   val appPreferences = remember(context) { AppPreferencesStore(context) }
   val coroutineScope = rememberCoroutineScope()
   var userRole by rememberSaveable { mutableStateOf<UserRole?>(null) }
@@ -120,6 +124,7 @@ private fun AppRoot() {
   var appLanguageCode by rememberSaveable { mutableStateOf(AppLanguage.English.code) }
   var preferencesLoaded by rememberSaveable { mutableStateOf(false) }
   var restoredOnce by rememberSaveable { mutableStateOf(false) }
+  var authNotice by rememberSaveable { mutableStateOf<String?>(null) }
 
   val role = userRole
   val userName = if (currentUserName != "Guest") {
@@ -145,6 +150,14 @@ private fun AppRoot() {
     if (restoredOnce) return@LaunchedEffect
     val restored = authRepository.restoreSession()
     if (restored != null) {
+      val backendReachable = authRepository.isBackendReachable()
+      val localSession = authRepository.hasLocalSession()
+      if (backendReachable && localSession) {
+        authRepository.clearStoredSession()
+        authNotice = "Signed out of offline mode. Sign in again to load live analytics data."
+        restoredOnce = true
+        return@LaunchedEffect
+      }
       currentUserId = restored.userId
       userRole = restored.role
       currentUserName = restored.fullName
@@ -153,8 +166,27 @@ private fun AppRoot() {
       isVolunteerLive = restored.volunteerLive
       currentTab = MainTab.Map
       isAuthenticated = true
+    } else {
+      userRole = null
+      currentUserId = ""
+      currentUserName = "Guest"
+      currentUserEmail = ""
+      currentUserDisabilityType = null
+      currentUserPhotoPath = null
+      isVolunteerLive = false
+      isAuthenticated = false
+      currentTab = MainTab.Map
+      authView = "login"
     }
     restoredOnce = true
+  }
+
+  LaunchedEffect(authNotice) {
+    val message = authNotice?.trim().orEmpty()
+    if (message.isNotBlank()) {
+      Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+      authNotice = null
+    }
   }
 
   LaunchedEffect(currentUserId) {
@@ -162,6 +194,20 @@ private fun AppRoot() {
       null
     } else {
       appPreferences.readProfilePhotoPath(currentUserId)
+    }
+  }
+
+  LaunchedEffect(isAuthenticated, currentUserId) {
+    if (!isAuthenticated || currentUserId.isBlank()) return@LaunchedEffect
+    when (val accountResult = repository.getCurrentAccount()) {
+      is ApiCallResult.Success -> {
+        currentUserId = accountResult.data.id
+        currentUserName = accountResult.data.fullName.ifBlank { currentUserName }
+        currentUserEmail = accountResult.data.email.ifBlank { currentUserEmail }
+        currentUserDisabilityType = accountResult.data.disabilityType ?: currentUserDisabilityType
+        isVolunteerLive = accountResult.data.volunteerLive
+      }
+      is ApiCallResult.Failure -> Unit
     }
   }
 
@@ -382,4 +428,3 @@ private fun BottomTabButton(
     }
   }
 }
-

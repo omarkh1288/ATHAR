@@ -1,4 +1,7 @@
 package com.athar.accessibilitymapping.ui.screens
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -257,175 +260,195 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
   Column(Modifier.fillMaxSize().background(BluePrimary)) {
     Box(
-      Modifier.fillMaxWidth().background(NavyPrimary).statusBarsPadding().padding(16.dp)
+      Modifier.fillMaxWidth().background(NavyPrimary).statusBarsPadding()
+        .padding(horizontal = 16.sdp, vertical = 18.sdp)
     ) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White) }
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.sdp)) {
+        Surface(
+          modifier = Modifier.size(40.sdp).clip(CircleShape).clickable(onClick = onBack),
+          shape = CircleShape,
+          color = Color.White.copy(alpha = 0.12f)
+        ) {
+          Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(20.sdp))
+          }
+        }
         Column(Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Lucide.Hand, null, tint = Color.White, modifier = Modifier.size(22.dp))
-            Text("Sign Language Translator", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+            Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(22.sdp))
+            Text("Sign Language", color = Color.White, fontSize = 22.ssp, fontWeight = FontWeight.Bold)
           }
           Text(
-            "Live camera gestures with English and Arabic output",
-            color = Color.White.copy(alpha = 0.72f),
-            fontSize = 13.sp
+            "Live camera · English & Arabic",
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 13.ssp
           )
         }
       }
     }
 
     Column(
-      Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+      Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.sdp),
+      verticalArrangement = Arrangement.spacedBy(16.sdp)
     ) {
+      // Camera preview card
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(2.dp, Gray200)
+        shape = RoundedCornerShape(24.sdp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp)
       ) {
-        Column {
-          Box(
-            modifier = Modifier.fillMaxWidth().height(420.dp).background(
-              Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF172554), Color.Black))
+        Box(
+          modifier = Modifier.fillMaxWidth().height(400.sdp).clip(RoundedCornerShape(24.sdp)).background(
+            Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF172554), Color.Black))
+          )
+        ) {
+          LiveGestureCameraPreview(
+            modifier = Modifier.fillMaxSize(),
+            hasCameraPermission = hasCameraPermission,
+            isAnalyzing = isDetecting,
+            onFrameAnalyzed = ::handleFrame
+          )
+          GridOverlay()
+
+          if (!hasCameraPermission) {
+            CenterOverlay(
+              title = "Camera permission required",
+              message = "Enable camera access to analyze live gestures.",
+              buttonText = "Grant Permission",
+              onButtonClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
             )
+          } else if (errorText != null) {
+            CenterOverlay(title = "Recognizer error", message = errorText ?: "", buttonText = null, onButtonClick = null)
+          } else if (!isDetecting) {
+            CenterOverlay(title = "Camera ready", message = "Tap start detection to begin live recognition.", buttonText = null, onButtonClick = null)
+          } else if (currentDetection == null) {
+            CenterOverlay(title = "Listening", message = "Show one supported gesture with one hand.", buttonText = null, onButtonClick = null)
+          }
+
+          if (isDetecting && currentDetection != null) {
+            DetectionOverlay(currentDetection ?: return@Card)
+          }
+
+          Surface(
+            modifier = Modifier.align(Alignment.TopStart).padding(12.sdp),
+            shape = RoundedCornerShape(999.sdp),
+            color = if (isDetecting) ErrorRed.copy(alpha = 0.95f) else NavyPrimary.copy(alpha = 0.92f)
           ) {
-            LiveGestureCameraPreview(
-              modifier = Modifier.fillMaxSize(),
-              hasCameraPermission = hasCameraPermission,
-              isAnalyzing = isDetecting,
-              onFrameAnalyzed = ::handleFrame
+            Text(
+              if (isDetecting) "LIVE" else "READY",
+              color = Color.White,
+              fontWeight = FontWeight.Bold,
+              fontSize = 11.ssp,
+              modifier = Modifier.padding(horizontal = 10.sdp, vertical = 6.sdp)
             )
-            GridOverlay()
+          }
 
-            if (!hasCameraPermission) {
-              CenterOverlay(
-                title = "Camera permission required",
-                message = "Enable camera access to analyze live gestures.",
-                buttonText = "Grant Permission",
-                onButtonClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
-              )
-            } else if (errorText != null) {
-              CenterOverlay(title = "Recognizer error", message = errorText ?: "", buttonText = null, onButtonClick = null)
-            } else if (!isDetecting) {
-              CenterOverlay(title = "Camera ready", message = "Tap start detection to begin live recognition.", buttonText = null, onButtonClick = null)
-            } else if (currentDetection == null) {
-              CenterOverlay(title = "Listening", message = "Show one supported gesture with one hand.", buttonText = null, onButtonClick = null)
-            }
-
-            if (isDetecting && currentDetection != null) {
-              DetectionOverlay(currentDetection ?: return@Column)
-            }
-
+          if (visibleHandCount > 0) {
             Surface(
-              modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-              shape = RoundedCornerShape(999.dp),
-              color = if (isDetecting) ErrorRed.copy(alpha = 0.95f) else NavyPrimary.copy(alpha = 0.92f)
+              modifier = Modifier.align(Alignment.TopEnd).padding(12.sdp),
+              shape = RoundedCornerShape(999.sdp),
+              color = Color.White.copy(alpha = 0.16f)
             ) {
               Text(
-                if (isDetecting) "LIVE" else "READY",
+                if (visibleHandCount == 1) "1 hand" else "$visibleHandCount hands",
                 color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                fontSize = 11.ssp,
+                modifier = Modifier.padding(horizontal = 10.sdp, vertical = 6.sdp)
               )
-            }
-
-            if (visibleHandCount > 0) {
-              Surface(
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-                shape = RoundedCornerShape(999.dp),
-                color = Color.White.copy(alpha = 0.16f)
-              ) {
-                Text(
-                  if (visibleHandCount == 1) "1 hand" else "$visibleHandCount hands",
-                  color = Color.White,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                )
-              }
             }
           }
+        }
+      }
 
-          Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-          ) {
-            Button(
-              onClick = {
-                if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
-                else isDetecting = !isDetecting
-              },
-              modifier = Modifier.weight(1f).height(56.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = when {
-                  !hasCameraPermission -> NavyPrimary
-                  isDetecting -> ErrorRed
-                  else -> AccentGold
-                }
-              ),
-              shape = RoundedCornerShape(16.dp)
-            ) {
-              Icon(
-                imageVector = when {
-                  !hasCameraPermission -> Lucide.Camera
-                  isDetecting -> Lucide.CircleStop
-                  else -> Lucide.Play
-                },
-                contentDescription = null
-              )
-              Spacer(Modifier.width(8.dp))
-              Text(
-                when {
-                  !hasCameraPermission -> "Enable Camera"
-                  isDetecting -> "Stop Detection"
-                  else -> "Start Detection"
-                },
-                fontWeight = FontWeight.Bold
-              )
+      // Status bar
+      Row(
+        Modifier.fillMaxWidth().background(
+          if (errorText != null) ErrorRed.copy(alpha = 0.08f) else Color.White,
+          RoundedCornerShape(14.sdp)
+        ).border(1.sdp, if (errorText != null) ErrorRed.copy(alpha = 0.2f) else Gray200, RoundedCornerShape(14.sdp))
+          .padding(horizontal = 14.sdp, vertical = 12.sdp),
+        horizontalArrangement = Arrangement.spacedBy(10.sdp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Box(
+          Modifier.size(8.sdp).clip(CircleShape).background(if (errorText != null) ErrorRed else if (isDetecting) SuccessGreen else AccentGold)
+        )
+        Text(statusText, color = if (errorText != null) ErrorRed else NavyPrimary, fontSize = 13.ssp)
+      }
+
+      // Controls row - below the camera, not overlapping
+      Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.sdp)
+      ) {
+        Button(
+          onClick = {
+            if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
+            else isDetecting = !isDetecting
+          },
+          modifier = Modifier.weight(1f).height(54.sdp),
+          colors = ButtonDefaults.buttonColors(
+            containerColor = when {
+              !hasCameraPermission -> NavyPrimary
+              isDetecting -> ErrorRed
+              else -> AccentGold
             }
+          ),
+          shape = RoundedCornerShape(16.sdp),
+          elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.sdp)
+        ) {
+          Icon(
+            imageVector = when {
+              !hasCameraPermission -> Lucide.Camera
+              isDetecting -> Lucide.CircleStop
+              else -> Lucide.Play
+            },
+            contentDescription = null,
+            modifier = Modifier.size(20.sdp)
+          )
+          Spacer(Modifier.width(8.sdp))
+          Text(
+            when {
+              !hasCameraPermission -> "Enable Camera"
+              isDetecting -> "Stop Detection"
+              else -> "Start Detection"
+            },
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.ssp
+          )
+        }
 
-            IconButton(
-              onClick = {
-                reset(clearTranscript = true)
-                errorText = null
-                statusText = if (hasCameraPermission) {
-                  "Transcript cleared. Start detection to analyze supported gestures."
-                } else {
-                  "Allow camera access to start live recognition."
-                }
-              },
-              modifier = Modifier.size(56.dp).background(BlueSecondary, RoundedCornerShape(16.dp))
-            ) {
-              Icon(Lucide.RotateCcw, "Clear", tint = NavyPrimary)
+        Surface(
+          modifier = Modifier.size(54.sdp).clip(RoundedCornerShape(16.sdp)).clickable {
+            reset(clearTranscript = true)
+            errorText = null
+            statusText = if (hasCameraPermission) {
+              "Transcript cleared. Start detection to analyze supported gestures."
+            } else {
+              "Allow camera access to start live recognition."
             }
-          }
-
-          Row(
-            Modifier.fillMaxWidth().background(if (errorText != null) ErrorRed.copy(alpha = 0.08f) else BluePrimary)
-              .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Box(
-              Modifier.size(10.dp).clip(CircleShape).background(if (errorText != null) ErrorRed else SuccessGreen)
-            )
-            Text(statusText, color = if (errorText != null) ErrorRed else NavyPrimary)
+          },
+          shape = RoundedCornerShape(16.sdp),
+          color = Color.White,
+          border = BorderStroke(1.5.dp, Gray200)
+        ) {
+          Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(Lucide.RotateCcw, "Clear", tint = NavyPrimary, modifier = Modifier.size(22.sdp))
           }
         }
       }
 
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(2.dp, Gray200)
+        border = BorderStroke(2.sdp, Gray200)
       ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.dp))
-            Text("Volunteer Sentence", color = NavyPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(14.sdp)) {
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.sdp)) {
+            Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.sdp))
+            Text("Volunteer Sentence", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           }
 
           if (interpreterPending && volunteerArabicSentence.isNullOrBlank()) {
@@ -452,21 +475,21 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
             Text("Interpreter status: waiting for backend response...", color = TextLight)
           }
           interpreterNotes.take(2).forEach { note ->
-            Text(note, color = TextLight, fontSize = 13.sp)
+            Text(note, color = TextLight, fontSize = 13.ssp)
           }
         }
       }
 
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(2.dp, Gray200)
+        border = BorderStroke(2.sdp, Gray200)
       ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Lucide.Languages, null, tint = AccentGold, modifier = Modifier.size(22.dp))
-            Text("Current Detection", color = NavyPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(14.sdp)) {
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.sdp)) {
+            Icon(Lucide.Languages, null, tint = AccentGold, modifier = Modifier.size(22.sdp))
+            Text("Current Detection", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           }
 
           if (currentDetection == null) {
@@ -486,14 +509,14 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(2.dp, Gray200)
+        border = BorderStroke(2.sdp, Gray200)
       ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.dp))
-            Text("Transcript", color = NavyPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(14.sdp)) {
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.sdp)) {
+            Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.sdp))
+            Text("Transcript", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           }
           TranscriptBlock("English transcript", englishTranscript) {
             if (englishTranscript.isNotBlank()) clipboard.setText(AnnotatedString(englishTranscript))
@@ -506,20 +529,20 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(2.dp, Gray200)
+        border = BorderStroke(2.sdp, Gray200)
       ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          Text("Supported Gestures", color = NavyPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(12.sdp)) {
+          Text("Supported Gestures", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           SupportedGestureTranslations.forEach { gesture ->
             Column(
-              Modifier.fillMaxWidth().background(BluePrimary, RoundedCornerShape(16.dp))
-                .border(1.dp, Gray200, RoundedCornerShape(16.dp)).padding(14.dp)
+              Modifier.fillMaxWidth().background(BluePrimary, RoundedCornerShape(16.sdp))
+                .border(1.sdp, Gray200, RoundedCornerShape(16.sdp)).padding(14.sdp)
             ) {
               Text("${gesture.english} - ${gesture.arabic}", color = NavyPrimary, fontWeight = FontWeight.SemiBold)
-              Spacer(Modifier.height(4.dp))
-              Text(gesture.hint, color = TextLight, fontSize = 13.sp)
+              Spacer(Modifier.height(4.sdp))
+              Text(gesture.hint, color = TextLight, fontSize = 13.ssp)
             }
           }
         }
@@ -527,12 +550,12 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
       Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E8)),
-        border = BorderStroke(2.dp, AccentGold.copy(alpha = 0.35f))
+        border = BorderStroke(2.sdp, AccentGold.copy(alpha = 0.35f))
       ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Current Scope", color = NavyPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(10.sdp)) {
+          Text("Current Scope", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           Text(
             "This now uses real camera frames and a real MediaPipe gesture model. It does not cover full sign-language vocabulary or guarantee 100% accuracy. Full Arabic and English sign-language translation needs a custom trained model and evaluation data.",
             color = NavyPrimary
@@ -545,25 +568,25 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
 @Composable
 private fun DetectionBlock(title: String, value: String, onCopy: () -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.sdp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
       Text(title, color = TextLight, fontWeight = FontWeight.SemiBold)
       IconButton(
         onClick = onCopy,
         enabled = value.isNotBlank(),
-        modifier = Modifier.size(36.dp).background(if (value.isNotBlank()) BluePrimary else Color.Transparent, RoundedCornerShape(12.dp))
+        modifier = Modifier.size(36.sdp).background(if (value.isNotBlank()) BluePrimary else Color.Transparent, RoundedCornerShape(12.sdp))
       ) {
         Icon(Lucide.Copy, "Copy $title", tint = if (value.isNotBlank()) NavyPrimary else Gray200)
       }
     }
     Box(
-      Modifier.fillMaxWidth().background(BluePrimary, RoundedCornerShape(16.dp))
-        .border(2.dp, Gray200, RoundedCornerShape(16.dp)).padding(16.dp)
+      Modifier.fillMaxWidth().background(BluePrimary, RoundedCornerShape(16.sdp))
+        .border(2.sdp, Gray200, RoundedCornerShape(16.sdp)).padding(16.sdp)
     ) {
       Text(
         if (value.isNotBlank()) value else "Waiting for interpretation...",
         color = if (value.isNotBlank()) NavyPrimary else TextLight,
-        fontSize = 16.sp,
+        fontSize = 16.ssp,
         fontWeight = FontWeight.Medium
       )
     }
@@ -572,25 +595,25 @@ private fun DetectionBlock(title: String, value: String, onCopy: () -> Unit) {
 
 @Composable
 private fun TranscriptBlock(title: String, value: String, onCopy: () -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.sdp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
       Text(title, color = NavyPrimary, fontWeight = FontWeight.SemiBold)
       IconButton(
         onClick = onCopy,
         enabled = value.isNotBlank(),
-        modifier = Modifier.size(36.dp).background(if (value.isNotBlank()) BluePrimary else Color.Transparent, RoundedCornerShape(12.dp))
+        modifier = Modifier.size(36.sdp).background(if (value.isNotBlank()) BluePrimary else Color.Transparent, RoundedCornerShape(12.sdp))
       ) {
         Icon(Lucide.Copy, "Copy $title", tint = if (value.isNotBlank()) NavyPrimary else Gray200)
       }
     }
     Box(
-      Modifier.fillMaxWidth().heightIn(min = 90.dp).background(BluePrimary, RoundedCornerShape(16.dp))
-        .border(2.dp, Gray200, RoundedCornerShape(16.dp)).padding(16.dp)
+      Modifier.fillMaxWidth().heightIn(min = 90.sdp).background(BluePrimary, RoundedCornerShape(16.sdp))
+        .border(2.sdp, Gray200, RoundedCornerShape(16.sdp)).padding(16.sdp)
     ) {
       if (value.isBlank()) {
         Text("Detected gestures will appear here.", color = TextLight, modifier = Modifier.align(Alignment.Center))
       } else {
-        SelectionContainer { Text(value, color = NavyPrimary, lineHeight = 24.sp) }
+        SelectionContainer { Text(value, color = NavyPrimary, lineHeight = 24.ssp) }
       }
     }
   }
@@ -599,23 +622,23 @@ private fun TranscriptBlock(title: String, value: String, onCopy: () -> Unit) {
 @Composable
 private fun CenterOverlay(title: String, message: String, buttonText: String?, onButtonClick: (() -> Unit)?) {
   Column(
-    Modifier.fillMaxSize().padding(28.dp),
+    Modifier.fillMaxSize().padding(28.sdp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center
   ) {
     Box(
-      Modifier.size(96.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f))
-        .border(2.dp, Color.White.copy(alpha = 0.18f), CircleShape),
+      Modifier.size(96.sdp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f))
+        .border(2.sdp, Color.White.copy(alpha = 0.18f), CircleShape),
       contentAlignment = Alignment.Center
     ) {
-      Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(44.dp))
+      Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(44.sdp))
     }
-    Spacer(Modifier.height(18.dp))
-    Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(18.sdp))
+    Text(title, color = Color.White, fontSize = 18.ssp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(8.sdp))
     Text(message, color = Color.White.copy(alpha = 0.72f), textAlign = TextAlign.Center)
     if (buttonText != null && onButtonClick != null) {
-      Spacer(Modifier.height(18.dp))
+      Spacer(Modifier.height(18.sdp))
       Button(onClick = onButtonClick, colors = ButtonDefaults.buttonColors(containerColor = AccentGold)) {
         Text(buttonText)
       }
@@ -654,17 +677,17 @@ private fun DetectionOverlay(detection: GestureDetectionEntry) {
       )
     }
     Surface(
-      modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-      shape = RoundedCornerShape(18.dp),
+      modifier = Modifier.align(Alignment.BottomCenter).padding(16.sdp),
+      shape = RoundedCornerShape(18.sdp),
       color = NavyPrimary.copy(alpha = 0.92f)
     ) {
       Column(
-        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+        modifier = Modifier.padding(horizontal = 18.sdp, vertical = 14.sdp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
-        Text(detection.translation.english, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(detection.translation.arabic, color = Color.White.copy(alpha = 0.92f), fontSize = 18.sp)
-        Text("${detection.confidencePercent}% confidence", color = AccentGold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(detection.translation.english, color = Color.White, fontSize = 20.ssp, fontWeight = FontWeight.Bold)
+        Text(detection.translation.arabic, color = Color.White.copy(alpha = 0.92f), fontSize = 18.ssp)
+        Text("${detection.confidencePercent}% confidence", color = AccentGold, fontSize = 13.ssp, fontWeight = FontWeight.SemiBold)
       }
     }
   }

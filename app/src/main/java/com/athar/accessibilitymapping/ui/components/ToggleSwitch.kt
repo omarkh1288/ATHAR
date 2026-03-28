@@ -1,4 +1,7 @@
 package com.athar.accessibilitymapping.ui.components
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,32 +41,32 @@ fun ToggleSwitch(
     label = "borderColor"
   )
   val thumbOffset = animateDpAsState(
-    targetValue = if (enabled) 24.dp else 2.dp,
+    targetValue = if (enabled) 24.sdp else 2.sdp,
     animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f),
     label = "thumbOffset"
   )
 
   Box(
     modifier = Modifier
-      .size(width = 52.dp, height = 30.dp)
-      .background(trackColor.value, RoundedCornerShape(15.dp))
+      .size(width = 52.sdp, height = 30.sdp)
+      .background(trackColor.value, RoundedCornerShape(15.sdp))
       .border(
-        width = 1.5.dp,
-        color = borderColor.value,
-        shape = RoundedCornerShape(15.dp)
+        1.5.dp,
+        borderColor.value,
+        RoundedCornerShape(15.sdp)
       )
       .clickable { onChange() }
   ) {
     Box(
       modifier = Modifier
-        .offset(x = thumbOffset.value, y = 2.dp)
-        .size(26.dp)
-        .shadow(2.dp, CircleShape)
+        .offset(x = thumbOffset.value, y = 2.sdp)
+        .size(26.sdp)
+        .shadow(2.sdp, CircleShape)
         .background(Color.White, CircleShape)
         .border(
-          width = 1.dp,
-          color = if (enabled) activeBorderColor.copy(alpha = 0.25f) else Color(0xFFD5DDE8),
-          shape = CircleShape
+          1.sdp,
+          if (enabled) activeBorderColor.copy(alpha = 0.25f) else Color(0xFFD5DDE8),
+          CircleShape
         )
     )
   }

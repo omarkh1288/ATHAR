@@ -51,6 +51,8 @@ import com.athar.accessibilitymapping.ui.theme.BlueSecondary
 import com.athar.accessibilitymapping.ui.theme.Gray200
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 
 @Composable
 fun PrivacySecurityScreen(onBack: () -> Unit) {

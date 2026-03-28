@@ -70,6 +70,8 @@ import com.athar.accessibilitymapping.ui.theme.BlueSecondary
 import com.athar.accessibilitymapping.ui.theme.Gray200
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.payment.AtharPaymentFlow
 import com.athar.accessibilitymapping.ui.review.AtharEndOfRideReview
 import kotlinx.coroutines.delay
@@ -665,17 +667,26 @@ fun RequestsScreen(
 
   if (showPaymentFlow && activeRequestForFlow != null) {
     val request = activeRequestForFlow!!
+    val normalizedPricePerHour = normalizeUiRequestPricePerHour(request.hours, request.pricePerHour)
+    val normalizedTotalAmount = normalizeUiRequestTotalAmount(
+      hours = request.hours,
+      pricePerHour = request.pricePerHour,
+      totalAmountEgp = request.totalAmountEgp
+    )
     AtharPaymentFlow(
       volunteerName = request.volunteerName ?: "Sara Mohammed",
       serviceName = if (request.description.isBlank()) "Assistance" else request.description,
       location = request.location,
       date = "Mar 6, 2026",
-      initialPricePerHour = request.pricePerHour,
+      initialPricePerHour = normalizedPricePerHour,
       initialHours = request.hours,
-      initialTotalAmountEgp = request.totalAmountEgp,
+      initialTotalAmountEgp = normalizedTotalAmount,
       onSubmitPayment = { method ->
-        val amountEgp = request.totalAmountEgp?.coerceAtLeast(1)
-          ?: (request.hours * request.pricePerHour).coerceAtLeast(1)
+        val amountEgp = normalizeUiRequestTotalAmount(
+          hours = request.hours,
+          pricePerHour = request.pricePerHour,
+          totalAmountEgp = request.totalAmountEgp
+        ) ?: (request.hours * normalizedPricePerHour).coerceAtLeast(1)
         val result = repository.payRequest(request.id, method, amountEgp)
         requestsViewModel.refreshNow()
         when (result) {
@@ -830,3 +841,20 @@ private fun requiresPayment(raw: String): Boolean {
   return normalizeRequestStatus(raw) == "accepted"
 }
 
+private fun normalizeUiRequestPricePerHour(hours: Int, pricePerHour: Int): Int {
+  // Valid EGP pricePerHour: 50-200. Piaster values start at 5000.
+  return when {
+    pricePerHour > 200 && pricePerHour % 100 == 0 -> (pricePerHour / 100).coerceAtLeast(1)
+    else -> pricePerHour.coerceAtLeast(1)
+  }
+}
+
+private fun normalizeUiRequestTotalAmount(hours: Int, pricePerHour: Int, totalAmountEgp: Int?): Int? {
+  // Valid EGP total: max 200*8=1600. Piaster values start at 5000.
+  return totalAmountEgp?.let { total ->
+    when {
+      total > 1600 && total % 100 == 0 -> (total / 100).coerceAtLeast(1)
+      else -> total.coerceAtLeast(1)
+    }
+  }
+}

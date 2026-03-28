@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
 
-  private val repository = AtharRepository(application)
+  val repository = AtharRepository(application)
 
   private val _locations = MutableStateFlow<List<Location>>(emptyList())
   val locations: StateFlow<List<Location>> = _locations

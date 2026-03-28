@@ -56,6 +56,8 @@ import com.athar.accessibilitymapping.ui.theme.BluePrimary
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.ui.theme.TextLight
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,7 +81,7 @@ fun LoginScreen(
           colors = listOf(NavyPrimary, NavyDark)
         )
       )
-      .padding(16.dp)
+      .padding(16.sdp)
   ) {
     Column(
       modifier = Modifier.fillMaxSize(),

@@ -1,4 +1,7 @@
 ﻿package com.athar.accessibilitymapping.ui.components
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -33,24 +36,24 @@ fun ScreenHeader(
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .shadow(elevation = 8.dp)
+      .shadow(elevation = 8.sdp)
       .background(background)
       .statusBarsPadding()
-      .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 22.dp)
+      .padding(start = 16.sdp, end = 16.sdp, top = 20.sdp, bottom = 22.sdp)
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       TextButton(
         onClick = onBack,
         colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.sdp)
       ) {
         Icon(
           imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
           contentDescription = null,
           tint = Color.White,
-          modifier = Modifier.size(24.dp)
+          modifier = Modifier.size(24.sdp)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(6.sdp))
         Text(
           text = "Back",
           color = Color.White,

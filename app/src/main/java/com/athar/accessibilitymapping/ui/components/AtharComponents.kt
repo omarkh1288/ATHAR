@@ -1,4 +1,7 @@
 ﻿package com.athar.accessibilitymapping.ui.components
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,25 +40,25 @@ fun PrimaryButton(
     enabled = enabled,
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = 56.dp),
-    shape = RoundedCornerShape(12.dp),
+      .heightIn(min = 56.sdp),
+    shape = RoundedCornerShape(12.sdp),
     colors = ButtonDefaults.buttonColors(
       containerColor = background,
       contentColor = contentColor,
       disabledContainerColor = Color(0xFFCBD5E1),
       disabledContentColor = Color.White
     ),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
+    contentPadding = PaddingValues(horizontal = 16.sdp, vertical = 16.sdp)
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       if (leadingIcon != null) {
         Icon(
           imageVector = leadingIcon,
           contentDescription = leadingIconContentDescription,
-          modifier = Modifier.size(20.dp),
+          modifier = Modifier.size(20.sdp),
           tint = contentColor
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(8.sdp))
       }
       Text(
         text = text,
@@ -77,10 +80,10 @@ fun OutlineActionButton(
     onClick = onClick,
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = 56.dp),
-    shape = RoundedCornerShape(12.dp),
-    border = BorderStroke(2.dp, borderColor),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
+      .heightIn(min = 56.sdp),
+    shape = RoundedCornerShape(12.sdp),
+    border = BorderStroke(2.sdp, borderColor),
+    contentPadding = PaddingValues(horizontal = 16.sdp, vertical = 16.sdp)
   ) {
     Text(
       text = text,

@@ -1,4 +1,7 @@
 package com.athar.accessibilitymapping.ui.screens
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import android.Manifest
 import android.content.Context
@@ -227,13 +230,13 @@ fun SignLanguageTranslatorScreenOld(onBack: () -> Unit) {
 
       ModeTabs(
         mode = mode,
-        topPadding = if (showInfo) 8.dp else 12.dp,
+        topPadding = if (showInfo) 8.sdp else 12.sdp,
         onModeChange = { mode = it }
       )
 
       Column(
-        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.sdp, vertical = 12.sdp),
+        verticalArrangement = Arrangement.spacedBy(12.sdp)
       ) {
         if (mode == TranslatorMode.Glove) {
           GloveMode(
@@ -287,7 +290,7 @@ fun SignLanguageTranslatorScreenOld(onBack: () -> Unit) {
             onClear = { cameraWords.clear(); currentSign = null; cameraConfidence = 0 }
           )
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(12.sdp))
       }
     }
 
@@ -347,33 +350,33 @@ private fun TranslatorHeader(
     ConnectionStatus.Disconnected -> "Disconnected"
   }
 
-  Column(Modifier.fillMaxWidth().background(NavyPrimary).statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 22.dp)) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      Box(Modifier.size(40.dp).clip(CircleShape).background(NavyDark).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-        Icon(Lucide.ArrowLeft, "Go back", tint = Color.White, modifier = Modifier.size(20.dp))
+  Column(Modifier.fillMaxWidth().background(NavyPrimary).statusBarsPadding().padding(start = 16.sdp, end = 16.sdp, top = 20.sdp, bottom = 22.sdp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.sdp)) {
+      Box(Modifier.size(40.sdp).clip(CircleShape).background(NavyDark).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
+        Icon(Lucide.ArrowLeft, "Go back", tint = Color.White, modifier = Modifier.size(20.sdp))
       }
       Column(Modifier.weight(1f)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Icon(Lucide.Hand, null, tint = Color.White, modifier = Modifier.size(22.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+          Icon(Lucide.Hand, null, tint = Color.White, modifier = Modifier.size(22.sdp))
           Text("Sign Language Translator", color = Color.White, style = TranslatorTitleStyle)
         }
         Text(if (mode == TranslatorMode.Glove) "Bluetooth glove recognition" else "Video stream recognition", color = Color.White.copy(alpha = 0.7f), style = TranslatorBodyStyle)
       }
-      Box(Modifier.size(36.dp).clip(CircleShape).background(NavyDark).clickable(onClick = onToggleInfo), contentAlignment = Alignment.Center) {
-        Icon(Lucide.Info, "Info", tint = Color.White, modifier = Modifier.size(18.dp))
+      Box(Modifier.size(36.sdp).clip(CircleShape).background(NavyDark).clickable(onClick = onToggleInfo), contentAlignment = Alignment.Center) {
+        Icon(Lucide.Info, "Info", tint = Color.White, modifier = Modifier.size(18.sdp))
       }
     }
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(12.sdp))
     Row(
-      modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(NavyDark).padding(horizontal = 12.dp, vertical = 10.dp),
+      modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.sdp)).background(NavyDark).padding(horizontal = 12.sdp, vertical = 10.sdp),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically
     ) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(statusColor))
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+        Box(Modifier.size(10.sdp).clip(CircleShape).background(statusColor))
         Text(statusLabel, color = Color.White.copy(alpha = 0.8f), style = TranslatorLabelStyle)
       }
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.sdp)) {
         Icon(
           imageVector = when {
             mode == TranslatorMode.Glove && activeStatus == ConnectionStatus.Connected -> Lucide.Bluetooth
@@ -383,7 +386,7 @@ private fun TranslatorHeader(
           },
           contentDescription = null,
           tint = if (activeStatus == ConnectionStatus.Connected) Color.White.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.4f),
-          modifier = Modifier.size(16.dp)
+          modifier = Modifier.size(16.sdp)
         )
         Text(rightLabel, color = Color.White.copy(alpha = 0.6f), style = TranslatorLabelStyle)
       }
@@ -394,22 +397,22 @@ private fun TranslatorHeader(
 @Composable
 private fun ModeTabs(mode: TranslatorMode, topPadding: androidx.compose.ui.unit.Dp, onModeChange: (TranslatorMode) -> Unit) {
   Card(
-    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = topPadding, bottom = 12.dp).fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, Gray200),
+    modifier = Modifier.padding(start = 16.sdp, end = 16.sdp, top = topPadding, bottom = 12.sdp).fillMaxWidth(),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, Gray200),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.sdp)
   ) {
-    Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(Modifier.fillMaxWidth().padding(4.sdp), horizontalArrangement = Arrangement.spacedBy(4.sdp)) {
       TranslatorMode.entries.forEach { item ->
         val selected = item == mode
         Row(
-          modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (selected) NavyPrimary else Color.Transparent).clickable { onModeChange(item) }.padding(horizontal = 8.dp, vertical = 12.dp),
+          modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.sdp)).background(if (selected) NavyPrimary else Color.Transparent).clickable { onModeChange(item) }.padding(horizontal = 8.sdp, vertical = 12.sdp),
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.Center
         ) {
-          Icon(if (item == TranslatorMode.Glove) Lucide.Bluetooth else Lucide.Camera, item.name, tint = if (selected) Color.White else TextLight, modifier = Modifier.size(16.dp))
-          Spacer(Modifier.width(8.dp))
+          Icon(if (item == TranslatorMode.Glove) Lucide.Bluetooth else Lucide.Camera, item.name, tint = if (selected) Color.White else TextLight, modifier = Modifier.size(16.sdp))
+          Spacer(Modifier.width(8.sdp))
           Text(if (item == TranslatorMode.Glove) "Glove Translator" else "Camera Translator", color = if (selected) Color.White else TextLight, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
         }
       }
@@ -420,22 +423,22 @@ private fun ModeTabs(mode: TranslatorMode, topPadding: androidx.compose.ui.unit.
 @Composable
 private fun TranslatorInfoCard(mode: TranslatorMode, onDismiss: () -> Unit) {
   Card(
-    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 0.dp).fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, AccentGoldDark),
+    modifier = Modifier.padding(start = 16.sdp, end = 16.sdp, top = 10.sdp, bottom = 0.sdp).fillMaxWidth(),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, AccentGoldDark),
     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8DC)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.sdp)
   ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp)) {
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-        Icon(Lucide.Zap, null, tint = AccentGoldDark, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+    Column(Modifier.padding(horizontal = 16.sdp, vertical = 18.sdp)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(8.sdp), verticalAlignment = Alignment.Top) {
+        Icon(Lucide.Zap, null, tint = AccentGoldDark, modifier = Modifier.padding(top = 2.sdp).size(18.sdp))
         Column(Modifier.weight(1f)) {
           Text(
             if (mode == TranslatorMode.Glove) "Glove Translator" else "Camera Translator",
             color = NavyPrimary,
             style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold)
           )
-          Spacer(Modifier.height(6.dp))
+          Spacer(Modifier.height(6.sdp))
           Text(
             if (mode == TranslatorMode.Glove) {
               "Connect the Athar smart glove via Bluetooth. The glove sensors detect finger positions and translate them into individual characters (A-Z, 0-9) in real time."
@@ -443,11 +446,11 @@ private fun TranslatorInfoCard(mode: TranslatorMode, onDismiss: () -> Unit) {
               "Receive a live video stream from the Athar desktop app. The camera captures sign language gestures and translates them into words and phrases."
             },
             color = NavyDark,
-            style = TranslatorLabelStyle.copy(fontSize = 12.sp, lineHeight = 18.sp)
+            style = TranslatorLabelStyle.copy(fontSize = 12.ssp, lineHeight = 18.ssp)
           )
         }
       }
-      Spacer(Modifier.height(18.dp))
+      Spacer(Modifier.height(18.sdp))
       val steps = if (mode == TranslatorMode.Glove) {
         listOf(
           "Turn on the Athar glove and enable Bluetooth",
@@ -462,13 +465,13 @@ private fun TranslatorInfoCard(mode: TranslatorMode, onDismiss: () -> Unit) {
         )
       }
       steps.forEachIndexed { index, step ->
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.sdp), verticalAlignment = Alignment.Top) {
           Text("${index + 1}.", color = AccentGoldDark, style = TranslatorLabelStyle.copy(fontWeight = FontWeight.Bold))
-          Text(step, color = NavyDark, style = TranslatorLabelStyle.copy(fontSize = 12.sp, lineHeight = 16.sp))
+          Text(step, color = NavyDark, style = TranslatorLabelStyle.copy(fontSize = 12.ssp, lineHeight = 16.ssp))
         }
-        if (index < steps.lastIndex) Spacer(Modifier.height(8.dp))
+        if (index < steps.lastIndex) Spacer(Modifier.height(8.sdp))
       }
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(12.sdp))
       Text(
         "Got it",
         color = AccentGoldDark,
@@ -497,10 +500,10 @@ private fun GloveMode(
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, if (status == ConnectionStatus.Connected) SuccessGreen else Gray200),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, if (status == ConnectionStatus.Connected) SuccessGreen else Gray200),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp)
   ) {
     Column {
       Column(
@@ -508,34 +511,34 @@ private fun GloveMode(
           Brush.linearGradient(
             if (status == ConnectionStatus.Connected) listOf(NavyPrimary, NavyDark) else listOf(Gray700, Gray600)
           )
-        ).padding(24.dp),
+        ).padding(24.sdp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Box(
-          modifier = Modifier.size(96.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(3.dp, if (status == ConnectionStatus.Connected) SuccessGreen else Color.White.copy(alpha = 0.2f), CircleShape),
+          modifier = Modifier.size(96.sdp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(3.sdp, if (status == ConnectionStatus.Connected) SuccessGreen else Color.White.copy(alpha = 0.2f), CircleShape),
           contentAlignment = Alignment.Center
         ) {
           when (status) {
-            ConnectionStatus.Connecting -> PulsingIcon(Lucide.BluetoothSearching, Color.White.copy(alpha = 0.6f), 48.dp)
-            ConnectionStatus.Connected -> Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(42.dp))
-            ConnectionStatus.Disconnected -> Icon(Lucide.BluetoothOff, null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(42.dp))
+            ConnectionStatus.Connecting -> PulsingIcon(Lucide.BluetoothSearching, Color.White.copy(alpha = 0.6f), 48.sdp)
+            ConnectionStatus.Connected -> Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(42.sdp))
+            ConnectionStatus.Disconnected -> Icon(Lucide.BluetoothOff, null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(42.sdp))
           }
         }
 
         when (status) {
           ConnectionStatus.Connected -> {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.sdp))
             Text(deviceName ?: "Athar Glove v2", color = Color.White, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold))
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-              Surface(shape = RoundedCornerShape(999.dp), color = SuccessGreen.copy(alpha = 0.2f)) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Box(Modifier.size(8.dp).clip(CircleShape).background(SuccessGreen))
+            Spacer(Modifier.height(8.sdp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.sdp), verticalAlignment = Alignment.CenterVertically) {
+              Surface(shape = RoundedCornerShape(999.sdp), color = SuccessGreen.copy(alpha = 0.2f)) {
+                Row(Modifier.padding(horizontal = 10.sdp, vertical = 6.sdp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.sdp)) {
+                  Box(Modifier.size(8.sdp).clip(CircleShape).background(SuccessGreen))
                   Text("Paired", color = SuccessGreen.copy(alpha = 0.9f), style = TranslatorLabelStyle)
                 }
               }
-              Surface(shape = RoundedCornerShape(999.dp), color = Color.White.copy(alpha = 0.12f)) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              Surface(shape = RoundedCornerShape(999.sdp), color = Color.White.copy(alpha = 0.12f)) {
+                Row(Modifier.padding(horizontal = 10.sdp, vertical = 6.sdp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.sdp)) {
                   BatteryIndicator(battery)
                   Text("$battery%", color = Color.White.copy(alpha = 0.7f), style = TranslatorLabelStyle)
                 }
@@ -543,31 +546,31 @@ private fun GloveMode(
             }
           }
           ConnectionStatus.Connecting -> {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.sdp))
             Text("Searching for glove...", color = Color.White.copy(alpha = 0.65f), style = TranslatorBodyStyle)
           }
           ConnectionStatus.Disconnected -> {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.sdp))
             Text("No glove connected", color = Color.White.copy(alpha = 0.45f), style = TranslatorBodyStyle)
           }
         }
 
         if (status == ConnectionStatus.Connected && currentChar != null) {
-          Spacer(Modifier.height(16.dp))
+          Spacer(Modifier.height(16.sdp))
           Box(
-            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(AccentGold),
+            modifier = Modifier.size(64.sdp).clip(RoundedCornerShape(16.sdp)).background(AccentGold),
             contentAlignment = Alignment.Center
           ) {
-            Text(currentChar, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+            Text(currentChar, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.ssp)
           }
         }
       }
 
-      Column(Modifier.padding(16.dp)) {
+      Column(Modifier.padding(16.sdp)) {
         when (status) {
           ConnectionStatus.Disconnected -> FilledPanelButton("Pair Glove", Lucide.Bluetooth, NavyPrimary, onConnect, Modifier.fillMaxWidth())
           ConnectionStatus.Connecting -> FilledPanelButton("Pairing...", Lucide.LoaderCircle, TextLight, {}, Modifier.fillMaxWidth(), spinIcon = true)
-          ConnectionStatus.Connected -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          ConnectionStatus.Connected -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.sdp)) {
             OutlinePanelButton("Unpair", Lucide.BluetoothOff, ErrorRed, Modifier.weight(1f), onDisconnect)
             FilledPanelButton(if (listening) "Stop" else "Start Listening", Lucide.Hand, if (listening) ErrorRed else AccentGold, onToggleListening, Modifier.weight(1f))
           }
@@ -590,14 +593,14 @@ private fun GloveMode(
         buildAnnotatedString(text),
         color = NavyPrimary,
         fontFamily = FontFamily.Monospace,
-        fontSize = 18.sp,
-        lineHeight = 28.sp
+        fontSize = 18.ssp,
+        lineHeight = 28.ssp
       )
     }
   }
 
   if (status == ConnectionStatus.Connected) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
       OutlinePanelButton("Space", null, NavyPrimary, Modifier.weight(1f), onSpace)
       OutlinePanelButton("Backspace", Lucide.Delete, NavyPrimary, Modifier.weight(1f), onBackspace)
       OutlinePanelButton("Clear", Lucide.RotateCcw, ErrorRed, Modifier.weight(1f), onClear)
@@ -663,17 +666,17 @@ private fun CameraMode(
   // Camera Preview Card with Modern Design
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(20.dp),
+    shape = RoundedCornerShape(20.sdp),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp)
   ) {
     Column {
       // Camera View
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(420.dp)
-          .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+          .height(420.sdp)
+          .clip(RoundedCornerShape(topStart = 20.sdp, topEnd = 20.sdp))
       ) {
         // Camera Preview with animated background
         Box(
@@ -710,14 +713,14 @@ private fun CameraMode(
               contentAlignment = Alignment.Center
             ) {
               Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(60.dp))
-                Spacer(Modifier.height(16.dp))
+                Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(60.sdp))
+                Spacer(Modifier.height(16.sdp))
                 Text(
                   "Camera Permission Required",
                   color = Color.White,
                   style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold)
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.sdp))
                 Button(
                   onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
                   colors = ButtonDefaults.buttonColors(containerColor = AccentGold)
@@ -732,8 +735,8 @@ private fun CameraMode(
               contentAlignment = Alignment.Center
             ) {
               Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(60.dp))
-                Spacer(Modifier.height(16.dp))
+                Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(60.sdp))
+                Spacer(Modifier.height(16.sdp))
                 Text(
                   "Camera Ready",
                   color = Color.White,
@@ -749,15 +752,15 @@ private fun CameraMode(
               Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                   modifier = Modifier
-                    .size(100.dp)
+                    .size(100.sdp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.1f))
-                    .border(3.dp, AccentGold.copy(alpha = 0.5f), CircleShape),
+                    .border(3.sdp, AccentGold.copy(alpha = 0.5f), CircleShape),
                   contentAlignment = Alignment.Center
                 ) {
-                  Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(48.dp))
+                  Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(48.sdp))
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.sdp))
                 Text(
                   "Tap 'Start Detection' below",
                   color = Color.White.copy(alpha = 0.7f),
@@ -786,21 +789,21 @@ private fun CameraMode(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(16.sdp)
             .align(Alignment.TopCenter),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
           // Language Selector
           Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(12.sdp),
             color = NavyPrimary.copy(alpha = 0.9f)
           ) {
             Row(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.padding(horizontal = 12.sdp, vertical = 8.sdp),
+              horizontalArrangement = Arrangement.spacedBy(8.sdp),
               verticalAlignment = Alignment.CenterVertically
             ) {
-              Icon(Lucide.Languages, null, tint = AccentGold, modifier = Modifier.size(18.dp))
+              Icon(Lucide.Languages, null, tint = AccentGold, modifier = Modifier.size(18.sdp))
               Text(
                 selectedLanguage,
                 color = Color.White,
@@ -811,7 +814,7 @@ private fun CameraMode(
                 null,
                 tint = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier
-                  .size(16.dp)
+                  .size(16.sdp)
                   .clickable {
                     selectedLanguage = if (selectedLanguage == "English") "Arabic" else "English"
                   }
@@ -822,13 +825,13 @@ private fun CameraMode(
           // Fullscreen Toggle
           Box(
             modifier = Modifier
-              .size(40.dp)
-              .clip(RoundedCornerShape(12.dp))
+              .size(40.sdp)
+              .clip(RoundedCornerShape(12.sdp))
               .background(NavyPrimary.copy(alpha = 0.9f))
               .clickable(onClick = onToggleFullscreen),
             contentAlignment = Alignment.Center
           ) {
-            Icon(Lucide.Maximize2, "Fullscreen", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Maximize2, "Fullscreen", tint = Color.White, modifier = Modifier.size(20.sdp))
           }
         }
 
@@ -840,15 +843,15 @@ private fun CameraMode(
           ) {
             Box(
               modifier = Modifier
-                .size(100.dp)
+                .size(100.sdp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.1f))
-                .border(3.dp, AccentGold.copy(alpha = 0.5f), CircleShape),
+                .border(3.sdp, AccentGold.copy(alpha = 0.5f), CircleShape),
               contentAlignment = Alignment.Center
             ) {
-              Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(48.dp))
+              Icon(Lucide.Camera, null, tint = AccentGold, modifier = Modifier.size(48.sdp))
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(16.sdp))
             Text(
               "Tap 'Start Detection' below",
               color = Color.White.copy(alpha = 0.7f),
@@ -862,18 +865,18 @@ private fun CameraMode(
           Surface(
             modifier = Modifier
               .align(Alignment.BottomStart)
-              .padding(16.dp),
-            shape = RoundedCornerShape(999.dp),
+              .padding(16.sdp),
+            shape = RoundedCornerShape(999.sdp),
             color = ErrorRed.copy(alpha = 0.9f)
           ) {
             Row(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+              modifier = Modifier.padding(horizontal = 12.sdp, vertical = 8.sdp),
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
+              horizontalArrangement = Arrangement.spacedBy(8.sdp)
             ) {
               Box(
                 modifier = Modifier
-                  .size(10.dp)
+                  .size(10.sdp)
                   .clip(CircleShape)
                   .background(Color.White)
               )
@@ -891,28 +894,28 @@ private fun CameraMode(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+          .padding(16.sdp),
+        horizontalArrangement = Arrangement.spacedBy(12.sdp)
       ) {
         // Start/Stop Detection Button
         Box(
           modifier = Modifier
             .weight(1f)
-            .height(56.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(56.sdp)
+            .clip(RoundedCornerShape(16.sdp))
             .background(if (translating) ErrorRed else AccentGold)
             .clickable(onClick = onToggleTranslation),
           contentAlignment = Alignment.Center
         ) {
           Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.sdp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
               if (translating) Lucide.CircleStop else Lucide.Play,
               null,
               tint = Color.White,
-              modifier = Modifier.size(22.dp)
+              modifier = Modifier.size(22.sdp)
             )
             Text(
               if (translating) "Stop Detection" else "Start Detection",
@@ -925,14 +928,14 @@ private fun CameraMode(
         // Clear Button
         Box(
           modifier = Modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .size(56.sdp)
+            .clip(RoundedCornerShape(16.sdp))
             .background(BlueSecondary)
-            .border(2.dp, Gray200, RoundedCornerShape(16.dp))
+            .border(2.sdp, Gray200, RoundedCornerShape(16.sdp))
             .clickable(onClick = onClear),
           contentAlignment = Alignment.Center
         ) {
-          Icon(Lucide.RotateCcw, "Clear", tint = NavyPrimary, modifier = Modifier.size(22.dp))
+          Icon(Lucide.RotateCcw, "Clear", tint = NavyPrimary, modifier = Modifier.size(22.sdp))
         }
       }
     }
@@ -941,33 +944,33 @@ private fun CameraMode(
   // Translation Output Card
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(20.dp),
+    shape = RoundedCornerShape(20.sdp),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp)
   ) {
-    Column(Modifier.padding(20.dp)) {
+    Column(Modifier.padding(20.sdp)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
         Row(
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          horizontalArrangement = Arrangement.spacedBy(10.sdp),
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.dp))
+          Icon(Lucide.MessageSquare, null, tint = AccentGold, modifier = Modifier.size(22.sdp))
           Text(
             "Translation",
             color = NavyPrimary,
-            style = TranslatorTitleStyle.copy(fontSize = 18.sp)
+            style = TranslatorTitleStyle.copy(fontSize = 18.ssp)
           )
         }
 
         // Copy Button
         Box(
           modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .size(40.sdp)
+            .clip(RoundedCornerShape(10.sdp))
             .background(if (translatedText.isNotEmpty()) BlueSecondary else BlueSecondary.copy(alpha = 0.5f))
             .clickable(enabled = translatedText.isNotEmpty(), onClick = onCopy),
           contentAlignment = Alignment.Center
@@ -976,29 +979,29 @@ private fun CameraMode(
             Lucide.Copy,
             "Copy",
             tint = if (translatedText.isNotEmpty()) NavyPrimary else NavyPrimary.copy(alpha = 0.4f),
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(18.sdp)
           )
         }
       }
 
-      Spacer(Modifier.height(16.dp))
+      Spacer(Modifier.height(16.sdp))
 
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .heightIn(min = 120.dp)
-          .clip(RoundedCornerShape(16.dp))
+          .heightIn(min = 120.sdp)
+          .clip(RoundedCornerShape(16.sdp))
           .background(BluePrimary)
-          .border(2.dp, Gray200, RoundedCornerShape(16.dp))
-          .padding(16.dp)
+          .border(2.sdp, Gray200, RoundedCornerShape(16.sdp))
+          .padding(16.sdp)
       ) {
         if (translatedText.isEmpty()) {
           Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
           ) {
-            Icon(Lucide.Hand, null, tint = Gray200, modifier = Modifier.size(40.dp))
-            Spacer(Modifier.height(8.dp))
+            Icon(Lucide.Hand, null, tint = Gray200, modifier = Modifier.size(40.sdp))
+            Spacer(Modifier.height(8.sdp))
             Text(
               "Start detection to see translations",
               color = TextLight,
@@ -1011,8 +1014,8 @@ private fun CameraMode(
             translatedText,
             color = NavyPrimary,
             style = TranslatorBodyStyle.copy(
-              fontSize = 16.sp,
-              lineHeight = 24.sp,
+              fontSize = 16.ssp,
+              lineHeight = 24.ssp,
               fontWeight = FontWeight.Medium
             )
           )
@@ -1033,9 +1036,9 @@ private fun CameraStreamPanel(
   confidence: Int,
   onToggleFullscreen: () -> Unit
 ) {
-  val shape = if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(16.dp)
+  val shape = if (fullscreen) RoundedCornerShape(0.sdp) else RoundedCornerShape(16.sdp)
   Box(
-    modifier = modifier.clip(shape).background(Color.Black).border(if (fullscreen) 0.dp else 2.dp, if (status == ConnectionStatus.Connected) SuccessGreen else Gray200, shape)
+    modifier = modifier.clip(shape).background(Color.Black).border(if (fullscreen) 0.sdp else 2.sdp, if (status == ConnectionStatus.Connected) SuccessGreen else Gray200, shape)
   ) {
     when {
       connected -> {
@@ -1043,8 +1046,8 @@ private fun CameraStreamPanel(
           modifier = Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF020617), Color(0xFF111827), NavyPrimary)))
         ) {
           Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Lucide.Monitor, null, tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(56.dp))
-            Spacer(Modifier.height(12.dp))
+            Icon(Lucide.Monitor, null, tint = Color.White.copy(alpha = 0.75f), modifier = Modifier.size(56.sdp))
+            Spacer(Modifier.height(12.sdp))
             Text("Desktop Stream Active", color = Color.White, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold))
             Text("Live recognition preview", color = Color.White.copy(alpha = 0.65f), style = TranslatorLabelStyle)
           }
@@ -1052,17 +1055,17 @@ private fun CameraStreamPanel(
       }
       status == ConnectionStatus.Connecting -> {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-          SpinningIcon(Lucide.LoaderCircle, Color.White.copy(alpha = 0.4f), 44.dp)
-          Spacer(Modifier.height(12.dp))
+          SpinningIcon(Lucide.LoaderCircle, Color.White.copy(alpha = 0.4f), 44.sdp)
+          Spacer(Modifier.height(12.sdp))
           Text("Connecting to desktop stream...", color = Color.White.copy(alpha = 0.55f), style = TranslatorBodyStyle)
         }
       }
       else -> {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-          Box(Modifier.size(80.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(3.dp, Color.White.copy(alpha = 0.2f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Lucide.Monitor, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(40.dp))
+          Box(Modifier.size(80.sdp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(3.sdp, Color.White.copy(alpha = 0.2f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Monitor, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(40.sdp))
           }
-          Spacer(Modifier.height(12.dp))
+          Spacer(Modifier.height(12.sdp))
           Text("Enter the desktop stream URL below to connect", color = Color.White.copy(alpha = 0.5f), style = TranslatorBodyStyle, textAlign = TextAlign.Center)
         }
       }
@@ -1070,12 +1073,12 @@ private fun CameraStreamPanel(
 
     if (connected) {
       Surface(
-        modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-        shape = RoundedCornerShape(999.dp),
+        modifier = Modifier.align(Alignment.TopStart).padding(12.sdp),
+        shape = RoundedCornerShape(999.sdp),
         color = SuccessGreen.copy(alpha = 0.2f)
       ) {
-        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          Box(Modifier.size(8.dp).clip(CircleShape).background(SuccessGreen))
+        Row(Modifier.padding(horizontal = 10.sdp, vertical = 6.sdp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.sdp)) {
+          Box(Modifier.size(8.sdp).clip(CircleShape).background(SuccessGreen))
           Text("Live", color = SuccessGreen, style = TranslatorLabelStyle)
         }
       }
@@ -1083,23 +1086,23 @@ private fun CameraStreamPanel(
 
     if (translating && currentSign != null) {
       Surface(
-        modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.align(Alignment.BottomCenter).padding(12.sdp),
+        shape = RoundedCornerShape(12.sdp),
         color = NavyPrimary.copy(alpha = 0.88f)
       ) {
         Row(
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+          modifier = Modifier.padding(horizontal = 14.sdp, vertical = 12.sdp),
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(10.dp)
+          horizontalArrangement = Arrangement.spacedBy(10.sdp)
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f, false)) {
-            Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(18.dp))
-            Text(currentSign, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp), modifier = Modifier.weight(1f, false)) {
+            Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(18.sdp))
+            Text(currentSign, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.ssp)
           }
           Column(horizontalAlignment = Alignment.End) {
-            Box(Modifier.width(40.dp).height(6.dp).clip(RoundedCornerShape(999.dp)).background(Color.White.copy(alpha = 0.2f))) {
+            Box(Modifier.width(40.sdp).height(6.sdp).clip(RoundedCornerShape(999.sdp)).background(Color.White.copy(alpha = 0.2f))) {
               Box(
-                Modifier.fillMaxHeight().fillMaxWidth(confidence / 100f).clip(RoundedCornerShape(999.dp)).background(
+                Modifier.fillMaxHeight().fillMaxWidth(confidence / 100f).clip(RoundedCornerShape(999.sdp)).background(
                   when {
                     confidence >= 90 -> SuccessGreen
                     confidence >= 80 -> AccentGold
@@ -1108,26 +1111,26 @@ private fun CameraStreamPanel(
                 )
               )
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(4.sdp))
             Text("$confidence%", color = Color.White.copy(alpha = 0.7f), style = TranslatorLabelStyle)
           }
         }
       }
     } else if (translating) {
       Surface(
-        modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.align(Alignment.BottomCenter).padding(12.sdp),
+        shape = RoundedCornerShape(12.sdp),
         color = NavyPrimary.copy(alpha = 0.88f)
       ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          SpinningIcon(Lucide.LoaderCircle, Color.White.copy(alpha = 0.7f), 18.dp)
+        Row(Modifier.padding(horizontal = 14.sdp, vertical = 12.sdp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+          SpinningIcon(Lucide.LoaderCircle, Color.White.copy(alpha = 0.7f), 18.sdp)
           Text("Waiting for sign language gestures...", color = Color.White.copy(alpha = 0.7f), style = TranslatorBodyStyle)
         }
       }
     }
 
-    Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.5f)).clickable(onClick = onToggleFullscreen), contentAlignment = Alignment.Center) {
-      Icon(if (fullscreen) Lucide.Minimize2 else Lucide.Maximize2, "Toggle fullscreen", tint = Color.White, modifier = Modifier.size(18.dp))
+    Box(Modifier.align(Alignment.TopEnd).padding(12.sdp).size(32.sdp).clip(RoundedCornerShape(8.sdp)).background(Color.Black.copy(alpha = 0.5f)).clickable(onClick = onToggleFullscreen), contentAlignment = Alignment.Center) {
+      Icon(if (fullscreen) Lucide.Minimize2 else Lucide.Maximize2, "Toggle fullscreen", tint = Color.White, modifier = Modifier.size(18.sdp))
     }
   }
 }
@@ -1143,27 +1146,27 @@ private fun OutputCard(
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, Gray200),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, Gray200),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.sdp)
   ) {
     Column {
       Row(
-        modifier = Modifier.fillMaxWidth().background(BlueSecondary).border(0.dp, Color.Transparent).padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().background(BlueSecondary).border(0.sdp, Color.Transparent).padding(horizontal = 16.sdp, vertical = 12.sdp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Icon(Lucide.MessageSquare, null, tint = NavyPrimary, modifier = Modifier.size(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+          Icon(Lucide.MessageSquare, null, tint = NavyPrimary, modifier = Modifier.size(16.sdp))
           Text(title, color = NavyPrimary, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.sdp)) {
           SquareIconButton(Lucide.Copy, onCopy)
           SquareIconButton(Lucide.Trash2, onClear)
         }
       }
-      Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
+      Column(Modifier.fillMaxWidth().padding(16.sdp), content = content)
     }
   }
 }
@@ -1179,15 +1182,15 @@ private fun InputCard(
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, Gray200),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, Gray200),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.sdp)
   ) {
-    Column(Modifier.padding(16.dp)) {
+    Column(Modifier.padding(16.sdp)) {
       Text("Desktop Stream URL", color = NavyPrimary, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold))
-      Spacer(Modifier.height(8.dp))
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      Spacer(Modifier.height(8.sdp))
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.sdp), verticalAlignment = Alignment.CenterVertically) {
         TranslatorInputField(value, onValueChange, placeholder, Modifier.weight(1f))
         ConnectPanelButton(
           text = buttonLabel,
@@ -1196,7 +1199,7 @@ private fun InputCard(
           spinIcon = buttonLabel == "Connecting..."
         )
       }
-      Spacer(Modifier.height(8.dp))
+      Spacer(Modifier.height(8.sdp))
       Text("Open the Athar desktop app, start the camera, and copy the stream URL here.", color = TextLight, style = TranslatorLabelStyle)
     }
   }
@@ -1206,25 +1209,25 @@ private fun InputCard(
 private fun SupportedCharactersCard(currentChar: String?) {
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(2.dp, Gray200),
+    shape = RoundedCornerShape(16.sdp),
+    border = BorderStroke(2.sdp, Gray200),
     colors = CardDefaults.cardColors(containerColor = Color.White),
-    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    elevation = CardDefaults.cardElevation(defaultElevation = 6.sdp)
   ) {
     Column {
-      Row(Modifier.fillMaxWidth().background(BlueSecondary).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(16.dp))
+      Row(Modifier.fillMaxWidth().background(BlueSecondary).padding(horizontal = 16.sdp, vertical = 12.sdp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.sdp)) {
+        Icon(Lucide.Hand, null, tint = AccentGold, modifier = Modifier.size(16.sdp))
         Text("Supported Characters", color = NavyPrimary, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold))
       }
-      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Column(Modifier.padding(16.sdp), verticalArrangement = Arrangement.spacedBy(12.sdp)) {
         Text("Letters", color = TextLight, style = TranslatorLabelStyle.copy(fontWeight = FontWeight.SemiBold))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.sdp), verticalArrangement = Arrangement.spacedBy(6.sdp)) {
           gloveAlphabet.forEach { item ->
             CharacterChip(item, currentChar == item)
           }
         }
         Text("Numbers", color = TextLight, style = TranslatorLabelStyle.copy(fontWeight = FontWeight.SemiBold))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.sdp), verticalArrangement = Arrangement.spacedBy(6.sdp)) {
           gloveNumbers.forEach { item ->
             CharacterChip(item, currentChar == item)
           }
@@ -1237,7 +1240,7 @@ private fun SupportedCharactersCard(currentChar: String?) {
 @Composable
 private fun CharacterChip(text: String, selected: Boolean) {
   Box(
-    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(if (selected) AccentGold else BluePrimary).border(1.dp, Gray200, RoundedCornerShape(8.dp)),
+    modifier = Modifier.size(32.sdp).clip(RoundedCornerShape(8.sdp)).background(if (selected) AccentGold else BluePrimary).border(1.sdp, Gray200, RoundedCornerShape(8.sdp)),
     contentAlignment = Alignment.Center
   ) {
     Text(text, color = if (selected) Color.White else NavyPrimary, style = TranslatorLabelStyle.copy(fontWeight = FontWeight.Bold))
@@ -1246,34 +1249,34 @@ private fun CharacterChip(text: String, selected: Boolean) {
 
 @Composable
 private fun BatteryIndicator(level: Int) {
-  Box(Modifier.width(18.dp).height(10.dp).border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(3.dp))) {
+  Box(Modifier.width(18.sdp).height(10.sdp).border(1.sdp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(3.sdp))) {
     Box(
-      Modifier.fillMaxHeight().fillMaxWidth(level / 100f).clip(RoundedCornerShape(3.dp)).background(if (level > 30) SuccessGreen else ErrorRed)
+      Modifier.fillMaxHeight().fillMaxWidth(level / 100f).clip(RoundedCornerShape(3.sdp)).background(if (level > 30) SuccessGreen else ErrorRed)
     )
   }
 }
 
 @Composable
 private fun SquareIconButton(icon: ImageVector, onClick: () -> Unit) {
-  Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(BluePrimary).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-    Icon(icon, null, tint = TextLight, modifier = Modifier.size(16.dp))
+  Box(Modifier.size(32.sdp).clip(RoundedCornerShape(8.sdp)).background(BluePrimary).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Icon(icon, null, tint = TextLight, modifier = Modifier.size(16.sdp))
   }
 }
 
 @Composable
 private fun FilledPanelButton(text: String, icon: ImageVector?, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier, spinIcon: Boolean = false) {
   Row(
-    modifier = modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).background(color).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp),
+    modifier = modifier.heightIn(min = 52.sdp).clip(RoundedCornerShape(12.sdp)).background(color).clickable(onClick = onClick).padding(horizontal = 14.sdp, vertical = 14.sdp),
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
     if (icon != null) {
       if (spinIcon) {
-        SpinningIcon(icon = icon, tint = Color.White, size = 18.dp)
+        SpinningIcon(icon = icon, tint = Color.White, size = 18.sdp)
       } else {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.sdp))
       }
-      Spacer(Modifier.width(8.dp))
+      Spacer(Modifier.width(8.sdp))
     }
     Text(text, color = Color.White, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold), textAlign = TextAlign.Center)
   }
@@ -1285,18 +1288,18 @@ private val ConnectButtonBlue = Color(0xFF6B86A7)
 private fun ConnectPanelButton(text: String, enabled: Boolean, onClick: () -> Unit, spinIcon: Boolean) {
   Row(
     modifier = Modifier
-      .width(96.dp)
-      .height(48.dp)
-      .clip(RoundedCornerShape(16.dp))
+      .width(96.sdp)
+      .height(48.sdp)
+      .clip(RoundedCornerShape(16.sdp))
       .background(if (enabled) ConnectButtonBlue else TextLight.copy(alpha = 0.8f))
       .clickable(onClick = onClick)
-      .padding(horizontal = 12.dp),
+      .padding(horizontal = 12.sdp),
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
     if (spinIcon) {
-      SpinningIcon(icon = Lucide.LoaderCircle, tint = Color.White, size = 16.dp)
-      Spacer(Modifier.width(6.dp))
+      SpinningIcon(icon = Lucide.LoaderCircle, tint = Color.White, size = 16.sdp)
+      Spacer(Modifier.width(6.sdp))
     }
     Text(
       text,
@@ -1310,13 +1313,13 @@ private fun ConnectPanelButton(text: String, enabled: Boolean, onClick: () -> Un
 @Composable
 private fun OutlinePanelButton(text: String, icon: ImageVector?, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
   Row(
-    modifier = modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).border(2.dp, if (color == ErrorRed) ErrorRed else Gray200, RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
+    modifier = modifier.heightIn(min = 52.sdp).clip(RoundedCornerShape(12.sdp)).background(Color.White).border(2.sdp, if (color == ErrorRed) ErrorRed else Gray200, RoundedCornerShape(12.sdp)).clickable(onClick = onClick).padding(horizontal = 12.sdp, vertical = 14.sdp),
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
     if (icon != null) {
-      Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
-      Spacer(Modifier.width(8.dp))
+      Icon(icon, null, tint = color, modifier = Modifier.size(18.sdp))
+      Spacer(Modifier.width(8.sdp))
     }
     Text(text, color = color, style = TranslatorBodyStyle.copy(fontWeight = FontWeight.SemiBold), textAlign = TextAlign.Center)
   }
@@ -1325,14 +1328,14 @@ private fun OutlinePanelButton(text: String, icon: ImageVector?, color: Color, m
 @Composable
 private fun TranslatorInputField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
   Box(
-    modifier = modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).border(2.dp, Gray200, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp)
+    modifier = modifier.clip(RoundedCornerShape(16.sdp)).background(Color.White).border(2.sdp, Gray200, RoundedCornerShape(16.sdp)).padding(horizontal = 14.sdp, vertical = 12.sdp)
   ) {
     BasicTextField(
       value = value,
       onValueChange = onValueChange,
       singleLine = true,
       keyboardOptions = KeyboardOptions.Default,
-      textStyle = TextStyle(color = NavyPrimary, fontFamily = FontFamily.SansSerif, fontSize = 15.sp, lineHeight = 20.sp),
+      textStyle = TextStyle(color = NavyPrimary, fontFamily = FontFamily.SansSerif, fontSize = 15.ssp, lineHeight = 20.ssp),
       cursorBrush = SolidColor(NavyPrimary),
       modifier = Modifier.fillMaxWidth(),
       decorationBox = { inner ->
@@ -1347,8 +1350,8 @@ private fun TranslatorInputField(value: String, onValueChange: (String) -> Unit,
 
 @Composable
 private fun EmptyState(text: String, icon: ImageVector) {
-  Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Icon(icon, null, tint = Gray200, modifier = Modifier.size(32.dp))
+  Column(Modifier.fillMaxWidth().padding(vertical = 12.sdp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.sdp)) {
+    Icon(icon, null, tint = Gray200, modifier = Modifier.size(32.sdp))
     Text(text, color = TextLight, style = TranslatorBodyStyle, textAlign = TextAlign.Center)
   }
 }
@@ -1460,10 +1463,10 @@ private fun HandDetectionBox(sign: String, confidence: Int) {
     // Detection Rectangle (simulating hand detection)
     Box(
       modifier = Modifier
-        .size(220.dp, 180.dp)
+        .size(220.sdp, 180.sdp)
         .align(Alignment.Center)
         .offset(y = (-20).dp)
-        .border(3.dp, AccentGold, RoundedCornerShape(12.dp))
+        .border(3.sdp, AccentGold, RoundedCornerShape(12.sdp))
     ) {
       // Corner indicators
       listOf(
@@ -1474,9 +1477,9 @@ private fun HandDetectionBox(sign: String, confidence: Int) {
       ).forEach { alignment ->
         Box(
           modifier = Modifier
-            .size(20.dp)
+            .size(20.sdp)
             .align(alignment)
-            .background(AccentGold, RoundedCornerShape(4.dp))
+            .background(AccentGold, RoundedCornerShape(4.sdp))
         )
       }
     }
@@ -1485,36 +1488,36 @@ private fun HandDetectionBox(sign: String, confidence: Int) {
     Surface(
       modifier = Modifier
         .align(Alignment.Center)
-        .offset(y = 100.dp),
-      shape = RoundedCornerShape(16.dp),
+        .offset(y = 100.sdp),
+      shape = RoundedCornerShape(16.sdp),
       color = AccentGold
     ) {
       Column(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.padding(horizontal = 20.sdp, vertical = 12.sdp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Text(
           sign,
           color = Color.White,
-          style = TranslatorTitleStyle.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold)
+          style = TranslatorTitleStyle.copy(fontSize = 20.ssp, fontWeight = FontWeight.Bold)
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(4.sdp))
         Row(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          horizontalArrangement = Arrangement.spacedBy(6.sdp),
           verticalAlignment = Alignment.CenterVertically
         ) {
           Box(
             modifier = Modifier
-              .width(60.dp)
-              .height(4.dp)
-              .clip(RoundedCornerShape(999.dp))
+              .width(60.sdp)
+              .height(4.sdp)
+              .clip(RoundedCornerShape(999.sdp))
               .background(Color.White.copy(alpha = 0.3f))
           ) {
             Box(
               modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(confidence / 100f)
-                .clip(RoundedCornerShape(999.dp))
+                .clip(RoundedCornerShape(999.sdp))
                 .background(Color.White)
             )
           }

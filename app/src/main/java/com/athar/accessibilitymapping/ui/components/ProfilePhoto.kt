@@ -1,4 +1,7 @@
 package com.athar.accessibilitymapping.ui.components
+import com.athar.accessibilitymapping.ui.theme.ssp
+
+import com.athar.accessibilitymapping.ui.theme.sdp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +34,7 @@ fun ProfilePhoto(
   placeholderTint: Color,
   contentDescription: String? = null,
   placeholderIcon: ImageVector = Icons.Outlined.Person,
-  placeholderIconSize: Dp = 40.dp
+  placeholderIconSize: Dp = 40.sdp
 ) {
   val imageFile = remember(photoPath) {
     photoPath
@@ -44,7 +47,7 @@ fun ProfilePhoto(
     modifier = modifier
       .clip(CircleShape)
       .background(backgroundColor, CircleShape)
-      .border(2.dp, borderColor, CircleShape),
+      .border(2.sdp, borderColor, CircleShape),
     contentAlignment = Alignment.Center
   ) {
     if (imageFile != null) {

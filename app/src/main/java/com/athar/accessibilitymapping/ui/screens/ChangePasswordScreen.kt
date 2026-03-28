@@ -39,6 +39,8 @@ import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.ui.components.PrimaryButton
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.theme.BluePrimary
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 import kotlinx.coroutines.launch
 
 @Composable
