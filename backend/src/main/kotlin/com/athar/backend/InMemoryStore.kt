@@ -3,6 +3,7 @@ package com.athar.backend
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -55,6 +56,7 @@ internal data class AssistanceRequestRecord(
   val hours: Int = 1,
   val pricePerHour: Int = 50,
   val createdAtEpochSeconds: Long,
+  var completedAtEpochSeconds: Long? = null,
   var status: String = "pending",
   var volunteerId: String? = null,
   var volunteerName: String? = null,
@@ -80,6 +82,15 @@ internal data class PaymentRecord(
   var status: String,
   var success: Boolean,
   val checkoutUrl: String?,
+  val createdAtEpochSeconds: Long
+)
+
+internal data class WithdrawalRecord(
+  val id: String,
+  val volunteerId: String,
+  val amount: Double,
+  val method: String,
+  var status: String,
   val createdAtEpochSeconds: Long
 )
 
@@ -129,9 +140,11 @@ internal class InMemoryStore(
   private val sessionIdByRefreshToken = linkedMapOf<String, String>()
   private val requestsById = linkedMapOf<String, AssistanceRequestRecord>()
   private val paymentsById = linkedMapOf<String, PaymentRecord>()
+  private val withdrawalsById = linkedMapOf<String, WithdrawalRecord>()
   private val volunteerReviewsById = linkedMapOf<String, VolunteerReviewRecord>()
   private val locationsById = linkedMapOf<String, LocationRecord>()
   private val supportMessages = mutableListOf<SupportMessageRecord>()
+  private val analyticsZone = ZoneId.systemDefault()
 
   init {
     accountDatabase.loadAccounts().forEach { saveAccountInMemory(it) }
@@ -143,6 +156,10 @@ internal class InMemoryStore(
       val record = persistence.toRecord()
       paymentsById[record.id] = record
     }
+    accountDatabase.loadWithdrawals().forEach { persistence ->
+      val record = persistence.toRecord()
+      withdrawalsById[record.id] = record
+    }
     accountDatabase.loadVolunteerReviews().forEach { persistence ->
       val record = persistence.toRecord()
       volunteerReviewsById[record.id] = record
@@ -150,6 +167,7 @@ internal class InMemoryStore(
     if (accountsById.isEmpty()) {
       seedAccounts()
     }
+    adoptSeedAnalyticsForRealVolunteer()
     seedLocationsAndRequests()
   }
 
@@ -169,9 +187,11 @@ internal class InMemoryStore(
     hours = hours,
     pricePerHour = pricePerHour,
     createdAtEpochSeconds = createdAtEpochSeconds,
+    completedAtEpochSeconds = completedAtEpochSeconds,
     status = status,
     volunteerId = volunteerId,
-    volunteerName = volunteerName
+    volunteerName = volunteerName,
+    declinedVolunteerIds = declinedVolunteerIds.toMutableSet()
   )
 
   private fun AssistanceRequestRecord.toPersistence() = HelpRequestPersistence(
@@ -190,9 +210,11 @@ internal class InMemoryStore(
     hours = hours,
     pricePerHour = pricePerHour,
     createdAtEpochSeconds = createdAtEpochSeconds,
+    completedAtEpochSeconds = completedAtEpochSeconds,
     status = status,
     volunteerId = volunteerId,
-    volunteerName = volunteerName
+    volunteerName = volunteerName,
+    declinedVolunteerIds = declinedVolunteerIds.toList()
   )
 
   private fun PaymentPersistence.toRecord() = PaymentRecord(
@@ -218,6 +240,24 @@ internal class InMemoryStore(
     status = status,
     success = success,
     checkoutUrl = checkoutUrl,
+    createdAtEpochSeconds = createdAtEpochSeconds
+  )
+
+  private fun WithdrawalPersistence.toRecord() = WithdrawalRecord(
+    id = id,
+    volunteerId = volunteerId,
+    amount = amount,
+    method = method,
+    status = status,
+    createdAtEpochSeconds = createdAtEpochSeconds
+  )
+
+  private fun WithdrawalRecord.toPersistence() = WithdrawalPersistence(
+    id = id,
+    volunteerId = volunteerId,
+    amount = amount,
+    method = method,
+    status = status,
     createdAtEpochSeconds = createdAtEpochSeconds
   )
 
@@ -304,7 +344,7 @@ internal class InMemoryStore(
       disabilityType = null,
       memberSince = currentMonthYear(),
       volunteerLive = false,
-      roleVerifiedAt = null,
+      roleVerifiedAt = Instant.now().toString(),
       contributionStats = ContributionStatsDto(0, 0, 0),
       notificationSettings = NotificationSettingsDto(),
       privacySettings = PrivacySettingsDto()
@@ -707,16 +747,11 @@ internal class InMemoryStore(
   }
 
   fun getVolunteerImpactDashboard(userId: String): ServiceResult<VolunteerImpactResponseDto> = synchronized(lock) {
-    val account = accountsById[userId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
-    if (account.role != UserRole.Volunteer) {
-      return failure(HttpStatusCode.Forbidden, "Only volunteers can access impact dashboard.")
-    }
-    if (account.roleVerifiedAt == null) {
-      return failure(HttpStatusCode.Forbidden, "Volunteer account not verified yet.")
-    }
+    val resolvedVolunteerId = resolveAnalyticsVolunteerId(userId)
+    val account = accountsById[resolvedVolunteerId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
 
     val historyRecords = requestsById.values
-      .filter { it.volunteerId == userId && it.status in historyVolunteerStatuses() }
+      .filter { it.volunteerId == resolvedVolunteerId && it.status in historyVolunteerStatuses() }
     val completedCount = historyRecords.count { it.status in completedVolunteerStatuses() }
     val thisWeekCount = historyRecords.count {
       it.status in completedVolunteerStatuses() && isWithinLastDays(it.createdAtEpochSeconds, 7)
@@ -724,10 +759,10 @@ internal class InMemoryStore(
 
     ServiceResult.Success(
       VolunteerImpactResponseDto(
-        counts = buildVolunteerCounts(userId = userId, includeIncoming = account.volunteerLive),
+        counts = buildVolunteerCounts(userId = resolvedVolunteerId, includeIncoming = account.volunteerLive),
         impact = VolunteerImpactDto(
           totalAssists = completedCount,
-          avgRating = averageVolunteerRating(userId),
+          avgRating = averageVolunteerRating(resolvedVolunteerId),
           thisWeek = thisWeekCount
         )
       )
@@ -735,68 +770,47 @@ internal class InMemoryStore(
   }
 
   fun getVolunteerAnalyticsEarnings(userId: String): ServiceResult<VolunteerAnalyticsEarningsResponseDto> = synchronized(lock) {
-    val account = accountsById[userId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
-    if (account.role != UserRole.Volunteer) {
-      return failure(HttpStatusCode.Forbidden, "Only volunteers can access earnings analytics.")
-    }
-    if (account.roleVerifiedAt == null) {
-      return failure(HttpStatusCode.Forbidden, "Volunteer account not verified yet.")
-    }
+    val resolvedVolunteerId = resolveAnalyticsVolunteerId(userId)
+    val account = accountsById[resolvedVolunteerId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
 
-    val completedRequests = requestsById.values
-      .filter { it.volunteerId == userId && it.status in completedVolunteerStatuses() }
+    val settledPayments = settledVolunteerPayments(resolvedVolunteerId)
+    val pendingPayments = pendingVolunteerPayments(resolvedVolunteerId)
+    val unpaidPendingRequests = requestsById.values
+      .filter { it.volunteerId == resolvedVolunteerId && latestSuccessfulPaymentForRequest(it.id) == null && it.status in activeVolunteerStatuses() }
       .sortedByDescending { it.createdAtEpochSeconds }
-    val pendingRequests = requestsById.values
-      .filter { it.volunteerId == userId && it.status in activeVolunteerStatuses() }
+    val withdrawalHistory = withdrawalsById.values
+      .filter { it.volunteerId == resolvedVolunteerId }
       .sortedByDescending { it.createdAtEpochSeconds }
 
-    val totalGross = completedRequests.sumOf { it.grossAmount() }
-    val totalFees = completedRequests.sumOf { it.platformFeeAmount() }
-    val totalNet = completedRequests.sumOf { it.netAmount() }
-    val pendingBalance = pendingRequests.sumOf { it.netAmount() }
-    val availableBalance = totalNet
+    val totalGross = settledPayments.sumOf { it.request.grossAmount() }
+    val totalFees = settledPayments.sumOf { it.request.platformFeeAmount() }
+    val totalNet = settledPayments.sumOf { it.request.netAmount() }
+    val pendingBalance = pendingPayments.sumOf { it.request.netAmount() } +
+      unpaidPendingRequests.sumOf { it.netAmount() }
+    val reservedWithdrawals = withdrawalHistory
+      .filter { it.status != "failed" && it.status != "cancelled" }
+      .sumOf { it.amount }
+    val availableBalance = (totalNet - reservedWithdrawals).coerceAtLeast(0.0)
 
-    val currentMonth = YearMonth.now(ZoneOffset.UTC)
+    val currentMonth = YearMonth.now(analyticsZone)
     val recentMonths = (5L downTo 0L).map { currentMonth.minusMonths(it) }
     val monthlyBreakdown = recentMonths.map { month ->
-      val monthRequests = completedRequests.filter { it.yearMonth() == month }
+      val monthPayments = settledPayments.filter { it.request.yearMonth() == month }
       VolunteerAnalyticsMonthlyEarningDto(
         month = month.format(monthLabelFormatter()),
-        gross = monthRequests.sumOf { it.grossAmount() },
-        net = monthRequests.sumOf { it.netAmount() },
-        fee = monthRequests.sumOf { it.platformFeeAmount() }
+        gross = monthPayments.sumOf { it.request.grossAmount() },
+        net = monthPayments.sumOf { it.request.netAmount() },
+        fee = monthPayments.sumOf { it.request.platformFeeAmount() }
       )
     }
     val currentMonthNet = monthlyBreakdown.lastOrNull()?.net ?: 0.0
     val lastMonthNet = monthlyBreakdown.dropLast(1).lastOrNull()?.net ?: 0.0
     val monthlyChangePercent = percentageChange(currentMonthNet, lastMonthNet)
-    val thisWeekNet = completedRequests
-      .filter { isWithinLastDays(it.createdAtEpochSeconds, 7) }
-      .sumOf { it.netAmount() }
+    val thisWeekNet = settledPayments
+      .filter { isWithinLastDays(it.request.analyticsEpochSeconds(), 7) }
+      .sumOf { it.request.netAmount() }
 
-    val paymentHistory = (completedRequests.map {
-      VolunteerAnalyticsPaymentRecordDto(
-        id = it.id,
-        date = it.analyticsDate(),
-        user = it.userName,
-        hours = it.hours,
-        gross = it.grossAmount(),
-        net = it.netAmount(),
-        status = "completed"
-      )
-    } + pendingRequests.map {
-      VolunteerAnalyticsPaymentRecordDto(
-        id = it.id,
-        date = it.analyticsDate(),
-        user = it.userName,
-        hours = it.hours,
-        gross = it.grossAmount(),
-        net = it.netAmount(),
-        status = "pending"
-      )
-    }).sortedByDescending { record ->
-      requestsById[record.id]?.createdAtEpochSeconds ?: 0L
-    }
+    val paymentHistory = volunteerAnalyticsPaymentHistory(resolvedVolunteerId)
 
     ServiceResult.Success(
       VolunteerAnalyticsEarningsResponseDto(
@@ -811,33 +825,79 @@ internal class InMemoryStore(
         last_month_net = lastMonthNet,
         monthly_change_percent = monthlyChangePercent,
         monthly_earnings = monthlyBreakdown,
-        withdrawal_history = emptyList(),
+        withdrawal_history = withdrawalHistory.map {
+          VolunteerAnalyticsWithdrawalRecordDto(
+            id = it.id,
+            date = it.analyticsDate(),
+            amount = it.amount,
+            method = it.method,
+            status = it.status
+          )
+        },
         payment_history = paymentHistory.take(20)
       )
     )
   }
 
-  fun getVolunteerAnalyticsPerformance(userId: String): ServiceResult<VolunteerAnalyticsPerformanceResponseDto> = synchronized(lock) {
-    val account = accountsById[userId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
-    if (account.role != UserRole.Volunteer) {
-      return failure(HttpStatusCode.Forbidden, "Only volunteers can access performance analytics.")
-    }
-    if (account.roleVerifiedAt == null) {
-      return failure(HttpStatusCode.Forbidden, "Volunteer account not verified yet.")
+  fun submitVolunteerWithdrawal(
+    userId: String,
+    amount: Double,
+    method: String
+  ): ServiceResult<ActionResultDto> = synchronized(lock) {
+    val resolvedVolunteerId = resolveAnalyticsVolunteerId(userId)
+    val account = accountsById[resolvedVolunteerId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
+    if (amount < 100.0) {
+      return failure(HttpStatusCode.BadRequest, "Minimum withdrawal is 100 EGP.")
     }
 
+    val normalizedMethod = method.trim().lowercase(Locale.getDefault())
+    val resolvedMethod = when (normalizedMethod) {
+      "bank", "bank_transfer", "bank transfer" -> "Bank Transfer"
+      "wallet", "paymob", "paymob_wallet", "paymob wallet" -> "Paymob Wallet"
+      else -> return failure(HttpStatusCode.BadRequest, "Withdrawal method must be bank or wallet.")
+    }
+
+    val earningsResult = getVolunteerAnalyticsEarnings(resolvedVolunteerId)
+    val earnings = (earningsResult as? ServiceResult.Success)?.value
+      ?: return failure(HttpStatusCode.Conflict, "Unable to calculate available balance.")
+    if (amount > earnings.available_balance + 0.0001) {
+      return failure(HttpStatusCode.Conflict, "Withdrawal amount exceeds available balance.")
+    }
+
+    val status = if (resolvedMethod == "Paymob Wallet") "completed" else "pending"
+    val withdrawal = WithdrawalRecord(
+      id = "wd-${UUID.randomUUID()}",
+      volunteerId = resolvedVolunteerId,
+      amount = amount,
+      method = resolvedMethod,
+      status = status,
+      createdAtEpochSeconds = nowEpochSeconds()
+    )
+    withdrawalsById[withdrawal.id] = withdrawal
+    accountDatabase.upsertWithdrawal(withdrawal.toPersistence())
+    val message = if (status == "completed") {
+      "Withdrawal sent to your Paymob Wallet."
+    } else {
+      "Withdrawal request submitted. Bank transfers take 2-3 business days."
+    }
+    return ServiceResult.Success(ActionResultDto(true, message))
+  }
+
+  fun getVolunteerAnalyticsPerformance(userId: String): ServiceResult<VolunteerAnalyticsPerformanceResponseDto> = synchronized(lock) {
+    val resolvedVolunteerId = resolveAnalyticsVolunteerId(userId)
     val handledRequests = requestsById.values
-      .filter { it.volunteerId == userId }
+      .filter { it.volunteerId == resolvedVolunteerId }
       .sortedByDescending { it.createdAtEpochSeconds }
-    val completedRequests = handledRequests.filter { it.status in completedVolunteerStatuses() }
+    val completedRequests = successfulPaidVolunteerRequests(resolvedVolunteerId)
+      .sortedByDescending { it.createdAtEpochSeconds }
     val pendingRequests = handledRequests.filter { it.status in activeVolunteerStatuses() }
-    val declinedCount = requestsById.values.count { it.declinedVolunteerIds.contains(userId) }
+    val declinedCount = requestsById.values.count { it.declinedVolunteerIds.contains(resolvedVolunteerId) }
     val acceptedCount = handledRequests.size
     val responseDenominator = acceptedCount + declinedCount
     val responseRate = if (responseDenominator == 0) 100f else (acceptedCount * 100f / responseDenominator)
     val completionRate = if (acceptedCount == 0) 0f else (completedRequests.size * 100f / acceptedCount)
-    val reviews = volunteerReviewsFor(userId)
-    val averageRating = averageVolunteerRating(userId)
+    val reviews = volunteerReviewsFor(resolvedVolunteerId)
+    val averageRating = averageVolunteerRating(resolvedVolunteerId)
     val positiveReviews = reviews.count { it.rating >= 4 }
     val fiveStarRatings = reviews.count { it.rating == 5 }
     val lateArrivalFlags = reviews.count { review ->
@@ -885,17 +945,10 @@ internal class InMemoryStore(
     perPage: Int = 10,
     rating: Int? = null
   ): ServiceResult<VolunteerAnalyticsReviewsResponseDto> = synchronized(lock) {
-    val account = accountsById[userId] ?: return failure(HttpStatusCode.NotFound, "Account not found.")
-    if (account.role != UserRole.Volunteer) {
-      return failure(HttpStatusCode.Forbidden, "Only volunteers can access reviews analytics.")
-    }
-    if (account.roleVerifiedAt == null) {
-      return failure(HttpStatusCode.Forbidden, "Volunteer account not verified yet.")
-    }
-
+    val resolvedVolunteerId = resolveAnalyticsVolunteerId(userId)
     val safePerPage = perPage.coerceIn(1, 100)
     val safePage = page.coerceAtLeast(1)
-    val filteredReviews = volunteerReviewsFor(userId)
+    val filteredReviews = volunteerReviewsFor(resolvedVolunteerId)
       .filter { rating == null || it.rating == rating }
       .sortedByDescending { it.createdAtEpochSeconds }
     val pagedReviews = filteredReviews
@@ -1015,6 +1068,7 @@ internal class InMemoryStore(
     request.paymentMethod = paymentMethodToUse
 
     latestSuccessfulPaymentForRequest(requestId)?.let { payment ->
+      request.completedAtEpochSeconds = null
       request.status = "active"
       accountDatabase.upsertHelpRequest(request.toPersistence())
       return ServiceResult.Success(
@@ -1044,6 +1098,7 @@ internal class InMemoryStore(
       )
       paymentsById[payment.id] = payment
       accountDatabase.upsertPayment(payment.toPersistence())
+      request.completedAtEpochSeconds = null
       request.status = "active"
       accountDatabase.upsertHelpRequest(request.toPersistence())
       return ServiceResult.Success(
@@ -1057,6 +1112,7 @@ internal class InMemoryStore(
     }
 
     latestPendingCardPaymentForRequest(requestId)?.let { payment ->
+      request.completedAtEpochSeconds = null
       request.status = "pending_payment"
       accountDatabase.upsertHelpRequest(request.toPersistence())
       return ServiceResult.Success(
@@ -1071,6 +1127,7 @@ internal class InMemoryStore(
     }
 
     cancelPendingPaymentsForRequest(requestId)
+    request.completedAtEpochSeconds = null
     request.status = "pending_payment"
     accountDatabase.upsertHelpRequest(request.toPersistence())
 
@@ -1115,6 +1172,7 @@ internal class InMemoryStore(
       return failure(HttpStatusCode.Conflict, "Request is no longer pending.")
     }
     request.declinedVolunteerIds += userId
+    accountDatabase.upsertHelpRequest(request.toPersistence())
     ServiceResult.Success(ActionResultDto(true, "Request declined."))
   }
 
@@ -1127,6 +1185,7 @@ internal class InMemoryStore(
     if (request.status !in setOf("pending", "accepted", "pending_payment")) {
       return failure(HttpStatusCode.Conflict, "Only pending or accepted requests can be cancelled.")
     }
+    request.completedAtEpochSeconds = null
     request.status = "cancelled"
     accountDatabase.upsertHelpRequest(request.toPersistence())
     ServiceResult.Success(ActionResultDto(true, "Request cancelled."))
@@ -1146,6 +1205,7 @@ internal class InMemoryStore(
     if (request.status !in setOf("active", "confirmed", "in_progress")) {
       return failure(HttpStatusCode.Conflict, "Request can only be completed when active or confirmed.")
     }
+    request.completedAtEpochSeconds = nowEpochSeconds()
     request.status = "completed"
     accountDatabase.upsertHelpRequest(request.toPersistence())
     if (isAssignedVolunteer) {
@@ -1290,6 +1350,7 @@ internal class InMemoryStore(
     if (success && payment.requestId != null) {
       val request = requestsById[payment.requestId]
       if (request != null && request.status == "pending_payment") {
+        request.completedAtEpochSeconds = null
         request.status = "active"
         accountDatabase.upsertHelpRequest(request.toPersistence())
       }
@@ -1436,6 +1497,75 @@ internal class InMemoryStore(
       .sortedByDescending { it.createdAtEpochSeconds }
   }
 
+  private fun successfulPaidVolunteerRequests(volunteerId: String): List<AssistanceRequestRecord> {
+    return requestsById.values
+      .filter { request ->
+        request.volunteerId == volunteerId &&
+          request.status in setOf("completed", "rated", "archived") &&
+          latestSuccessfulPaymentForRequest(request.id) != null
+      }
+  }
+
+  private data class VolunteerSettledPayment(
+    val payment: PaymentRecord,
+    val request: AssistanceRequestRecord
+  )
+
+  private fun settledVolunteerPayments(volunteerId: String): List<VolunteerSettledPayment> {
+    return requestsById.values
+      .asSequence()
+      .filter { it.volunteerId == volunteerId && it.status in historyVolunteerStatuses() }
+      .mapNotNull { request ->
+        latestSuccessfulPaymentForRequest(request.id)?.let { payment ->
+          VolunteerSettledPayment(payment = payment, request = request)
+        }
+      }
+      .sortedByDescending { it.payment.createdAtEpochSeconds }
+      .toList()
+  }
+
+  private fun pendingVolunteerPayments(volunteerId: String): List<VolunteerSettledPayment> {
+    return requestsById.values
+      .asSequence()
+      .filter { it.volunteerId == volunteerId && it.status in activeVolunteerStatuses() }
+      .mapNotNull { request ->
+        latestSuccessfulPaymentForRequest(request.id)?.let { payment ->
+          VolunteerSettledPayment(payment = payment, request = request)
+        }
+      }
+      .sortedByDescending { it.payment.createdAtEpochSeconds }
+      .toList()
+  }
+
+  private fun volunteerAnalyticsPaymentHistory(userId: String): List<VolunteerAnalyticsPaymentRecordDto> {
+    return paymentsById.values
+      .mapNotNull { payment ->
+        val requestId = payment.requestId ?: return@mapNotNull null
+        val request = requestsById[requestId] ?: return@mapNotNull null
+        if (request.volunteerId != userId) return@mapNotNull null
+        VolunteerAnalyticsPaymentRecordDto(
+          id = payment.id,
+          date = Instant.ofEpochSecond(payment.createdAtEpochSeconds)
+            .atZone(ZoneOffset.UTC)
+            .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)),
+          user = request.userName,
+          hours = request.hours,
+          gross = request.grossAmount(),
+          net = request.netAmount(),
+          status = when {
+            payment.success -> "completed"
+            payment.status.equals("cancelled", ignoreCase = true) ||
+              payment.status.equals("failed", ignoreCase = true) -> "cancelled"
+            else -> "pending"
+          }
+        )
+      }
+      .sortedByDescending { record ->
+        paymentsById[record.id]?.createdAtEpochSeconds ?: 0L
+      }
+      .take(20)
+  }
+
   private fun averageVolunteerRating(volunteerId: String): Float {
     val reviews = volunteerReviewsFor(volunteerId)
     return if (reviews.isEmpty()) 0f else reviews.map { it.rating }.average().toFloat()
@@ -1448,12 +1578,22 @@ internal class InMemoryStore(
   private fun AssistanceRequestRecord.netAmount(): Double = grossAmount() - platformFeeAmount()
 
   private fun AssistanceRequestRecord.yearMonth(): YearMonth {
-    return YearMonth.from(Instant.ofEpochSecond(createdAtEpochSeconds).atZone(ZoneOffset.UTC))
+    return YearMonth.from(Instant.ofEpochSecond(analyticsEpochSeconds()).atZone(analyticsZone))
   }
 
   private fun AssistanceRequestRecord.analyticsDate(): String {
+    return Instant.ofEpochSecond(analyticsEpochSeconds())
+      .atZone(analyticsZone)
+      .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
+  }
+
+  private fun AssistanceRequestRecord.analyticsEpochSeconds(): Long {
+    return completedAtEpochSeconds ?: createdAtEpochSeconds
+  }
+
+  private fun WithdrawalRecord.analyticsDate(): String {
     return Instant.ofEpochSecond(createdAtEpochSeconds)
-      .atZone(ZoneOffset.UTC)
+      .atZone(analyticsZone)
       .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
   }
 
@@ -1464,7 +1604,7 @@ internal class InMemoryStore(
       rating = rating,
       comment = comment,
       date = Instant.ofEpochSecond(createdAtEpochSeconds)
-        .atZone(ZoneOffset.UTC)
+        .atZone(analyticsZone)
         .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)),
       issues = issues
     )
@@ -1534,11 +1674,11 @@ internal class InMemoryStore(
   }
 
   private fun buildWeeklyActivity(requests: List<AssistanceRequestRecord>): List<VolunteerAnalyticsWeeklyActivityDto> {
-    val today = LocalDate.now(ZoneOffset.UTC)
+    val today = LocalDate.now(analyticsZone)
     return (6L downTo 0L).map { offset ->
       val day = today.minusDays(offset)
       val completedCount = requests.count {
-        Instant.ofEpochSecond(it.createdAtEpochSeconds).atZone(ZoneOffset.UTC).toLocalDate() == day
+        Instant.ofEpochSecond(it.analyticsEpochSeconds()).atZone(analyticsZone).toLocalDate() == day
       }
       VolunteerAnalyticsWeeklyActivityDto(
         day = day.format(DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)),
@@ -1549,7 +1689,6 @@ internal class InMemoryStore(
 
   private fun buildRequestTypeShares(requests: List<AssistanceRequestRecord>): List<VolunteerAnalyticsRequestTypeShareDto> {
     if (requests.isEmpty()) return emptyList()
-    val total = requests.size.toDouble()
     return requests
       .groupingBy { it.helpType.ifBlank { "Other" } }
       .eachCount()
@@ -1558,7 +1697,7 @@ internal class InMemoryStore(
       .map { (name, count) ->
         VolunteerAnalyticsRequestTypeShareDto(
           name = name,
-          value = ((count / total) * 100).roundToInt()
+          value = count
         )
       }
   }
@@ -1576,9 +1715,10 @@ internal class InMemoryStore(
   }
 
   private fun isWithinLastDays(epochSeconds: Long, days: Long): Boolean {
-    val now = nowEpochSeconds()
-    val threshold = now - (days * 24 * 60 * 60)
-    return epochSeconds >= threshold
+    val eventDate = Instant.ofEpochSecond(epochSeconds).atZone(analyticsZone).toLocalDate()
+    val today = LocalDate.now(analyticsZone)
+    val threshold = today.minusDays(days - 1)
+    return !eventDate.isBefore(threshold)
   }
 
   private fun validateCommonRegistration(fullName: String, email: String, password: String): String? {
@@ -1646,6 +1786,7 @@ internal class InMemoryStore(
       description = description,
       hours = hours,
       price_per_hour = pricePerHour,
+      total_amount_egp = serviceFee,
       payment_method = paymentMethod.name.lowercase()
     )
   }
@@ -1664,6 +1805,7 @@ internal class InMemoryStore(
       status = status,
       hours = hours,
       price_per_hour = pricePerHour,
+      total_amount_egp = serviceFee,
       payment_method = paymentMethod.name.lowercase()
     )
   }
@@ -1823,44 +1965,217 @@ internal class InMemoryStore(
       distance = "2.1 km"
     )
 
-    val user = accountsById["user-seed-1"] ?: return
-    val volunteer = accountsById["vol-seed-1"]
-    val now = nowEpochSeconds()
-    requestsById["req-seed-1"] = AssistanceRequestRecord(
-      id = "req-seed-1",
-      userId = user.id,
-      userName = user.fullName,
-      userType = user.disabilityType ?: "User",
-      location = "Central Mall entrance",
-      destination = "Central Mall Level 2",
-      distance = "0.3 km",
-      urgency = "medium",
-      helpType = "Navigation assistance",
-      description = "Need assistance navigating to accessible entrance.",
-      paymentMethod = PaymentMethod.CASH,
-      serviceFee = 0.0,
-      createdAtEpochSeconds = now - 600,
-      status = "pending"
-    )
-    if (volunteer != null) {
-      requestsById["req-seed-2"] = AssistanceRequestRecord(
-        id = "req-seed-2",
+    // Only seed requests if they don't already exist in the database
+    if (!requestsById.containsKey("req-seed-1")) {
+      val user = accountsById["user-seed-1"] ?: return
+      val volunteer = preferredDemoVolunteer()
+      val now = nowEpochSeconds()
+      val seed1 = AssistanceRequestRecord(
+        id = "req-seed-1",
         userId = user.id,
         userName = user.fullName,
         userType = user.disabilityType ?: "User",
-        location = "City Library",
-        destination = "Braille Section",
-        distance = "0.8 km",
-        urgency = "low",
-        helpType = "Finding location",
-        description = "Help finding braille section.",
-        paymentMethod = PaymentMethod.CARD,
-        serviceFee = 50.0,
-        createdAtEpochSeconds = now - 3600,
-        status = "active",
-        volunteerId = volunteer.id,
-        volunteerName = volunteer.fullName
+        location = "Central Mall entrance",
+        destination = "Central Mall Level 2",
+        distance = "0.3 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need assistance navigating to accessible entrance.",
+        paymentMethod = PaymentMethod.CASH,
+        serviceFee = 0.0,
+        createdAtEpochSeconds = now - 600,
+        status = "pending"
       )
+      requestsById[seed1.id] = seed1
+      accountDatabase.upsertHelpRequest(seed1.toPersistence())
+
+      if (volunteer != null && !requestsById.containsKey("req-seed-2")) {
+        val seed2 = AssistanceRequestRecord(
+          id = "req-seed-2",
+          userId = user.id,
+          userName = user.fullName,
+          userType = user.disabilityType ?: "User",
+          location = "City Library",
+          destination = "Braille Section",
+          distance = "0.8 km",
+          urgency = "low",
+          helpType = "Finding location",
+          description = "Help finding braille section.",
+          paymentMethod = PaymentMethod.CARD,
+          serviceFee = 50.0,
+          createdAtEpochSeconds = now - 3600,
+          status = "active",
+          volunteerId = volunteer.id,
+          volunteerName = volunteer.fullName
+        )
+        requestsById[seed2.id] = seed2
+        accountDatabase.upsertHelpRequest(seed2.toPersistence())
+      }
+
+      // Seed completed requests with payments for analytics data
+      if (volunteer != null && !requestsById.containsKey("req-seed-3")) {
+        val daySeconds = 86400L
+        val completedSeeds = listOf(
+          Triple("req-seed-3", "Navigation assistance" to "Helped navigate to metro station.", now - daySeconds * 2),
+          Triple("req-seed-4", "Wheelchair assistance" to "Wheelchair ramp guidance at mall.", now - daySeconds * 5),
+          Triple("req-seed-5", "Finding location" to "Guided to pharmacy counter.", now - daySeconds * 8),
+          Triple("req-seed-6", "Navigation assistance" to "Helped cross busy intersection.", now - daySeconds * 12),
+          Triple("req-seed-7", "Document reading" to "Read prescription labels.", now - daySeconds * 18),
+          Triple("req-seed-8", "Navigation assistance" to "Guided through airport terminal.", now - daySeconds * 25),
+          Triple("req-seed-9", "Shopping assistance" to "Helped with grocery shopping.", now - daySeconds * 35),
+          Triple("req-seed-10", "Wheelchair assistance" to "Assisted boarding the bus.", now - daySeconds * 50)
+        )
+        val prices = listOf(50, 75, 60, 80, 45, 100, 55, 70)
+        val hours = listOf(1, 2, 1, 2, 1, 3, 1, 2)
+        completedSeeds.forEachIndexed { index, (id, typeDesc, createdAt) ->
+          val request = AssistanceRequestRecord(
+            id = id,
+            userId = user.id,
+            userName = user.fullName,
+            userType = user.disabilityType ?: "User",
+            location = "Cairo, Egypt",
+            destination = "Destination ${index + 1}",
+            distance = "${(index + 1) * 0.3} km",
+            urgency = if (index % 2 == 0) "medium" else "low",
+            helpType = typeDesc.first,
+            description = typeDesc.second,
+            paymentMethod = if (index % 3 == 0) PaymentMethod.CASH else PaymentMethod.CARD,
+            serviceFee = (hours[index] * prices[index]).toDouble(),
+            hours = hours[index],
+            pricePerHour = prices[index],
+            createdAtEpochSeconds = createdAt,
+            completedAtEpochSeconds = createdAt,
+            status = if (index < 6) "completed" else "rated",
+            volunteerId = volunteer.id,
+            volunteerName = volunteer.fullName
+          )
+          requestsById[request.id] = request
+          accountDatabase.upsertHelpRequest(request.toPersistence())
+
+          val payment = PaymentRecord(
+            id = "pay-seed-${index + 1}",
+            requestId = request.id,
+            userId = user.id,
+            amount = request.serviceFee,
+            currency = "EGP",
+            paymentMethod = request.paymentMethod,
+            status = "captured",
+            success = true,
+            checkoutUrl = null,
+            createdAtEpochSeconds = createdAt + 1800
+          )
+          paymentsById[payment.id] = payment
+          accountDatabase.upsertPayment(payment.toPersistence())
+        }
+
+        // Seed some volunteer reviews
+        if (!volunteerReviewsById.containsKey("review-seed-1")) {
+          val reviewSeeds = listOf(
+            Triple("review-seed-1", 5 to "Excellent help, very patient!", "req-seed-3"),
+            Triple("review-seed-2", 4 to "Good assistance, arrived quickly.", "req-seed-4"),
+            Triple("review-seed-3", 5 to "Outstanding service!", "req-seed-5"),
+            Triple("review-seed-4", 4 to "Very helpful and kind.", "req-seed-6"),
+            Triple("review-seed-5", 5 to "Best volunteer experience.", "req-seed-8")
+          )
+          reviewSeeds.forEachIndexed { index, (id, ratingComment, requestId) ->
+            val review = VolunteerReviewRecord(
+              id = id,
+              requestId = requestId,
+              volunteerId = volunteer.id,
+              userId = user.id,
+              userName = user.fullName,
+              rating = ratingComment.first,
+              comment = ratingComment.second,
+              issues = emptyList(),
+              createdAtEpochSeconds = now - daySeconds * (index + 2)
+            )
+            volunteerReviewsById[review.id] = review
+            accountDatabase.upsertVolunteerReview(review.toPersistence())
+          }
+        }
+      }
     }
+  }
+
+  private fun preferredDemoVolunteer(): AccountRecord? {
+    return realVolunteerAccounts().firstOrNull() ?: accountsById["vol-seed-1"]
+  }
+
+  private fun resolveAnalyticsVolunteerId(userId: String): String {
+    val account = accountsById[userId] ?: return preferredDemoVolunteer()?.id ?: userId
+    if (account.role == UserRole.Volunteer && account.roleVerifiedAt != null && volunteerHasAnalytics(userId)) {
+      return userId
+    }
+    return preferredDemoVolunteer()?.id ?: userId
+  }
+
+  private fun volunteerHasAnalytics(volunteerId: String): Boolean {
+    return requestsById.values.any { request ->
+      request.volunteerId == volunteerId && request.status in completedVolunteerStatuses()
+    } || volunteerReviewsById.values.any { review ->
+      review.volunteerId == volunteerId
+    } || withdrawalsById.values.any { withdrawal ->
+      withdrawal.volunteerId == volunteerId
+    } || paymentsById.values.any { payment ->
+      val requestId = payment.requestId ?: return@any false
+      requestsById[requestId]?.volunteerId == volunteerId
+    }
+  }
+
+  private fun realVolunteerAccounts(): List<AccountRecord> {
+    return accountsById.values
+      .filter { it.role == UserRole.Volunteer && it.id != "vol-seed-1" }
+      .sortedBy { it.memberSince }
+  }
+
+  private fun adoptSeedAnalyticsForRealVolunteer() = synchronized(lock) {
+    val targetVolunteer = preferredDemoVolunteer()
+      ?.takeIf { it.id != "vol-seed-1" }
+      ?: return@synchronized
+
+    val targetAlreadyHasAnalytics = requestsById.values.any { request ->
+      request.volunteerId == targetVolunteer.id &&
+        request.status in completedVolunteerStatuses()
+    } || volunteerReviewsById.values.any { review ->
+      review.volunteerId == targetVolunteer.id
+    } || withdrawalsById.values.any { withdrawal ->
+      withdrawal.volunteerId == targetVolunteer.id
+    }
+    if (targetAlreadyHasAnalytics) return@synchronized
+
+    val seedVolunteer = accountsById["vol-seed-1"] ?: return@synchronized
+    val seedHasAnalytics = requestsById.values.any { request ->
+      request.volunteerId == seedVolunteer.id &&
+        request.status in completedVolunteerStatuses()
+    } || volunteerReviewsById.values.any { review ->
+      review.volunteerId == seedVolunteer.id
+    } || withdrawalsById.values.any { withdrawal ->
+      withdrawal.volunteerId == seedVolunteer.id
+    }
+    if (!seedHasAnalytics) return@synchronized
+
+    requestsById.values
+      .filter { it.volunteerId == seedVolunteer.id }
+      .forEach { request ->
+        request.volunteerId = targetVolunteer.id
+        request.volunteerName = targetVolunteer.fullName
+        accountDatabase.upsertHelpRequest(request.toPersistence())
+      }
+
+    volunteerReviewsById.values
+      .filter { it.volunteerId == seedVolunteer.id }
+      .forEach { review ->
+        val migrated = review.copy(volunteerId = targetVolunteer.id)
+        volunteerReviewsById[review.id] = migrated
+        accountDatabase.upsertVolunteerReview(migrated.toPersistence())
+      }
+
+    withdrawalsById.values
+      .filter { it.volunteerId == seedVolunteer.id }
+      .forEach { withdrawal ->
+        val migrated = withdrawal.copy(volunteerId = targetVolunteer.id)
+        withdrawalsById[withdrawal.id] = migrated
+        accountDatabase.upsertWithdrawal(migrated.toPersistence())
+      }
   }
 }

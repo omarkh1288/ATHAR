@@ -11,6 +11,9 @@ import android.location.Geocoder
 import android.location.Location as AndroidLocation
 import android.net.Uri
 import android.util.Log
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -82,6 +85,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -175,6 +180,180 @@ import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.payment.AtharPaymentFlow
 import com.athar.accessibilitymapping.util.resolveMapsApiKey
+
+private val atharGlassHtml = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+/* Base Styles */
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* ========== BUTTON ========== */
+.button-wrap {
+  position: relative;
+  z-index: 2;
+  border-radius: 999vw;
+  background: transparent;
+}
+
+button {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  z-index: 3;
+  
+  /* Thick Milky Framer-style Frosted Glass */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.15) 100%);
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  
+  border-radius: 999vw;
+  
+  /* Framer exact shadows */
+  box-shadow: 
+    0px 8px 24px rgba(0, 0, 0, 0.08),  /* main soft drop shadow */
+    0px 2px 6px rgba(0, 0, 0, 0.04), /* tighter drop shadow */
+    inset 0px 4px 12px rgba(255, 255, 255, 1), /* top rim thick white highlight */
+    inset 0px -4px 10px rgba(0, 0, 0, 0.04), /* lower dark inward bevel */
+    inset 0px -8px 16px rgba(255, 255, 255, 0.5), /* lower rim white bounce */
+    0px 0px 0px 1px rgba(255, 255, 255, 0.8); /* crisp outer edge */
+    
+  transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1), box-shadow 300ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+button:hover {
+  transform: scale(0.975);
+  box-shadow: 
+    0px 4px 12px rgba(0, 0, 0, 0.08), 
+    0px 1px 4px rgba(0, 0, 0, 0.04),
+    inset 0px 4px 12px rgba(255, 255, 255, 1), 
+    inset 0px -4px 10px rgba(0, 0, 0, 0.05), 
+    inset 0px -8px 16px rgba(255, 255, 255, 0.5),
+    0px 0px 0px 1px rgba(255, 255, 255, 0.9);
+}
+
+button:active {
+  transform: scale(0.95);
+  box-shadow: 
+    0px 2px 6px rgba(0, 0, 0, 0.06), 
+    inset 0px 4px 8px rgba(0, 0, 0, 0.08), 
+    inset 0px -2px 10px rgba(255, 255, 255, 0.3),
+    0px 0px 0px 1px rgba(255, 255, 255, 0.5);
+}
+
+button span {
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  
+  /* Locked typography constraints matching original app style */
+  font-family: "Roboto", sans-serif;
+  letter-spacing: -0.05em;
+  font-weight: 600; /* SemiBold */
+  font-size: 26px; /* Scaled down representation of 30.sp */
+  color: #1F3C5B; /* NavyPrimary */
+  -webkit-font-smoothing: antialiased;
+  
+  /* Blurry text reflection seen in the Framer layout */
+  text-shadow: 0px 6px 14px rgba(0, 0, 0, 0.3), 0px 2px 4px rgba(0, 0, 0, 0.1);
+  
+  transition: all 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  padding-inline: 1.0em; 
+  padding-block: 0.4em; 
+  line-height: 1.2;
+}
+
+button:hover span {
+  text-shadow: 0px 3px 8px rgba(0, 0, 0, 0.2), 0px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+button:active span {
+  text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.15);
+  transform: translateY(1px);
+}
+</style>
+</head>
+<body style="background-color: transparent;">
+<svg style="position: absolute; width: 100%; height: 100%; z-index: 0;" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="dottedGrid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="rgba(0,0,0,0.15)" />
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#dottedGrid)" />
+</svg>
+<div class="button-wrap">
+  <button>
+    <span>Athar</span>
+  </button>
+</div>
+</body>
+</html>
+"""
+
+/*
+// BACKUP of previous experimental glass design. 
+// If you want to revert to the animated edges, replace the above string with this one:
+private val atharGlassHtml_backup = ""${'"'}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+/* Defs */
+@property --angle-1 { syntax: "<angle>"; inherits: false; initial-value: -75deg; }
+@property --angle-2 { syntax: "<angle>"; inherits: false; initial-value: -45deg; }
+:root { --global--size: 10px; --anim--hover-time: 400ms; --anim--hover-ease: cubic-bezier(0.25, 1, 0.5, 1); }
+body { width: 100%; height: 100%; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; font-size: var(--global--size); background-color: transparent; font-family: inherit; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow: hidden; }
+.button-wrap { position: relative; z-index: 2; border-radius: 999vw; background: transparent; pointer-events: none; transition: all var(--anim--hover-time) var(--anim--hover-ease); }
+.button-shadow { --shadow-cuttoff-fix: 1.5em; position: absolute; width: calc(100% + var(--shadow-cuttoff-fix)); height: calc(100% + var(--shadow-cuttoff-fix)); top: calc(0% - var(--shadow-cuttoff-fix) / 2); left: calc(0% - var(--shadow-cuttoff-fix) / 2); filter: blur(clamp(2px, 0.125em, 12px)); -webkit-filter: blur(clamp(2px, 0.125em, 12px)); overflow: visible; pointer-events: none; }
+.button-shadow::after { content: ""; position: absolute; z-index: 0; inset: 0; border-radius: 999vw; background: linear-gradient(180deg, rgba(31, 60, 91, 0.15), rgba(31, 60, 91, 0.05)); width: calc(100% - var(--shadow-cuttoff-fix) - 0.25em); height: calc(100% - var(--shadow-cuttoff-fix) - 0.25em); top: calc(var(--shadow-cuttoff-fix) - 0.5em); left: calc(var(--shadow-cuttoff-fix) - 0.875em); padding: 0.125em; box-sizing: border-box; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; -webkit-mask-composite: destination-out; transition: all var(--anim--hover-time) var(--anim--hover-ease); overflow: visible; opacity: 1; }
+button { --border-width: 1px; all: unset; cursor: pointer; position: relative; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); pointer-events: auto; z-index: 3; background: linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0) 100%); border-radius: 999vw; box-shadow: inset 0px 3px 5px rgba(255, 255, 255, 1), inset 0px 15px 15px rgba(255, 255, 255, 0.3), inset 0px -4px 6px rgba(0, 0, 0, 0.08), 0px 6px 14px rgba(31, 60, 91, 0.2), 0px 0px 0px 1px rgba(255, 255, 255, 0.6); backdrop-filter: blur(24px) saturate(200%); -webkit-backdrop-filter: blur(24px) saturate(200%); transition: all var(--anim--hover-time) var(--anim--hover-ease); }
+button:hover { transform: scale(0.98); box-shadow: inset 0px 3px 5px rgba(255, 255, 255, 1), inset 0px 15px 15px rgba(255, 255, 255, 0.45), inset 0px -4px 6px rgba(0, 0, 0, 0.04), 0px 4px 8px rgba(31, 60, 91, 0.15), 0px 0px 0px 1px rgba(255, 255, 255, 0.7); }
+button span { position: relative; display: block; user-select: none; -webkit-user-select: none; font-family: "Roboto", sans-serif; letter-spacing: -0.05em; font-weight: 600; font-size: 26px; color: #1F3C5B; -webkit-font-smoothing: antialiased; text-shadow: 0em 0.1em 0.05em rgba(0, 0, 0, 0.05); transition: all var(--anim--hover-time) var(--anim--hover-ease); padding-inline: 0.8em; padding-block: 0.3em; line-height: 1.2; }
+button:hover span { text-shadow: 0.025em 0.025em 0.025em rgba(0, 0, 0, 0.06); }
+button span::after { content: ""; display: block; position: absolute; z-index: 1; width: calc(100% - var(--border-width)); height: calc(100% - var(--border-width)); top: calc(0% + var(--border-width) / 2); left: calc(0% + var(--border-width) / 2); box-sizing: border-box; border-radius: 999vw; overflow: clip; background: linear-gradient(var(--angle-2), rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.5) 40% 50%, rgba(255, 255, 255, 0) 55%); z-index: 3; mix-blend-mode: screen; pointer-events: none; background-size: 200% 200%; background-position: 0% 50%; background-repeat: no-repeat; transition: background-position calc(var(--anim--hover-time) * 1.25) var(--anim--hover-ease), --angle-2 calc(var(--anim--hover-time) * 1.25) var(--anim--hover-ease); }
+button:hover span::after { background-position: 25% 50%; }
+button:active span::after { background-position: 50% 15%; --angle-2: -15deg; }
+@media (hover: none) and (pointer: coarse) { button span::after, button:active span::after { --angle-2: -45deg; } }
+button::after { content: ""; position: absolute; z-index: 1; inset: 0; border-radius: 999vw; width: calc(100% + var(--border-width)); height: calc(100% + var(--border-width)); top: calc(0% - var(--border-width) / 2); left: calc(0% - var(--border-width) / 2); padding: var(--border-width); box-sizing: border-box; background: conic-gradient(from var(--angle-1) at 50% 50%, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0) 5% 40%, rgba(0, 0, 0, 0.15) 50%, rgba(0, 0, 0, 0) 60% 95%, rgba(0, 0, 0, 0.15)), linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; -webkit-mask-composite: destination-out; transition: all var(--anim--hover-time) var(--anim--hover-ease), --angle-1 500ms ease; box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.5); }
+button:hover::after { --angle-1: -125deg; }
+button:active::after { --angle-1: -75deg; }
+@media (hover: none) and (pointer: coarse) { button::after, button:hover::after, button:active::after { --angle-1: -75deg; } }
+.button-wrap:has(button:hover) .button-shadow { filter: blur(clamp(2px, 0.0625em, 6px)); -webkit-filter: blur(clamp(2px, 0.0625em, 6px)); transition: filter var(--anim--hover-time) var(--anim--hover-ease); }
+.button-wrap:has(button:hover) .button-shadow::after { top: calc(var(--shadow-cuttoff-fix) - 0.875em); opacity: 1; }
+.button-wrap:has(button:active) { transform: rotate3d(1, 0, 0, 25deg); }
+.button-wrap:has(button:active) button { box-shadow: inset 0px 4px 6px rgba(0, 0, 0, 0.1), inset 0px -2px 4px rgba(255, 255, 255, 0.2), 0px 2px 4px rgba(31, 60, 91, 0.1), 0px 0px 0px 1px rgba(255, 255, 255, 0.4); }
+.button-wrap:has(button:active) .button-shadow { filter: blur(clamp(2px, 0.125em, 12px)); -webkit-filter: blur(clamp(2px, 0.125em, 12px)); }
+.button-wrap:has(button:active) .button-shadow::after { top: calc(var(--shadow-cuttoff-fix) - 0.5em); opacity: 0.75; }
+.button-wrap:has(button:active) span { text-shadow: 0.01em 0.1em 0.05em rgba(0, 0, 0, 0.06); transform: translateY(1px); }
+</style>
+</head>
+<body style="background-color: transparent;">
+<svg style="position: absolute; width: 100%; height: 100%; z-index: 0;" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="dottedGrid" width="30" height="30" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="rgba(0,0,0,0.15)" /></pattern></defs><rect width="100%" height="100%" fill="url(#dottedGrid)" /></svg>
+<div class="button-wrap"><button><span>Athar</span></button><div class="button-shadow"></div></div>
+</body>
+</html>
+""${'"'}
+*/
 
 private val MapHeaderStyle @Composable get() = TextStyle(
   fontFamily = FontFamily.SansSerif,
@@ -675,35 +854,24 @@ fun MapScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Box(
+        AndroidView(
+          factory = { ctx ->
+            WebView(ctx).apply {
+              setBackgroundColor(android.graphics.Color.TRANSPARENT)
+              settings.apply {
+                javaScriptEnabled = true
+                useWideViewPort = false
+                loadWithOverviewMode = false
+                domStorageEnabled = true
+              }
+              webChromeClient = WebChromeClient()
+              loadDataWithBaseURL(null, atharGlassHtml, "text/html", "UTF-8", null)
+            }
+          },
           modifier = Modifier
-            .background(
-              brush = Brush.linearGradient(
-                colors = listOf(
-                  Color.White.copy(alpha = 0.28f),
-                  Color.White.copy(alpha = 0.08f),
-                  Color.White.copy(alpha = 0.18f)
-                )
-              ),
-              shape = RoundedCornerShape(24.sdp)
-            )
-            .border(
-              width = 1.dp,
-              color = Color.White.copy(alpha = 0.72f),
-              shape = RoundedCornerShape(24.sdp)
-            )
-            .padding(horizontal = 20.sdp, vertical = 10.sdp)
-        ) {
-          Text(
-            "Athar",
-            color = NavyPrimary,
-            style = MapHeaderStyle.copy(
-              fontSize = 30.sp,
-              lineHeight = 36.sp,
-              fontWeight = FontWeight.SemiBold
-            )
-          )
-        }
+            .width(125.sdp) // Exact original box width
+            .height(55.sdp) // Exact original box height
+        )
 
         if (userRole == UserRole.User) {
           Card(

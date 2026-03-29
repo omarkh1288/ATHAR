@@ -187,6 +187,7 @@ data class VolunteerRequestDto(
   val description: String,
   val hours: Int = 1,
   val price_per_hour: Int = 50,
+  val total_amount_egp: Double = 0.0,
   val payment_method: String = "cash"
 )
 
@@ -204,6 +205,7 @@ data class AssistanceRequestDto(
   val status: String,
   val hours: Int = 1,
   val price_per_hour: Int = 50,
+  val total_amount_egp: Double = 0.0,
   val payment_method: String = "cash"
 )
 
@@ -355,6 +357,12 @@ data class VolunteerAnalyticsReviewsResponseDto(
   val per_page: Int = 10,
   val total: Int = 0,
   val average_rating: Double = 0.0
+)
+
+@Serializable
+data class CreateVolunteerWithdrawalRequest(
+  val amount_egp: Double,
+  val method: String
 )
 
 @Serializable

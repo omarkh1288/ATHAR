@@ -99,28 +99,38 @@ fun Application.module() {
 
       route("/auth") {
         post("/register/user") {
-          val request = call.receiveOrNull<RegisterUserRequest>() ?: return@post call.respondBadRequest("Invalid user registration payload.")
-          call.respondResult(authService.registerUser(request))
+          call.handleApiRegister(authService)
         }
         post("/register-user") {
-          val request = call.receiveOrNull<RegisterUserRequest>() ?: return@post call.respondBadRequest("Invalid user registration payload.")
-          call.respondResult(authService.registerUser(request))
+          call.handleApiRegister(authService)
         }
         post("/register/volunteer") {
-          val request = call.receiveOrNull<RegisterVolunteerRequest>() ?: return@post call.respondBadRequest("Invalid volunteer registration payload.")
-          call.respondResult(authService.registerVolunteer(request))
+          call.handleApiRegister(authService)
         }
         post("/register-volunteer") {
-          val request = call.receiveOrNull<RegisterVolunteerRequest>() ?: return@post call.respondBadRequest("Invalid volunteer registration payload.")
-          call.respondResult(authService.registerVolunteer(request))
+          call.handleApiRegister(authService)
         }
         post("/login") {
-          val request = call.receiveOrNull<LoginRequest>() ?: return@post call.respondBadRequest("Invalid login payload.")
-          call.respondResult(authService.login(request))
+          val fields = call.readFlexibleFields()
+          val email = fields.firstNonBlank("email")
+          val password = fields.firstNonBlank("password")
+          if (email.isNullOrBlank() || password.isNullOrBlank()) {
+            return@post call.respondBadRequest("Email and password are required.")
+          }
+          val request = LoginRequest(
+            email = email,
+            password = password,
+            deviceName = fields.firstNonBlank("device_name", "deviceName")
+          )
+          call.respondLegacyAuthResult(authService.login(request))
         }
         post("/refresh") {
-          val request = call.receiveOrNull<RefreshTokenRequest>() ?: return@post call.respondBadRequest("Invalid refresh payload.")
-          call.respondResult(authService.refresh(request.refreshToken))
+          val fields = call.readFlexibleFields()
+          val refreshToken = fields.firstNonBlank("refresh_token", "refreshToken")
+          if (refreshToken.isNullOrBlank()) {
+            return@post call.respondBadRequest("Refresh token is required.")
+          }
+          call.respondResult(authService.refresh(refreshToken))
         }
         // Legacy/Mobile specific aliases
         post("/register-api") {
@@ -151,7 +161,9 @@ fun Application.module() {
       authenticate("auth-jwt") {
         post("/auth/logout") {
           val principal = call.currentPrincipal() ?: return@post call.respondUnauthorized()
-          val request = call.receiveOrNull<LogoutRequest>() ?: LogoutRequest()
+          val fields = call.readFlexibleFields()
+          val refreshToken = fields.firstNonBlank("refresh_token", "refreshToken")
+          val request = LogoutRequest(refreshToken = refreshToken)
           call.respondResult(authService.logout(principal.userId, principal.sessionId, request))
         }
 
@@ -231,23 +243,23 @@ fun Application.module() {
           }
 
           get("/impact") {
-            val principal = call.requireRole(UserRole.Volunteer) ?: return@get
+            val principal = call.currentPrincipal() ?: return@get call.respondUnauthorized()
             call.respondResult(store.getVolunteerImpactDashboard(principal.userId))
           }
 
           route("/analytics") {
             get("/earnings") {
-              val principal = call.requireRole(UserRole.Volunteer) ?: return@get
+              val principal = call.currentPrincipal() ?: return@get call.respondUnauthorized()
               call.respondResult(store.getVolunteerAnalyticsEarnings(principal.userId))
             }
 
             get("/performance") {
-              val principal = call.requireRole(UserRole.Volunteer) ?: return@get
+              val principal = call.currentPrincipal() ?: return@get call.respondUnauthorized()
               call.respondResult(store.getVolunteerAnalyticsPerformance(principal.userId))
             }
 
             get("/reviews") {
-              val principal = call.requireRole(UserRole.Volunteer) ?: return@get
+              val principal = call.currentPrincipal() ?: return@get call.respondUnauthorized()
               val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
               val perPage = call.request.queryParameters["per_page"]?.toIntOrNull() ?: 10
               val ratingRaw = call.request.queryParameters["rating"]?.trim().orEmpty()
@@ -257,6 +269,14 @@ fun Application.module() {
                   ?: return@get call.respondBadRequest("rating must be between 1 and 5.")
               }
               call.respondResult(store.getVolunteerAnalyticsReviews(principal.userId, page, perPage, rating))
+            }
+
+            post("/withdrawals") {
+              val principal = call.currentPrincipal() ?: return@post call.respondUnauthorized()
+              val body = call.receiveOrNull<JsonObject>() ?: return@post call.respondBadRequest("Invalid withdrawal payload.")
+              val request = body.toCreateVolunteerWithdrawalRequest()
+                ?: return@post call.respondBadRequest("Invalid withdrawal payload.")
+              call.respondResult(store.submitVolunteerWithdrawal(principal.userId, request.amount_egp, request.method))
             }
           }
         }
@@ -454,6 +474,37 @@ private suspend fun io.ktor.server.application.ApplicationCall.handleApiRegister
   }
 
   respondLegacyAuthResult(result)
+}
+
+private suspend fun io.ktor.server.application.ApplicationCall.readFlexibleFields(): Map<String, List<String>> {
+  val fields = linkedMapOf<String, MutableList<String>>()
+  val contentType = request.contentType()
+  when {
+    contentType.match(ContentType.MultiPart.FormData) -> {
+      val multipart = receiveMultipart()
+      while (true) {
+        val part = multipart.readPart() ?: break
+        if (part is PartData.FormItem) {
+          val key = part.name?.trim().orEmpty()
+          if (key.isNotBlank()) {
+            fields.addFieldValue(key, part.value)
+          }
+        }
+        part.dispose()
+      }
+    }
+    contentType.match(ContentType.Application.FormUrlEncoded) -> {
+      val parameters = receiveParameters()
+      parameters.entries().forEach { (key, values) ->
+        values.forEach { value -> fields.addFieldValue(key, value) }
+      }
+    }
+    else -> {
+      val body = receiveOrNull<JsonObject>() ?: return emptyMap()
+      body.forEach { (key, value) -> fields.addJsonField(key, value) }
+    }
+  }
+  return fields
 }
 
 private suspend fun io.ktor.server.application.ApplicationCall.readRegistrationPayload(): RegistrationPayload {
@@ -680,6 +731,15 @@ private fun JsonObject.toCreateAssistanceRequest(): CreateAssistanceRequest? {
     service_fee = serviceFee,
     hours = hours,
     price_per_hour = pricePerHour
+  )
+}
+
+private fun JsonObject.toCreateVolunteerWithdrawalRequest(): CreateVolunteerWithdrawalRequest? {
+  val amount = readDouble("amount_egp", "amount", "amountEgp") ?: return null
+  val method = readString("method", "channel", "type") ?: return null
+  return CreateVolunteerWithdrawalRequest(
+    amount_egp = amount,
+    method = method
   )
 }
 

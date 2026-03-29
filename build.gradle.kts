@@ -6,6 +6,8 @@ plugins {
   id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20" apply false
 }
 
+val kotlinVersion = "2.2.20"
+
 // Keep build outputs outside OneDrive-managed project folders to avoid
 // Windows access/cleanup failures on Gradle incremental directories.
 val localBuildRoot = java.io.File(
@@ -16,4 +18,13 @@ val localBuildRoot = java.io.File(
 allprojects {
   val sanitizedPath = project.path.removePrefix(":").replace(':', '_').ifEmpty { "root" }
   layout.buildDirectory.set(localBuildRoot.resolve(sanitizedPath))
+
+  configurations.configureEach {
+    resolutionStrategy.force(
+      "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion",
+      "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion"
+    )
+  }
 }

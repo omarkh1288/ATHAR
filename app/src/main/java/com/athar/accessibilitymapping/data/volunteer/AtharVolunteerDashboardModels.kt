@@ -107,6 +107,18 @@ data class VolunteerPerformanceUiModel(
   val badges: List<String> = emptyList()
 )
 
+@Serializable
+data class AtharVolunteerPerformanceWeeklyActivityDto(
+  val dayLabel: String? = null,
+  val completedCount: Int? = null
+)
+
+@Serializable
+data class AtharVolunteerPerformanceRequestTypeDto(
+  val type: String? = null,
+  val count: Int? = null
+)
+
 data class VolunteerReviewsUiModel(
   val averageRating: Double = 0.0,
   val totalReviews: Int = 0,
@@ -221,7 +233,9 @@ data class AtharVolunteerPerformanceDto(
   val positiveReviews: Int? = null,
   val fiveStarRatings: Int? = null,
   val totalReviews: Int? = null,
-  val badges: List<String> = emptyList()
+  val badges: List<String> = emptyList(),
+  val weeklyActivity: List<AtharVolunteerPerformanceWeeklyActivityDto> = emptyList(),
+  val requestTypes: List<AtharVolunteerPerformanceRequestTypeDto> = emptyList()
 )
 
 @Serializable

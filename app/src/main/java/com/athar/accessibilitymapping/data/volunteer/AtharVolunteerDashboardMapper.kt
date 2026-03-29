@@ -34,8 +34,19 @@ class AtharVolunteerDashboardAssembler(
     val reviews = bundle.reviews ?: AtharVolunteerReviewsDto()
     val impact = bundle.impact ?: AtharVolunteerImpactDto()
 
-    val weeklyActivity = buildWeeklyActivity(history.data)
-    val requestTypes = buildRequestTypes(history.data)
+    val historyWeeklyActivity = buildWeeklyActivity(history.data)
+    val historyRequestTypes = buildRequestTypes(history.data)
+    val weeklyActivityFromPerformance = buildWeeklyActivityFromPerformance(performance)
+    val weeklyActivity = when {
+      historyWeeklyActivity.any { it.requestsCount > 0 || it.netAmount > 0.0 } -> historyWeeklyActivity
+      weeklyActivityFromPerformance.isNotEmpty() -> weeklyActivityFromPerformance
+      else -> historyWeeklyActivity
+    }
+    val requestTypes = if (historyRequestTypes.isNotEmpty()) {
+      historyRequestTypes
+    } else {
+      buildRequestTypesFromPerformance(performance)
+    }
     val historyThisWeekNet = deriveCurrentWeekNet(history.data)
     val historyThisWeekCount = history.summary.requestsThisWeek ?: deriveCurrentWeekCount(history.data)
     val currentMonthNet = history.summary.thisMonthNetEarnings ?: earnings.summary.netEarnings ?: 0.0
@@ -85,21 +96,23 @@ class AtharVolunteerDashboardAssembler(
           status = item.status.orEmpty()
         )
       },
-      paymentHistory = earnings.paymentHistory.mapNotNull { item ->
-        val amount = item.amount ?: return@mapNotNull null
-        VolunteerPaymentHistoryItemUiModel(
-          id = item.id.orEmpty(),
-          dateLabel = formatDisplayDate(item.dateTime),
-          amount = amount,
-          netAmount = item.netAmount ?: amount,
-          status = item.status.orEmpty(),
-          userName = item.userName.orEmpty(),
-          hours = item.hours ?: 0
-        )
-      },
+      paymentHistory = resolvePaymentHistory(earnings, history),
       performance = VolunteerPerformanceUiModel(
-        grade = performance.grade.orEmpty(),
-        headline = performance.headline.orEmpty(),
+        grade = performance.grade.orEmpty().ifBlank {
+          when {
+            (performance.completed ?: impact.totalAssists ?: 0) >= 10 -> "A"
+            (performance.completed ?: impact.totalAssists ?: 0) >= 5 -> "B"
+            (performance.completed ?: impact.totalAssists ?: 0) > 0 -> "C"
+            else -> "D"
+          }
+        },
+        headline = performance.headline.orEmpty().ifBlank {
+          if ((performance.completed ?: impact.totalAssists ?: 0) > 0) {
+            "Performance summary"
+          } else {
+            "No performance data yet"
+          }
+        },
         percentile = performance.percentile ?: 0,
         responseRate = performance.responseRate ?: 0f,
         completionRate = performance.completionRate ?: 0f,
@@ -133,6 +146,37 @@ class AtharVolunteerDashboardAssembler(
         thisWeekCount = impact.thisWeekCount ?: historyThisWeekCount
       )
     )
+  }
+
+  private fun resolvePaymentHistory(
+    earnings: AtharVolunteerEarningsDto,
+    history: AtharVolunteerHistoryDto
+  ): List<VolunteerPaymentHistoryItemUiModel> {
+    val fromEarnings = earnings.paymentHistory.mapNotNull { item ->
+        val amount = item.amount ?: return@mapNotNull null
+        VolunteerPaymentHistoryItemUiModel(
+          id = item.id.orEmpty(),
+          dateLabel = formatDisplayDate(item.dateTime),
+          amount = amount,
+          netAmount = item.netAmount ?: amount,
+          status = item.status.orEmpty(),
+          userName = item.userName.orEmpty(),
+          hours = item.hours ?: 0
+        )
+      }
+    if (fromEarnings.isNotEmpty()) return fromEarnings
+
+    return history.data.mapNotNull { item ->
+      VolunteerPaymentHistoryItemUiModel(
+        id = item.id.orEmpty(),
+        dateLabel = formatDisplayDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt),
+        amount = item.grossAmount ?: item.netAmount ?: 0.0,
+        netAmount = item.netAmount ?: item.grossAmount ?: 0.0,
+        status = item.status.orEmpty(),
+        userName = item.userName.orEmpty(),
+        hours = item.hours ?: 0
+      )
+    }
   }
 
   private fun buildWeeklyActivity(historyItems: List<AtharVolunteerHistoryItemDto>): List<VolunteerWeeklyActivityPointUiModel> {
@@ -169,6 +213,40 @@ class AtharVolunteerDashboardAssembler(
       .sortedByDescending { it.second }
     val total = grouped.sumOf { it.second }.coerceAtLeast(1)
     return grouped.map { (type, count) ->
+      VolunteerRequestTypeUiModel(
+        type = type,
+        count = count,
+        percent = count * 100.0 / total
+      )
+    }
+  }
+
+  private fun buildWeeklyActivityFromPerformance(
+    performance: AtharVolunteerPerformanceDto
+  ): List<VolunteerWeeklyActivityPointUiModel> {
+    val apiItems = performance.weeklyActivity
+    if (apiItems.isEmpty()) return emptyList()
+    return apiItems.map { item ->
+      VolunteerWeeklyActivityPointUiModel(
+        dateLabel = item.dayLabel.orEmpty().ifBlank { "Day" },
+        requestsCount = item.completedCount ?: 0,
+        netAmount = 0.0
+      )
+    }
+  }
+
+  private fun buildRequestTypesFromPerformance(
+    performance: AtharVolunteerPerformanceDto
+  ): List<VolunteerRequestTypeUiModel> {
+    val apiItems = performance.requestTypes
+      .mapNotNull { item ->
+        val count = item.count ?: return@mapNotNull null
+        val type = item.type?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        type to count
+      }
+    if (apiItems.isEmpty()) return emptyList()
+    val total = apiItems.sumOf { it.second }.coerceAtLeast(1)
+    return apiItems.map { (type, count) ->
       VolunteerRequestTypeUiModel(
         type = type,
         count = count,
@@ -333,7 +411,19 @@ internal object AtharVolunteerPayloadParser {
       positiveReviews = summary.int("positive_reviews", "positiveReviews"),
       fiveStarRatings = summary.int("five_star_ratings", "fiveStarRatings"),
       totalReviews = summary.int("total_reviews", "totalReviews"),
-      badges = summary.array("badges").orEmpty().mapNotNull { it.primitiveContent() ?: it.string("value") }
+      badges = summary.array("badges").orEmpty().mapNotNull { it.primitiveContent() ?: it.string("value") },
+      weeklyActivity = (payload.array("weekly_activity") ?: summary.array("weekly_activity") ?: emptyList()).map { item ->
+        AtharVolunteerPerformanceWeeklyActivityDto(
+          dayLabel = item.string("day", "label", "date"),
+          completedCount = item.int("completed", "count", "requests")
+        )
+      },
+      requestTypes = (payload.array("request_types") ?: summary.array("request_types") ?: emptyList()).map { item ->
+        AtharVolunteerPerformanceRequestTypeDto(
+          type = item.string("name", "type", "label", "assistance_type"),
+          count = item.int("value", "count", "requests")
+        )
+      }
     )
   }
 

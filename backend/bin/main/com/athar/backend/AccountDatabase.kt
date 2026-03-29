@@ -43,9 +43,11 @@ internal data class HelpRequestPersistence(
   val hours: Int,
   val pricePerHour: Int,
   val createdAtEpochSeconds: Long,
+  val completedAtEpochSeconds: Long?,
   val status: String,
   val volunteerId: String?,
-  val volunteerName: String?
+  val volunteerName: String?,
+  val declinedVolunteerIds: List<String>
 )
 
 internal data class HelpRequestMessagePersistence(
@@ -67,6 +69,15 @@ internal data class PaymentPersistence(
   val status: String,
   val success: Boolean,
   val checkoutUrl: String?,
+  val createdAtEpochSeconds: Long
+)
+
+internal data class WithdrawalPersistence(
+  val id: String,
+  val volunteerId: String,
+  val amount: Double,
+  val method: String,
+  val status: String,
   val createdAtEpochSeconds: Long
 )
 
@@ -266,7 +277,7 @@ internal class AccountDatabase(
       connection.prepareStatement(
         """
         SELECT id, user_id, user_name, user_type, location, destination, distance, urgency, help_type, description,
-               payment_method, service_fee, hours, price_per_hour, created_at, status, volunteer_id, volunteer_name
+               payment_method, service_fee, hours, price_per_hour, created_at, completed_at, status, volunteer_id, volunteer_name, declined_volunteer_ids
         FROM help_requests
         ORDER BY created_at DESC
         """.trimIndent()
@@ -291,9 +302,11 @@ internal class AccountDatabase(
                   hours = result.getInt("hours"),
                   pricePerHour = result.getInt("price_per_hour"),
                   createdAtEpochSeconds = result.getLong("created_at"),
+                  completedAtEpochSeconds = result.getNullableLong("completed_at"),
                   status = result.getString("status"),
                   volunteerId = result.getString("volunteer_id"),
-                  volunteerName = result.getString("volunteer_name")
+                  volunteerName = result.getString("volunteer_name"),
+                  declinedVolunteerIds = decodeOrDefault(result.getString("declined_volunteer_ids"), emptyList())
                 )
               )
             }
@@ -309,14 +322,17 @@ internal class AccountDatabase(
         """
         INSERT INTO help_requests (
           id, user_id, user_name, user_type, location, destination, distance, urgency, help_type, description,
-          payment_method, service_fee, hours, price_per_hour, created_at, status, volunteer_id, volunteer_name
+          payment_method, service_fee, hours, price_per_hour, created_at, completed_at, status, volunteer_id, volunteer_name, declined_volunteer_ids
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
+          created_at = excluded.created_at,
+          completed_at = excluded.completed_at,
           status = excluded.status,
           volunteer_id = excluded.volunteer_id,
           volunteer_name = excluded.volunteer_name,
-          payment_method = excluded.payment_method
+          payment_method = excluded.payment_method,
+          declined_volunteer_ids = excluded.declined_volunteer_ids
         """.trimIndent()
       ).use { statement ->
         statement.setString(1, request.id)
@@ -334,9 +350,15 @@ internal class AccountDatabase(
         statement.setInt(13, request.hours)
         statement.setInt(14, request.pricePerHour)
         statement.setLong(15, request.createdAtEpochSeconds)
-        statement.setString(16, request.status)
-        statement.setString(17, request.volunteerId)
-        statement.setString(18, request.volunteerName)
+        if (request.completedAtEpochSeconds != null) {
+          statement.setLong(16, request.completedAtEpochSeconds)
+        } else {
+          statement.setNull(16, Types.BIGINT)
+        }
+        statement.setString(17, request.status)
+        statement.setString(18, request.volunteerId)
+        statement.setString(19, request.volunteerName)
+        statement.setString(20, json.encodeToString(request.declinedVolunteerIds))
         statement.executeUpdate()
       }
     }
@@ -441,6 +463,56 @@ internal class AccountDatabase(
         statement.setInt(8, if (payment.success) 1 else 0)
         statement.setString(9, payment.checkoutUrl)
         statement.setLong(10, payment.createdAtEpochSeconds)
+        statement.executeUpdate()
+      }
+    }
+  }
+
+  fun loadWithdrawals(): List<WithdrawalPersistence> {
+    return withConnection { connection ->
+      connection.prepareStatement(
+        "SELECT id, volunteer_id, amount, method, status, created_at FROM volunteer_withdrawals ORDER BY created_at DESC"
+      ).use { statement ->
+        statement.executeQuery().use { result ->
+          buildList {
+            while (result.next()) {
+              add(
+                WithdrawalPersistence(
+                  id = result.getString("id"),
+                  volunteerId = result.getString("volunteer_id"),
+                  amount = result.getDouble("amount"),
+                  method = result.getString("method"),
+                  status = result.getString("status"),
+                  createdAtEpochSeconds = result.getLong("created_at")
+                )
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+
+  fun upsertWithdrawal(withdrawal: WithdrawalPersistence) {
+    withConnection { connection ->
+      connection.prepareStatement(
+        """
+        INSERT INTO volunteer_withdrawals (id, volunteer_id, amount, method, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          volunteer_id = excluded.volunteer_id,
+          amount = excluded.amount,
+          method = excluded.method,
+          status = excluded.status,
+          created_at = excluded.created_at
+        """.trimIndent()
+      ).use { statement ->
+        statement.setString(1, withdrawal.id)
+        statement.setString(2, withdrawal.volunteerId)
+        statement.setDouble(3, withdrawal.amount)
+        statement.setString(4, withdrawal.method)
+        statement.setString(5, withdrawal.status)
+        statement.setLong(6, withdrawal.createdAtEpochSeconds)
         statement.executeUpdate()
       }
     }
@@ -587,9 +659,11 @@ internal class AccountDatabase(
             hours INTEGER DEFAULT 1,
             price_per_hour INTEGER DEFAULT 50,
             created_at INTEGER NOT NULL,
+            completed_at INTEGER,
             status TEXT NOT NULL,
             volunteer_id TEXT,
             volunteer_name TEXT,
+            declined_volunteer_ids TEXT NOT NULL DEFAULT '[]',
             FOREIGN KEY(user_id) REFERENCES accounts(id) ON DELETE CASCADE,
             FOREIGN KEY(volunteer_id) REFERENCES accounts(id) ON DELETE SET NULL
           )
@@ -645,6 +719,19 @@ internal class AccountDatabase(
           )
           """.trimIndent()
         )
+        statement.execute(
+          """
+          CREATE TABLE IF NOT EXISTS volunteer_withdrawals (
+            id TEXT PRIMARY KEY,
+            volunteer_id TEXT NOT NULL,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(volunteer_id) REFERENCES accounts(id) ON DELETE CASCADE
+          )
+          """.trimIndent()
+        )
         ensureVolunteerProfileColumns(connection)
         ensureHelpRequestColumns(connection)
       }
@@ -695,6 +782,8 @@ internal class AccountDatabase(
 
     addColumnIfMissing("hours", "INTEGER DEFAULT 1")
     addColumnIfMissing("price_per_hour", "INTEGER DEFAULT 50")
+    addColumnIfMissing("completed_at", "INTEGER")
+    addColumnIfMissing("declined_volunteer_ids", "TEXT NOT NULL DEFAULT '[]'")
   }
 
   private inline fun <T> withConnection(block: (Connection) -> T): T {
@@ -713,16 +802,43 @@ internal class AccountDatabase(
       ?: fallback
   }
 
+  private fun java.sql.ResultSet.getNullableLong(columnName: String): Long? {
+    val value = getLong(columnName)
+    return if (wasNull()) null else value
+  }
+
   companion object {
     private fun defaultJdbcUrl(): String {
-      val configured = System.getenv("ATHAR_DB_URL")?.trim().orEmpty()
-      if (configured.isNotBlank()) return configured
+      configuredJdbcUrlOrNull()?.let { return it }
 
       val backendDirectory = resolveBackendDirectory()
       val databasePath = backendDirectory?.resolve("athar.db")
         ?: Paths.get(System.getProperty("user.home"), ".athar", "athar.db")
       databasePath.parent?.let { Files.createDirectories(it) }
       return "jdbc:sqlite:${databasePath.toAbsolutePath()}"
+    }
+
+    private fun configuredJdbcUrlOrNull(): String? {
+      val configuredJdbcUrl = System.getenv("ATHAR_DB_URL")?.trim().orEmpty()
+      if (configuredJdbcUrl.isNotBlank()) {
+        if (configuredJdbcUrl.startsWith("http://", ignoreCase = true) ||
+          configuredJdbcUrl.startsWith("https://", ignoreCase = true)
+        ) {
+          System.err.println(
+            "Ignoring ATHAR_DB_URL because it points to an HTTP endpoint. " +
+              "AccountDatabase expects a JDBC URL such as jdbc:sqlite:/path/to/athar.db."
+          )
+        } else {
+          return configuredJdbcUrl
+        }
+      }
+
+      val configuredPath = System.getenv("ATHAR_DB_PATH")?.trim().orEmpty()
+      if (configuredPath.isBlank()) return null
+
+      val databasePath = Paths.get(configuredPath).toAbsolutePath()
+      databasePath.parent?.let { Files.createDirectories(it) }
+      return "jdbc:sqlite:$databasePath"
     }
 
     private fun resolveBackendDirectory(): Path? {

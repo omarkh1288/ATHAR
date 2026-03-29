@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class InMemoryStoreTest {
   private data class TestStoreContext(
@@ -95,6 +96,38 @@ class InMemoryStoreTest {
 
     assertEquals(UserRole.User, user.role)
     assertEquals(UserRole.Volunteer, volunteer.role)
+  }
+
+  @Test
+  fun loginUsesPersistedDatabaseAccountsAfterStoreRestart() {
+    val context = newStoreContext()
+    val initialStore = context.store
+
+    val registeredVolunteer = initialStore.registerVolunteer(
+      request = RegisterVolunteerRequest(
+        fullName = "Persisted Volunteer",
+        email = "persisted-volunteer@example.com",
+        phone = "+10000000030",
+        location = "Riyadh",
+        password = "Password123!",
+        idNumber = "4455667788",
+        dateOfBirth = "1997-05-06",
+        motivation = "Verify persisted auth",
+        languages = listOf("Arabic", "English"),
+        availability = listOf("Weekends")
+      ),
+      passwordHash = org.mindrot.jbcrypt.BCrypt.hashpw("Password123!", org.mindrot.jbcrypt.BCrypt.gensalt())
+    )
+    val created = assertIs<ServiceResult.Success<AccountRecord>>(registeredVolunteer).value
+
+    val restartedStore = InMemoryStore(accountDatabase = AccountDatabase(context.jdbcUrl))
+    val auth = AuthService(restartedStore)
+    val login = auth.login(LoginRequest(email = "persisted-volunteer@example.com", password = "Password123!"))
+
+    val user = assertIs<ServiceResult.Success<AuthResponseDto>>(login).value.user
+    assertEquals(created.id, user.id)
+    assertEquals(UserRole.Volunteer, user.role)
+    assertEquals("persisted-volunteer@example.com", user.email)
   }
 
   @Test
@@ -206,5 +239,48 @@ class InMemoryStoreTest {
     assertEquals("application/pdf", contentType)
     assertNotNull(blobLength)
     assertEquals(fileBytes.size, blobLength)
+  }
+
+  @Test
+  fun volunteerAnalyticsEarningsReflectWithdrawalHistory() {
+    val store = newStoreContext().store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "Mall",
+        destination = "Gate B",
+        distance = "0.5 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need navigation help",
+        payment_method = PaymentMethod.CARD,
+        service_fee = 200.0,
+        hours = 2,
+        price_per_hour = 100
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.acceptRequest("vol-seed-1", requestId)).value.success)
+    assertTrue(assertIs<ServiceResult.Success<PayRequestResponseDto>>(store.payRequest("user-seed-1", requestId, PaymentMethod.CASH)).value.status == "active")
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.completeRequest("vol-seed-1", requestId)).value.success)
+
+    val beforeWithdrawal = assertIs<ServiceResult.Success<VolunteerAnalyticsEarningsResponseDto>>(
+      store.getVolunteerAnalyticsEarnings("vol-seed-1")
+    ).value
+    assertTrue(beforeWithdrawal.available_balance >= 140.0)
+    assertTrue(beforeWithdrawal.withdrawal_history.isEmpty())
+
+    val withdrawal = store.submitVolunteerWithdrawal("vol-seed-1", amount = 100.0, method = "wallet")
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(withdrawal).value.success)
+
+    val afterWithdrawal = assertIs<ServiceResult.Success<VolunteerAnalyticsEarningsResponseDto>>(
+      store.getVolunteerAnalyticsEarnings("vol-seed-1")
+    ).value
+    assertFalse(afterWithdrawal.withdrawal_history.isEmpty())
+    assertEquals("completed", afterWithdrawal.withdrawal_history.first().status)
+    assertEquals(100.0, afterWithdrawal.withdrawal_history.first().amount)
+    assertEquals(beforeWithdrawal.available_balance - 100.0, afterWithdrawal.available_balance)
   }
 }
