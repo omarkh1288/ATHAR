@@ -1,0 +1,56 @@
+﻿{
+    "available_balance":  0.0,
+    "pending_balance":  0.0,
+    "total_gross":  0.0,
+    "total_fees":  0.0,
+    "total_net":  0.0,
+    "this_week_net":  0.0,
+    "current_month_label":  "March 2026",
+    "current_month_net":  0.0,
+    "last_month_net":  0.0,
+    "monthly_change_percent":  0.0,
+    "monthly_earnings":  [
+                             {
+                                 "month":  "Oct",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             },
+                             {
+                                 "month":  "Nov",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             },
+                             {
+                                 "month":  "Dec",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             },
+                             {
+                                 "month":  "Jan",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             },
+                             {
+                                 "month":  "Feb",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             },
+                             {
+                                 "month":  "Mar",
+                                 "gross":  0.0,
+                                 "net":  0.0,
+                                 "fee":  0.0
+                             }
+                         ],
+    "withdrawal_history":  [
+
+                           ],
+    "payment_history":  [
+
+                        ]
+}

@@ -1,0 +1,17 @@
+﻿{
+    "success":  true,
+    "data":  {
+                 "token":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhdGhhci1iYWNrZW5kIiwiYXVkIjoiYXRoYXItbW9iaWxlIiwidWlkIjoidm9sLXNlZWQtMSIsInNpZCI6InNlcy02ZDUyNDZkZS1hNDRkLTRmZDgtYjVlNi0yNWY2NDY4MDgwZmUiLCJyb2xlIjoiVm9sdW50ZWVyIiwiZXhwIjoxNzc0NzAzMjg0fQ.VZvEAUMR-N7v3n8dfAn3Oa7L1Yfudcbk7QpjsHBJ5dw",
+                 "user":  {
+                              "id":  "vol-seed-1",
+                              "role":  "volunteer",
+                              "name":  "Sara Mohammed",
+                              "full_name":  "Sara Mohammed",
+                              "email":  "volunteer@athar.app",
+                              "phone":  "+966 55 987 6543",
+                              "location":  "Riyadh, Saudi Arabia",
+                              "created_at":  "2026-03-28T12:08:04.074050600Z",
+                              "is_live":  true
+                          }
+             }
+}

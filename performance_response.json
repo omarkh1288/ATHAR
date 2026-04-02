@@ -1,0 +1,51 @@
+﻿{
+    "grade":  "D",
+    "headline":  "Needs Attention",
+    "percentile":  70,
+    "response_rate":  100.0,
+    "completion_rate":  0.0,
+    "average_rating":  0.0,
+    "on_time_rate":  80.0,
+    "completed":  0,
+    "pending":  0,
+    "users_helped":  0,
+    "positive_reviews":  0,
+    "five_star_ratings":  0,
+    "total_reviews":  0,
+    "badges":  [
+                   "Quick Responder"
+               ],
+    "weekly_activity":  [
+                            {
+                                "day":  "Sun",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Mon",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Tue",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Wed",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Thu",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Fri",
+                                "completed":  0
+                            },
+                            {
+                                "day":  "Sat",
+                                "completed":  0
+                            }
+                        ],
+    "request_types":  [
+
+                      ]
+}
