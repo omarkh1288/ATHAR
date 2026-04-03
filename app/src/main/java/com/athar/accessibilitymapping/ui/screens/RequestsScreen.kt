@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
@@ -40,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -128,6 +131,10 @@ fun RequestsScreen(
 
   val requestsViewModel: RequestsViewModel = viewModel()
   requestsViewModel.startPollingIfNeeded()
+
+  LaunchedEffect(userId) {
+    requestsViewModel.refreshNow()
+  }
 
   val requests by requestsViewModel.requests.collectAsState()
   val isRefreshing by requestsViewModel.isRefreshing.collectAsState()
@@ -514,65 +521,119 @@ fun RequestsScreen(
                     )
                   }
 
-                  if (requiresPayment(request.status) && request.paymentMethod.lowercase() != "cash") {
+                  if (shouldShowPaymentSection(request)) {
+                    val requestPaid = isRequestPaid(request)
                     val contactInteraction = remember(request.id + "_contact") { MutableInteractionSource() }
                     val isContactHovered by contactInteraction.collectIsHoveredAsState()
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                      Button(
-                        onClick = {
-                          activeRequestForFlow = request
-                          showPaymentFlow = true
-                        },
-                        interactionSource = contactInteraction,
-                        colors = ButtonDefaults.buttonColors(
-                          containerColor = AccentGold,
-                          contentColor = Color.White
-                        ),
-                        border = BorderStroke(2.dp, AccentGoldDark),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+
+                    if (requestPaid) {
+                      // ── Paid success banner ──
+                      Box(
                         modifier = Modifier
-                          .weight(1f)
-                          .height(56.dp)
-                          .shadow(6.dp, RoundedCornerShape(10.dp))
+                          .fillMaxWidth()
+                          .clip(RoundedCornerShape(12.dp))
+                          .background(
+                            Brush.horizontalGradient(
+                              listOf(Color(0xFF059669), Color(0xFF10B981))
+                            )
+                          )
+                          .padding(horizontal = 16.dp, vertical = 14.dp)
                       ) {
-                        Text(
-                          text = "Pay for Service",
-                          style = RequestsBodyStyle.copy(
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp
-                          ),
-                          fontWeight = FontWeight.SemiBold,
-                        )
+                        Row(
+                          verticalAlignment = Alignment.CenterVertically,
+                          modifier = Modifier.fillMaxWidth()
+                        ) {
+                          Box(
+                            modifier = Modifier
+                              .size(36.dp)
+                              .clip(CircleShape)
+                              .background(Color.White.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                          ) {
+                            Icon(
+                              imageVector = Icons.Outlined.CheckCircle,
+                              contentDescription = null,
+                              tint = Color.White,
+                              modifier = Modifier.size(22.dp)
+                            )
+                          }
+                          Spacer(modifier = Modifier.width(12.dp))
+                          Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                              text = "Paid Successfully",
+                              color = Color.White,
+                              fontSize = 15.sp,
+                              fontWeight = FontWeight.Bold,
+                              lineHeight = 20.sp
+                            )
+                            Text(
+                              text = "Payment confirmed",
+                              color = Color.White.copy(alpha = 0.8f),
+                              fontSize = 12.sp,
+                              lineHeight = 16.sp
+                            )
+                          }
+                        }
                       }
-                      Button(
-                        onClick = {
-                          infoMessage = "Volunteer contact details are private in this MVP."
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                          containerColor = NavyPrimary,
-                          contentColor = Color.White
-                        ),
-                        border = BorderStroke(2.dp, NavyDark),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier
-                          .weight(1f)
-                          .height(56.dp)
-                          .shadow(6.dp, RoundedCornerShape(10.dp))
-                      ) {
-                        Text(
-                          text = "Contact",
-                          style = RequestsBodyStyle.copy(
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp
+                    } else {
+                      // ── Pay + Contact buttons ──
+                      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                          onClick = {
+                            activeRequestForFlow = request
+                            showPaymentFlow = true
+                          },
+                          interactionSource = contactInteraction,
+                          colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentGold,
+                            contentColor = Color.White
                           ),
-                          fontWeight = FontWeight.SemiBold,
-                        )
+                          border = BorderStroke(2.dp, AccentGoldDark),
+                          shape = RoundedCornerShape(10.dp),
+                          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                          modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .shadow(6.dp, RoundedCornerShape(10.dp)),
+                        ) {
+                          Text(
+                            text = "Pay for Service",
+                            style = RequestsBodyStyle.copy(
+                              fontSize = 16.sp,
+                              lineHeight = 22.sp
+                            ),
+                            fontWeight = FontWeight.SemiBold,
+                          )
+                        }
+                        Button(
+                          onClick = {
+                            infoMessage = "Volunteer contact details are private in this MVP."
+                          },
+                          colors = ButtonDefaults.buttonColors(
+                            containerColor = NavyPrimary,
+                            contentColor = Color.White
+                          ),
+                          border = BorderStroke(2.dp, NavyDark),
+                          shape = RoundedCornerShape(10.dp),
+                          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                          modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .shadow(6.dp, RoundedCornerShape(10.dp))
+                        ) {
+                          Text(
+                            text = "Contact",
+                            style = RequestsBodyStyle.copy(
+                              fontSize = 16.sp,
+                              lineHeight = 22.sp
+                            ),
+                            fontWeight = FontWeight.SemiBold,
+                          )
                       }
                     }
-                  }
+                    } // else
+                  } // shouldShowPaymentSection
 
                   if (normalizedStatus == "completed") {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -697,36 +758,53 @@ fun RequestsScreen(
           totalAmountEgp = request.totalAmountEgp
         ) ?: (request.hours * normalizedPricePerHour).coerceAtLeast(1)
         val result = repository.payRequest(request.id, method, amountEgp)
-        requestsViewModel.refreshNow()
         when (result) {
-          is ApiCallResult.Success -> infoMessage = result.data.message
+          is ApiCallResult.Success -> {
+            infoMessage = result.data.message
+            requestsViewModel.markRequestPaid(request.id)
+          }
           is ApiCallResult.Failure -> infoMessage = result.message
         }
         result
       },
       onConfirmPaymobPayment = { paymentId ->
         val result = repository.confirmPaymobPayment(paymentId)
-        requestsViewModel.refreshNow()
         when (result) {
-          is ApiCallResult.Success -> infoMessage = result.data.message
+          is ApiCallResult.Success -> {
+            infoMessage = result.data.message
+            requestsViewModel.markRequestPaid(request.id)
+          }
           is ApiCallResult.Failure -> infoMessage = result.message
         }
         result
       },
       onGetPaymentStatus = { paymentId ->
         val result = repository.getPaymentStatus(paymentId)
-        requestsViewModel.refreshNow()
+        if (result is ApiCallResult.Success && result.data.success) {
+          requestsViewModel.markRequestPaid(request.id)
+        }
         result
       },
       onRefreshPaymentStatus = { paymentId ->
         val result = repository.refreshPayment(paymentId)
-        requestsViewModel.refreshNow()
+        if (result is ApiCallResult.Success && result.data.success) {
+          requestsViewModel.markRequestPaid(request.id)
+        }
         result
       },
       skipNotification = true,
-      onComplete = { showPaymentFlow = false },
-      onTrackVolunteer = { showPaymentFlow = false },
-      onBackToHome = { showPaymentFlow = false },
+      onComplete = {
+        showPaymentFlow = false
+        requestsViewModel.markRequestPaid(request.id)
+      },
+      onTrackVolunteer = {
+        showPaymentFlow = false
+        requestsViewModel.markRequestPaid(request.id)
+      },
+      onBackToHome = {
+        showPaymentFlow = false
+        requestsViewModel.markRequestPaid(request.id)
+      },
       onClose = { showPaymentFlow = false }
     )
   }
@@ -848,6 +926,29 @@ private fun isActiveRequestStatus(raw: String): Boolean {
 
 private fun requiresPayment(raw: String): Boolean {
   return normalizeRequestStatus(raw) == "accepted"
+}
+
+private fun shouldShowPaymentSection(request: VolunteerRequest): Boolean {
+  if (request.paymentMethod.lowercase() == "cash") return false
+  val norm = normalizeRequestStatus(request.status)
+  return norm in setOf("accepted", "active", "completed") || isRequestPaid(request)
+}
+
+private fun isRequestPaid(request: VolunteerRequest): Boolean {
+  if (request.paymentMethod.lowercase() == "cash") return false
+  if (request.isPaid) return true
+  if (normalizeRequestStatus(request.status) in setOf("active", "completed")) return true
+  return when (request.paymentStatus?.trim()?.lowercase()) {
+    "success",
+    "succeeded",
+    "approved",
+    "paid",
+    "captured",
+    "completed",
+    "settled",
+    "authorized" -> true
+    else -> false
+  }
 }
 
 private fun normalizeUiRequestPricePerHour(hours: Int, pricePerHour: Int): Int {

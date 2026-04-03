@@ -413,4 +413,96 @@ class InMemoryStoreTest {
     assertTrue(afterRefreshActive.requests.any { it.id == requestId })
     assertTrue(afterRefreshActive.counts.active >= 1)
   }
+
+  @Test
+  fun paidRequestStateIsReturnedFromMyRequestsAfterRefreshAndRestart() {
+    val context = newStoreContext()
+    val store = context.store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "Mall",
+        destination = "Gate B",
+        distance = "0.5 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need navigation help",
+        payment_method = PaymentMethod.CARD,
+        service_fee = 200.0,
+        hours = 2,
+        price_per_hour = 100
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.acceptRequest("vol-seed-1", requestId)).value.success)
+
+    val checkout = assertIs<ServiceResult.Success<CheckoutResponseDto>>(
+      store.checkoutCard(userId = "user-seed-1", requestId = requestId, amountEgp = 200.0)
+    ).value
+
+    val refreshedPayment = assertIs<ServiceResult.Success<PaymentStatusDto>>(
+      store.refreshPayment(checkout.payment_id)
+    ).value
+    assertTrue(refreshedPayment.success)
+
+    val beforeRestart = assertIs<ServiceResult.Success<MyRequestsResponse>>(
+      store.getMyRequests("user-seed-1")
+    ).value.userRequests.first { it.id == requestId }
+    assertEquals("active", beforeRestart.status)
+    assertEquals("captured", beforeRestart.payment_status)
+    assertTrue(beforeRestart.is_paid)
+
+    val restartedStore = InMemoryStore(accountDatabase = AccountDatabase(context.jdbcUrl))
+    val afterRestart = assertIs<ServiceResult.Success<MyRequestsResponse>>(
+      restartedStore.getMyRequests("user-seed-1")
+    ).value.userRequests.first { it.id == requestId }
+    assertEquals("active", afterRestart.status)
+    assertEquals("captured", afterRestart.payment_status)
+    assertTrue(afterRestart.is_paid)
+  }
+
+  @Test
+  fun volunteerCompletionUsesPersistedPaymentStateAfterRestart() {
+    val context = newStoreContext()
+    val store = context.store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "Mall",
+        destination = "Gate B",
+        distance = "0.5 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need navigation help",
+        payment_method = PaymentMethod.CARD,
+        service_fee = 200.0,
+        hours = 2,
+        price_per_hour = 100
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.acceptRequest("vol-seed-1", requestId)).value.success)
+
+    val checkout = assertIs<ServiceResult.Success<CheckoutResponseDto>>(
+      store.checkoutCard(userId = "user-seed-1", requestId = requestId, amountEgp = 200.0)
+    ).value
+    assertTrue(assertIs<ServiceResult.Success<PaymentStatusDto>>(store.refreshPayment(checkout.payment_id)).value.success)
+
+    val restartedStore = InMemoryStore(accountDatabase = AccountDatabase(context.jdbcUrl))
+    val complete = assertIs<ServiceResult.Success<ActionResultDto>>(
+      restartedStore.completeRequest("vol-seed-1", requestId)
+    ).value
+    assertTrue(complete.success)
+
+    val history = assertIs<ServiceResult.Success<VolunteerHistoryResponseDto>>(
+      restartedStore.getVolunteerHistoryDashboard("vol-seed-1")
+    ).value
+    assertTrue(history.requests.any { it.id == requestId && it.status == "completed" })
+  }
 }

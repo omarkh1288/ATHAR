@@ -1259,6 +1259,20 @@ internal class InMemoryStore(
     if (!isOwner && !isAssignedVolunteer) {
       return failure(HttpStatusCode.Forbidden, "You are not allowed to complete this request.")
     }
+    // Auto-transition: if payment was confirmed but status is lagging, promote to active.
+    if (request.status in setOf("accepted", "pending_payment")) {
+      val hasPaid = hasPersistedSuccessfulPaymentForRequest(requestId)
+      if (hasPaid) {
+        request.status = "active"
+        accountDatabase.upsertHelpRequest(request.toPersistence())
+      } else if (request.paymentMethod == PaymentMethod.CASH) {
+        // Cash requests that were accepted are already active-equivalent
+        request.status = "active"
+        accountDatabase.upsertHelpRequest(request.toPersistence())
+      } else {
+        return failure(HttpStatusCode.Conflict, "Payment has not been completed yet. Please wait for the user to pay before marking as completed.")
+      }
+    }
     if (request.status !in setOf("active", "confirmed", "in_progress")) {
       return failure(HttpStatusCode.Conflict, "Request can only be completed when active or confirmed.")
     }
@@ -1438,6 +1452,24 @@ internal class InMemoryStore(
     return paymentsForRequest(requestId)
       .filter { it.success }
       .maxByOrNull { it.createdAtEpochSeconds }
+  }
+
+  private fun latestSuccessfulPaymentForRequestFromDatabase(requestId: String): PaymentRecord? {
+    val persisted = accountDatabase.findLatestSuccessfulPaymentForRequest(requestId) ?: return null
+    val record = persisted.toRecord()
+    paymentsById[record.id] = record
+    return record
+  }
+
+  private fun hasPersistedSuccessfulPaymentForRequest(requestId: String): Boolean {
+    return latestSuccessfulPaymentForRequest(requestId) != null ||
+      latestSuccessfulPaymentForRequestFromDatabase(requestId) != null
+  }
+
+  private fun latestRelevantPaymentForRequest(requestId: String): PaymentRecord? {
+    return latestSuccessfulPaymentForRequest(requestId)
+      ?: latestSuccessfulPaymentForRequestFromDatabase(requestId)
+      ?: paymentsForRequest(requestId).maxByOrNull { it.createdAtEpochSeconds }
   }
 
   private fun latestPendingCardPaymentForRequest(requestId: String): PaymentRecord? {
@@ -1850,6 +1882,7 @@ internal class InMemoryStore(
   }
 
   private fun AssistanceRequestRecord.toVolunteerRequestDto(): VolunteerRequestDto {
+    val paymentSnapshot = latestRelevantPaymentForRequest(id)
     return VolunteerRequestDto(
       id = id,
       userId = userId,
@@ -1863,11 +1896,14 @@ internal class InMemoryStore(
       hours = hours,
       price_per_hour = pricePerHour,
       total_amount_egp = serviceFee,
-      payment_method = paymentMethod.name.lowercase()
+      payment_method = paymentMethod.name.lowercase(),
+      payment_status = paymentSnapshot?.status,
+      is_paid = paymentSnapshot?.success == true
     )
   }
 
   private fun AssistanceRequestRecord.toAssistanceRequestDto(): AssistanceRequestDto {
+    val paymentSnapshot = latestRelevantPaymentForRequest(id)
     return AssistanceRequestDto(
       id = id,
       userName = userName,
@@ -1882,7 +1918,9 @@ internal class InMemoryStore(
       hours = hours,
       price_per_hour = pricePerHour,
       total_amount_egp = serviceFee,
-      payment_method = paymentMethod.name.lowercase()
+      payment_method = paymentMethod.name.lowercase(),
+      payment_status = paymentSnapshot?.status,
+      is_paid = paymentSnapshot?.success == true
     )
   }
 

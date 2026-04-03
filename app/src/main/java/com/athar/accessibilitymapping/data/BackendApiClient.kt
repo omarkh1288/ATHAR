@@ -234,7 +234,9 @@ data class ApiVolunteerRequest(
   val hours: Int = 1,
   val pricePerHour: Int = 50,
   val totalAmountEgp: Int? = null,
-  val paymentMethod: String = "cash"
+  val paymentMethod: String = "cash",
+  val paymentStatus: String? = null,
+  val isPaid: Boolean = false
 )
 
 @Serializable
@@ -251,7 +253,10 @@ data class ApiAssistanceRequest(
   val status: String,
   val hours: Int = 1,
   val pricePerHour: Int = 50,
-  val totalAmountEgp: Int? = null
+  val totalAmountEgp: Int? = null,
+  val paymentMethod: String = "cash",
+  val paymentStatus: String? = null,
+  val isPaid: Boolean = false
 )
 
 @Serializable
@@ -1575,6 +1580,7 @@ class BackendApiClient(private val appContext: Context? = null) {
     return when (status.trim().lowercase(Locale.getDefault())) {
       "success",
       "succeeded",
+      "approved",
       "paid",
       "captured",
       "completed",
@@ -1952,7 +1958,28 @@ class BackendApiClient(private val appContext: Context? = null) {
     val id = obj.readString("id") ?: return null
     val requester = obj["requester"]?.asObjectOrNull() ?: obj["user"]?.asObjectOrNull()
     val volunteer = obj["volunteer"]?.asObjectOrNull()
+    val payment = obj["payment"]?.asObjectOrNull()
+      ?: obj["payment_status"]?.asObjectOrNull()
+      ?: obj["paymentStatus"]?.asObjectOrNull()
     val pricing = parseRequestPricing(obj)
+    val paymentStatus = payment?.readString("status", "payment_status", "paymentStatus", "state")
+      ?: obj.readString("payment_status", "paymentStatus", "payment_state", "paymentState")
+    val isPaid = payment?.readBoolean(
+      "success",
+      "is_success",
+      "isSuccess",
+      "paid",
+      "is_paid",
+      "isPaid",
+      "captured"
+    ) ?: obj.readBoolean(
+      "paid",
+      "is_paid",
+      "isPaid",
+      "payment_success",
+      "paymentSuccess"
+    ) ?: paymentStatus?.let(::inferPaymentSuccess)
+      ?: false
 
     val userId = obj.readString("requester_id", "user_id", "userId")
       ?: requester.readString("id")
@@ -1984,7 +2011,9 @@ class BackendApiClient(private val appContext: Context? = null) {
       hours = pricing.hours,
       pricePerHour = pricing.pricePerHour,
       totalAmountEgp = pricing.totalAmountEgp,
-      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash"
+      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash",
+      paymentStatus = paymentStatus,
+      isPaid = isPaid
     )
   }
 
@@ -1992,6 +2021,17 @@ class BackendApiClient(private val appContext: Context? = null) {
     val id = obj.readString("id") ?: return null
     val requester = obj["requester"]?.asObjectOrNull() ?: obj["user"]?.asObjectOrNull()
     val pricing = parseRequestPricing(obj)
+    val payment = obj["payment"]?.asObjectOrNull()
+      ?: obj["payment_status"]?.asObjectOrNull()
+      ?: obj["paymentStatus"]?.asObjectOrNull()
+    val paymentStatus = payment?.readString("status", "payment_status", "paymentStatus", "state")
+      ?: obj.readString("payment_status", "paymentStatus", "payment_state", "paymentState")
+    val isPaid = payment?.readBoolean(
+      "success", "is_success", "isSuccess", "paid", "is_paid", "isPaid", "captured"
+    ) ?: obj.readBoolean(
+      "paid", "is_paid", "isPaid", "payment_success", "paymentSuccess"
+    ) ?: paymentStatus?.let(::inferPaymentSuccess)
+      ?: false
 
     val userName = requester.readString("full_name", "name")
       ?: obj.readString("requester_name", "user_name", "userName")
@@ -2017,7 +2057,10 @@ class BackendApiClient(private val appContext: Context? = null) {
       status = obj.readString("status") ?: "pending",
       hours = pricing.hours,
       pricePerHour = pricing.pricePerHour,
-      totalAmountEgp = pricing.totalAmountEgp
+      totalAmountEgp = pricing.totalAmountEgp,
+      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash",
+      paymentStatus = paymentStatus,
+      isPaid = isPaid
     )
   }
 
@@ -3203,7 +3246,9 @@ fun ApiVolunteerRequest.toDomainVolunteerRequest(): VolunteerRequest {
     hours = hours,
     pricePerHour = normalizedMoney.pricePerHour,
     totalAmountEgp = normalizedMoney.totalAmountEgp,
-    paymentMethod = paymentMethod
+    paymentMethod = paymentMethod,
+    paymentStatus = paymentStatus,
+    isPaid = isPaid
   )
 }
 
@@ -3225,8 +3270,8 @@ fun ApiAssistanceRequest.toDomainAssistanceRequest(): AssistanceRequest {
     requestTime = requestTime,
     status = when (status.lowercase()) {
       "created", "broadcasted", "pending" -> RequestStatus.Broadcasted
-      "active", "accepted" -> RequestStatus.Accepted
-      "inprogress", "in_progress" -> RequestStatus.InProgress
+      "accepted", "pending_payment" -> RequestStatus.Accepted
+      "active", "confirmed", "inprogress", "in_progress" -> RequestStatus.InProgress
       "completed" -> RequestStatus.Completed
       "rated" -> RequestStatus.Rated
       "archived" -> RequestStatus.Archived
@@ -3236,7 +3281,10 @@ fun ApiAssistanceRequest.toDomainAssistanceRequest(): AssistanceRequest {
     },
     hours = hours,
     pricePerHour = normalizedMoney.pricePerHour,
-    totalAmountEgp = normalizedMoney.totalAmountEgp
+    totalAmountEgp = normalizedMoney.totalAmountEgp,
+    paymentMethod = paymentMethod,
+    paymentStatus = paymentStatus,
+    isPaid = isPaid
   )
 }
 

@@ -468,6 +468,40 @@ internal class AccountDatabase(
     }
   }
 
+  fun findLatestSuccessfulPaymentForRequest(requestId: String): PaymentPersistence? {
+    return withConnection { connection ->
+      connection.prepareStatement(
+        """
+        SELECT id, request_id, user_id, amount, currency, payment_method, status, success, checkout_url, created_at
+        FROM payments
+        WHERE request_id = ? AND success = 1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """.trimIndent()
+      ).use { statement ->
+        statement.setString(1, requestId)
+        statement.executeQuery().use { result ->
+          if (!result.next()) {
+            null
+          } else {
+            PaymentPersistence(
+              id = result.getString("id"),
+              requestId = result.getString("request_id"),
+              userId = result.getString("user_id"),
+              amount = result.getDouble("amount"),
+              currency = result.getString("currency"),
+              paymentMethod = result.getString("payment_method"),
+              status = result.getString("status"),
+              success = result.getInt("success") != 0,
+              checkoutUrl = result.getString("checkout_url"),
+              createdAtEpochSeconds = result.getLong("created_at")
+            )
+          }
+        }
+      }
+    }
+  }
+
   fun loadWithdrawals(): List<WithdrawalPersistence> {
     return withConnection { connection ->
       connection.prepareStatement(

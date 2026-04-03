@@ -188,7 +188,9 @@ data class VolunteerRequestDto(
   val hours: Int = 1,
   val price_per_hour: Int = 50,
   val total_amount_egp: Double = 0.0,
-  val payment_method: String = "cash"
+  val payment_method: String = "cash",
+  val payment_status: String? = null,
+  val is_paid: Boolean = false
 )
 
 @Serializable
@@ -206,7 +208,9 @@ data class AssistanceRequestDto(
   val hours: Int = 1,
   val price_per_hour: Int = 50,
   val total_amount_egp: Double = 0.0,
-  val payment_method: String = "cash"
+  val payment_method: String = "cash",
+  val payment_status: String? = null,
+  val is_paid: Boolean = false
 )
 
 @Serializable
