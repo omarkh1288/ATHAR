@@ -1,5 +1,6 @@
 package com.athar.accessibilitymapping.data.volunteer
 
+import android.util.Log
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -27,29 +28,51 @@ class AtharVolunteerDashboardAssembler(
   private val zoneId: ZoneId = ZoneId.systemDefault(),
   private val locale: Locale = Locale.getDefault()
 ) {
+  companion object {
+    private const val TAG = "AtharDashAssembler"
+  }
+
   fun assemble(bundle: AtharVolunteerEndpointBundle): VolunteerDashboardUiModel {
+    Log.d(TAG, "assemble: impact=${bundle.impact != null}, history=${bundle.history != null}, " +
+      "earnings=${bundle.earnings != null}, performance=${bundle.performance != null}, reviews=${bundle.reviews != null}")
+
     val history = bundle.history ?: AtharVolunteerHistoryDto()
     val earnings = bundle.earnings ?: AtharVolunteerEarningsDto()
     val performance = bundle.performance ?: AtharVolunteerPerformanceDto()
     val reviews = bundle.reviews ?: AtharVolunteerReviewsDto()
     val impact = bundle.impact ?: AtharVolunteerImpactDto()
 
+    Log.d(TAG, "assemble: performance.weeklyActivity.size=${performance.weeklyActivity.size}, " +
+      "performance.badges=${performance.badges}, history.data.size=${history.data.size}")
+
     val historyWeeklyActivity = buildWeeklyActivity(history.data)
-    val historyRequestTypes = buildRequestTypes(history.data)
     val weeklyActivityFromPerformance = buildWeeklyActivityFromPerformance(performance)
+
+    Log.d(TAG, "assemble: weeklyActivityFromPerformance.size=${weeklyActivityFromPerformance.size}, " +
+      "historyWeeklyActivity.size=${historyWeeklyActivity.size}")
+
     val weeklyActivity = when {
-      historyWeeklyActivity.any { it.requestsCount > 0 || it.netAmount > 0.0 } -> historyWeeklyActivity
+      // Prefer the dedicated analytics endpoint because the volunteer history payload often
+      // contains display labels like "3h ago" instead of raw timestamps.
       weeklyActivityFromPerformance.isNotEmpty() -> weeklyActivityFromPerformance
+      historyWeeklyActivity.any { it.requestsCount > 0 || it.netAmount > 0.0 } -> historyWeeklyActivity
       else -> historyWeeklyActivity
     }
-    val requestTypes = if (historyRequestTypes.isNotEmpty()) {
-      historyRequestTypes
+    Log.d(TAG, "assemble: chosen weeklyActivity.size=${weeklyActivity.size}, " +
+      "values=${weeklyActivity.map { "${it.dateLabel}:${it.requestsCount}" }}")
+    val requestTypesFromPerformance = buildRequestTypesFromPerformance(performance)
+    val historyRequestTypes = buildRequestTypes(history.data)
+    val requestTypes = if (requestTypesFromPerformance.isNotEmpty()) {
+      requestTypesFromPerformance
     } else {
-      buildRequestTypesFromPerformance(performance)
+      historyRequestTypes
     }
-    val historyThisWeekNet = deriveCurrentWeekNet(history.data)
+    val historyThisWeekNet = earnings.summary.thisWeekNet ?: deriveCurrentWeekNet(history.data)
     val historyThisWeekCount = history.summary.requestsThisWeek ?: deriveCurrentWeekCount(history.data)
-    val currentMonthNet = history.summary.thisMonthNetEarnings ?: earnings.summary.netEarnings ?: 0.0
+    val currentMonthNet = earnings.summary.currentMonthNet
+      ?: history.summary.thisMonthNetEarnings
+      ?: monthlyNetFallback(earnings)
+    val historyRecords = history.data.map { item -> item.toHistoryRecordUiModel() }
 
     val monthlyNetEarnings = earnings.monthlyNetEarnings.mapNotNull { item ->
       val netAmount = item.netAmount ?: return@mapNotNull null
@@ -70,8 +93,8 @@ class AtharVolunteerDashboardAssembler(
     return VolunteerDashboardUiModel(
       totalNetEarnings = earnings.summary.netEarnings ?: monthlyNetEarnings.sumOf { it.netAmount },
       currentMonthNet = currentMonthNet,
-      currentMonthLabel = YearMonth.now(clock.withZone(zoneId))
-        .format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)),
+      currentMonthLabel = earnings.summary.currentMonthLabel
+        ?: YearMonth.now(clock.withZone(zoneId)).format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)),
       monthlyChangePercent = earnings.summary.monthlyChangePercent ?: deriveMonthlyChange(monthlyNetEarnings),
       completedCount = performance.completed ?: impact.totalAssists ?: 0,
       pendingCount = performance.pending ?: 0,
@@ -97,6 +120,7 @@ class AtharVolunteerDashboardAssembler(
         )
       },
       paymentHistory = resolvePaymentHistory(earnings, history),
+      historyRecords = historyRecords,
       performance = VolunteerPerformanceUiModel(
         grade = performance.grade.orEmpty().ifBlank {
           when {
@@ -169,7 +193,8 @@ class AtharVolunteerDashboardAssembler(
     return history.data.mapNotNull { item ->
       VolunteerPaymentHistoryItemUiModel(
         id = item.id.orEmpty(),
-        dateLabel = formatDisplayDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt),
+        dateLabel = formatDisplayDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt)
+          .ifBlank { item.requestTimeLabel.orEmpty() },
         amount = item.grossAmount ?: item.netAmount ?: 0.0,
         netAmount = item.netAmount ?: item.grossAmount ?: 0.0,
         status = item.status.orEmpty(),
@@ -183,7 +208,7 @@ class AtharVolunteerDashboardAssembler(
     val today = LocalDate.now(clock.withZone(zoneId))
     val activityByDate = historyItems
       .mapNotNull { item ->
-        val date = parseLocalDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt)
+        val date = parseHistoryItemDate(item)
           ?: return@mapNotNull null
         date to item
       }
@@ -258,7 +283,7 @@ class AtharVolunteerDashboardAssembler(
   private fun deriveCurrentWeekNet(historyItems: List<AtharVolunteerHistoryItemDto>): Double {
     val (start, end) = currentWeekRange()
     return historyItems.sumOf { item ->
-      val date = parseLocalDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt)
+      val date = parseHistoryItemDate(item)
         ?: return@sumOf 0.0
       if (date in start..end) item.netAmount ?: item.grossAmount ?: 0.0 else 0.0
     }
@@ -267,7 +292,7 @@ class AtharVolunteerDashboardAssembler(
   private fun deriveCurrentWeekCount(historyItems: List<AtharVolunteerHistoryItemDto>): Int {
     val (start, end) = currentWeekRange()
     return historyItems.count { item ->
-      val date = parseLocalDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt)
+      val date = parseHistoryItemDate(item)
         ?: return@count false
       date in start..end
     }
@@ -292,6 +317,32 @@ class AtharVolunteerDashboardAssembler(
     return date.format(DateTimeFormatter.ofPattern("dd MMM yyyy", locale))
   }
 
+  private fun monthlyNetFallback(earnings: AtharVolunteerEarningsDto): Double {
+    return earnings.monthlyNetEarnings.lastOrNull()?.netAmount
+      ?: earnings.summary.netEarnings
+      ?: 0.0
+  }
+
+  private fun AtharVolunteerHistoryItemDto.toHistoryRecordUiModel(): VolunteerHistoryRecordUiModel {
+    return VolunteerHistoryRecordUiModel(
+      id = id.orEmpty(),
+      userName = userName.orEmpty(),
+      helpType = assistanceType.orEmpty().ifBlank { "Assistance" },
+      location = location.orEmpty(),
+      dateLabel = formatDisplayDate(eventDateTime ?: completedAt ?: createdAt ?: updatedAt)
+        .ifBlank { requestTimeLabel.orEmpty() },
+      status = status.orEmpty(),
+      hours = hours ?: 0,
+      grossAmount = grossAmount ?: netAmount ?: 0.0,
+      netAmount = netAmount ?: grossAmount ?: 0.0
+    )
+  }
+
+  private fun parseHistoryItemDate(item: AtharVolunteerHistoryItemDto): LocalDate? {
+    return parseLocalDate(item.eventDateTime ?: item.completedAt ?: item.createdAt ?: item.updatedAt)
+      ?: parseRelativeDateLabel(item.requestTimeLabel)
+  }
+
   private fun parseLocalDate(rawValue: String?): LocalDate? {
     val value = rawValue?.trim().orEmpty()
     if (value.isBlank()) return null
@@ -304,22 +355,45 @@ class AtharVolunteerDashboardAssembler(
         try {
           LocalDate.parse(value)
         } catch (_: DateTimeParseException) {
-          null
+          runCatching {
+            LocalDate.parse(value, DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
+          }.getOrNull()
         }
       }
+    }
+  }
+
+  private fun parseRelativeDateLabel(rawValue: String?): LocalDate? {
+    val value = rawValue?.trim().orEmpty().lowercase(locale)
+    if (value.isBlank()) return null
+    val today = LocalDate.now(clock.withZone(zoneId))
+    if (value == "just now") return today
+
+    val match = Regex("""^(\d+)\s*([mhdw])\s*ago$""").matchEntire(value) ?: return null
+    val amount = match.groupValues[1].toLongOrNull() ?: return null
+    return when (match.groupValues[2]) {
+      "m", "h" -> today
+      "d" -> today.minusDays(amount)
+      "w" -> today.minusWeeks(amount)
+      else -> null
     }
   }
 }
 
 internal object AtharVolunteerPayloadParser {
+  private const val TAG = "AtharPayloadParser"
+
   fun parseImpact(element: JsonElement): AtharVolunteerImpactDto {
+    Log.d(TAG, "parseImpact: raw=${element.toString().take(300)}")
     val payload = unwrapPayloadObject(element)
     val impactObject = payload.obj("impact") ?: payload
-    return AtharVolunteerImpactDto(
+    val result = AtharVolunteerImpactDto(
       totalAssists = impactObject.int("total_assists", "totalAssists", "completed"),
       averageRating = impactObject.double("average_rating", "averageRating", "avg_rating", "avgRating"),
       thisWeekCount = impactObject.int("this_week", "thisWeek", "requests_this_week")
     )
+    Log.d(TAG, "parseImpact: totalAssists=${result.totalAssists}, avgRating=${result.averageRating}, thisWeek=${result.thisWeekCount}")
+    return result
   }
 
   fun parseHistory(element: JsonElement): AtharVolunteerHistoryDto {
@@ -336,18 +410,37 @@ internal object AtharVolunteerPayloadParser {
         requestsThisWeek = summarySource.int("requests_this_week", "this_week", "thisWeek")
       ),
       data = items.map { item ->
+        val grossAmount = item.double(
+          "total_amount_egp",
+          "totalAmountEgp",
+          "amount",
+          "gross_amount",
+          "total_amount",
+          "service_fee"
+        )
+        val pricePerHour = item.double("price_per_hour", "pricePerHour")
+        val hours = item.int("hours")
+        val fallbackGrossAmount = if (grossAmount != null) {
+          grossAmount
+        } else if (pricePerHour != null && hours != null) {
+          pricePerHour * hours
+        } else {
+          null
+        }
         AtharVolunteerHistoryItemDto(
           id = item.string("id"),
           assistanceType = item.string("assistance_type", "help_type", "helpType", "type"),
           status = item.string("status"),
           eventDateTime = item.string("completed_at", "completedAt", "request_date", "requestDate", "date"),
-          createdAt = item.string("created_at", "createdAt", "request_time", "requestTime"),
+          requestTimeLabel = item.string("request_time", "requestTime", "date"),
+          createdAt = item.string("created_at", "createdAt"),
           completedAt = item.string("completed_at", "completedAt"),
           updatedAt = item.string("updated_at", "updatedAt"),
           netAmount = item.double("net_amount", "net_earnings", "net_amount_egp", "this_month_net_earnings"),
-          grossAmount = item.double("amount", "gross_amount", "total_amount", "total_amount_egp", "service_fee"),
-          hours = item.int("hours"),
-          userName = item.string("user_name", "userName", "name")
+          grossAmount = fallbackGrossAmount,
+          hours = hours,
+          userName = item.string("user_name", "userName", "name"),
+          location = item.string("location")
         )
       }
     )
@@ -363,7 +456,11 @@ internal object AtharVolunteerPayloadParser {
         pendingBalance = summary.double("pending_balance", "pending_earnings"),
         grossEarnings = summary.double("gross_earnings", "total_gross"),
         totalFees = summary.double("total_fees", "fees"),
-        monthlyChangePercent = summary.double("monthly_change_percent")
+        monthlyChangePercent = summary.double("monthly_change_percent"),
+        thisWeekNet = summary.double("this_week_net"),
+        currentMonthLabel = summary.string("current_month_label"),
+        currentMonthNet = summary.double("current_month_net"),
+        lastMonthNet = summary.double("last_month_net")
       ),
       monthlyNetEarnings = (payload.array("monthly_net_earnings") ?: payload.array("monthly_earnings") ?: emptyList()).map { item ->
         AtharVolunteerMonthlyNetDto(
@@ -395,9 +492,15 @@ internal object AtharVolunteerPayloadParser {
   }
 
   fun parsePerformance(element: JsonElement): AtharVolunteerPerformanceDto {
+    Log.d(TAG, "parsePerformance: raw=${element.toString().take(500)}")
     val payload = unwrapPayloadObject(element)
     val summary = payload.obj("summary") ?: payload
-    return AtharVolunteerPerformanceDto(
+    Log.d(TAG, "parsePerformance: payload keys=${payload.keys}, summary==payload: ${summary === payload}")
+
+    val weeklyActivityArray = payload.array("weekly_activity") ?: summary.array("weekly_activity")
+    Log.d(TAG, "parsePerformance: weeklyActivityArray size=${weeklyActivityArray?.size}, isNull=${weeklyActivityArray == null}")
+
+    val result = AtharVolunteerPerformanceDto(
       grade = summary.string("grade"),
       headline = summary.string("headline"),
       percentile = summary.int("percentile"),
@@ -411,11 +514,11 @@ internal object AtharVolunteerPayloadParser {
       positiveReviews = summary.int("positive_reviews", "positiveReviews"),
       fiveStarRatings = summary.int("five_star_ratings", "fiveStarRatings"),
       totalReviews = summary.int("total_reviews", "totalReviews"),
-      badges = summary.array("badges").orEmpty().mapNotNull { it.primitiveContent() ?: it.string("value") },
-      weeklyActivity = (payload.array("weekly_activity") ?: summary.array("weekly_activity") ?: emptyList()).map { item ->
+      badges = summary.primitiveArray("badges").orEmpty(),
+      weeklyActivity = (weeklyActivityArray ?: emptyList()).map { item ->
         AtharVolunteerPerformanceWeeklyActivityDto(
           dayLabel = item.string("day", "label", "date"),
-          completedCount = item.int("completed", "count", "requests")
+          completedCount = item.int("completed", "completed_requests", "count", "requests", "value")
         )
       },
       requestTypes = (payload.array("request_types") ?: summary.array("request_types") ?: emptyList()).map { item ->
@@ -425,6 +528,10 @@ internal object AtharVolunteerPayloadParser {
         )
       }
     )
+    Log.d(TAG, "parsePerformance: grade=${result.grade}, completed=${result.completed}, " +
+      "weeklyActivity.size=${result.weeklyActivity.size}, badges=${result.badges}, " +
+      "requestTypes.size=${result.requestTypes.size}")
+    return result
   }
 
   fun parseReviews(element: JsonElement): AtharVolunteerReviewsDto {
@@ -443,7 +550,7 @@ internal object AtharVolunteerPayloadParser {
           rating = item.int("rating"),
           comment = item.string("comment", "review"),
           dateTime = item.string("date", "created_at", "createdAt"),
-          issues = item.array("issues").orEmpty().mapNotNull { issue -> issue.primitiveContent() }
+          issues = item.primitiveArray("issues").orEmpty()
         )
       }
     )
@@ -461,6 +568,17 @@ internal object AtharVolunteerPayloadParser {
   private fun JsonObject.array(key: String): List<JsonObject>? {
     val value = this[key] as? JsonArray ?: return null
     return value.mapNotNull { it as? JsonObject }
+  }
+
+  private fun JsonObject.primitiveArray(key: String): List<String>? {
+    val value = this[key] as? JsonArray ?: return null
+    return value.mapNotNull { element ->
+      when (element) {
+        is JsonPrimitive -> element.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+        is JsonObject -> element.string("value", "name", "label")
+        else -> null
+      }
+    }
   }
 
   private fun JsonObject.string(vararg keys: String): String? {

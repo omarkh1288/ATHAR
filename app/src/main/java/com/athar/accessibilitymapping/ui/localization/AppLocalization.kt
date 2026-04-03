@@ -232,10 +232,10 @@ private val overrideTranslations = mapOf(
   // ── Volunteer Request (MapScreen) ──
   "Request Volunteer Help" to "طلب مساعدة متطوع",
   "Close request form" to "إغلاق نموذج الطلب",
-  "Your Current Location *" to "موقعك الحالي *",
+  "Your Current Location" to "موقعك الحالي",
   "Central Mall, Main Entrance" to "المول المركزي، المدخل الرئيسي",
   "Use my current location" to "استخدم موقعي الحالي",
-  "Where do you need to go? *" to "إلى أين تحتاج الذهاب؟ *",
+  "Where do you need to go?" to "إلى أين تحتاج الذهاب؟",
   "Type of Assistance Needed *" to "نوع المساعدة المطلوبة *",
   "Select help type..." to "اختر نوع المساعدة...",
   "Urgency Level *" to "مستوى الاستعجال *",

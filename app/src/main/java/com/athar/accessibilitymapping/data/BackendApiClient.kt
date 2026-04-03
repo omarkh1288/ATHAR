@@ -319,8 +319,29 @@ data class ApiVolunteerAnalyticsMonthlyEarning(
 @Serializable
 data class ApiVolunteerAnalyticsWeeklyActivity(
   val day: String = "",
-  val completed: Int = 0
-)
+  val label: String = "",
+  val date: String = "",
+  val completed: Int = 0,
+  @SerialName("completed_requests") val completedRequests: Int = 0,
+  val count: Int = 0,
+  val requests: Int = 0,
+  val value: Int = 0
+) {
+  /** Resolved count using fallback order: completed > completed_requests > count > requests > value */
+  val effectiveCompleted: Int
+    get() = when {
+      completed != 0 -> completed
+      completedRequests != 0 -> completedRequests
+      count != 0 -> count
+      requests != 0 -> requests
+      value != 0 -> value
+      else -> 0
+    }
+
+  /** Resolved day label using fallback order: day > label > date */
+  val effectiveDay: String
+    get() = day.ifBlank { label.ifBlank { date } }
+}
 
 @Serializable
 data class ApiVolunteerAnalyticsRequestTypeShare(
@@ -2353,8 +2374,8 @@ class BackendApiClient(private val appContext: Context? = null) {
     }.map { item ->
       ApiVolunteerAnalyticsWeeklyActivity(
         day = item.readString("day", "label", "name").orEmpty(),
-        completed = item.readInt("completed", "count", "requests", "value")
-          ?: (item.readDouble("completed", "count", "requests", "value")?.toInt() ?: 0)
+        completed = item.readInt("completed", "completed_requests", "count", "requests", "value")
+          ?: (item.readDouble("completed", "completed_requests", "count", "requests", "value")?.toInt() ?: 0)
       )
     }
 
@@ -3339,8 +3360,8 @@ fun ApiVolunteerAnalyticsPerformanceResponse.toDomainVolunteerAnalyticsPerforman
     badges = badges,
     weeklyActivity = weeklyActivity.map { entry ->
       VolunteerAnalyticsWeeklyActivity(
-        day = entry.day,
-        completed = entry.completed
+        day = entry.effectiveDay,
+        completed = entry.effectiveCompleted
       )
     },
     requestTypes = requestTypes.map { entry ->

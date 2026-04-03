@@ -67,6 +67,10 @@ android {
     language.enableSplit = false
   }
 
+  testOptions {
+    unitTests.isReturnDefaultValues = true
+  }
+
 }
 
 tasks.matching { task ->

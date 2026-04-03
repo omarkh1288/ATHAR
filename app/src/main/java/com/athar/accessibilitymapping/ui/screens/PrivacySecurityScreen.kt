@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.components.ToggleSwitch
 import com.athar.accessibilitymapping.ui.theme.AccentGold
@@ -94,202 +95,207 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
     return
   }
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color.White)
+  AtharPullToRefresh(
+    isRefreshing = isLoading,
+    onRefresh = viewModel::refresh
   ) {
-    ScreenHeader(title = "Privacy & Security", onBack = onBack, background = NavyPrimary)
-
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .background(BluePrimary)
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp)
+        .background(Color.White)
     ) {
-      if (isLoading) {
-        Text("Loading privacy settings...", color = NavyPrimary, fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-      }
-      if (errorMessage != null) {
-        Text(errorMessage ?: "", color = Color(0xFFB91C1C), fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-      }
+      ScreenHeader(title = "Privacy & Security", onBack = onBack, background = NavyPrimary)
 
-      PrivacySection(title = "Privacy Settings") {
-        PrivacyToggleRow(
-          icon = Icons.Outlined.Place,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Location Sharing",
-          subtitle = "Share your location with volunteers",
-          enabled = locationSharing
-        ) { viewModel.toggleLocationSharing() }
-        PrivacyToggleRow(
-          icon = Icons.Outlined.Visibility,
-          iconBackground = Color(0xFF10B981),
-          iconBorder = Color(0xFF059669),
-          title = "Profile Visibility",
-          subtitle = "Allow others to see your profile",
-          enabled = profileVisibility
-        ) { viewModel.toggleProfileVisibility() }
-        PrivacyToggleRow(
-          icon = Icons.Outlined.UserCheck,
-          iconBackground = AccentGold,
-          iconBorder = AccentGoldDark,
-          title = "Show My Ratings",
-          subtitle = "Display ratings you've given",
-          enabled = showRatings
-        ) { viewModel.toggleShowRatings() }
-        PrivacyToggleRow(
-          icon = Icons.Outlined.Visibility,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Activity Status",
-          subtitle = "Show when you're active",
-          enabled = activityStatus,
-          showDivider = false
-        ) { viewModel.toggleActivityStatus() }
-      }
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(BluePrimary)
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp)
+      ) {
+        if (isLoading) {
+          Text("Loading privacy settings...", color = NavyPrimary, fontSize = 14.sp)
+          Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (errorMessage != null) {
+          Text(errorMessage ?: "", color = Color(0xFFB91C1C), fontSize = 14.sp)
+          Spacer(modifier = Modifier.height(12.dp))
+        }
 
-      Spacer(modifier = Modifier.height(16.dp))
+        PrivacySection(title = "Privacy Settings") {
+          PrivacyToggleRow(
+            icon = Icons.Outlined.Place,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Location Sharing",
+            subtitle = "Share your location with volunteers",
+            enabled = locationSharing
+          ) { viewModel.toggleLocationSharing() }
+          PrivacyToggleRow(
+            icon = Icons.Outlined.Visibility,
+            iconBackground = Color(0xFF10B981),
+            iconBorder = Color(0xFF059669),
+            title = "Profile Visibility",
+            subtitle = "Allow others to see your profile",
+            enabled = profileVisibility
+          ) { viewModel.toggleProfileVisibility() }
+          PrivacyToggleRow(
+            icon = Icons.Outlined.UserCheck,
+            iconBackground = AccentGold,
+            iconBorder = AccentGoldDark,
+            title = "Show My Ratings",
+            subtitle = "Display ratings you've given",
+            enabled = showRatings
+          ) { viewModel.toggleShowRatings() }
+          PrivacyToggleRow(
+            icon = Icons.Outlined.Visibility,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Activity Status",
+            subtitle = "Show when you're active",
+            enabled = activityStatus,
+            showDivider = false
+          ) { viewModel.toggleActivityStatus() }
+        }
 
-      PrivacySection(title = "Security") {
-        Row(
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PrivacySection(title = "Security") {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(Color(0xFFFFF8DC), RoundedCornerShape(8.dp))
+              .border(2.dp, AccentGold, RoundedCornerShape(8.dp))
+              .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(40.dp)
+                  .background(AccentGold, CircleShape)
+                  .border(2.dp, AccentGoldDark, CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(Icons.Outlined.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Text("Two-Factor Authentication", color = NavyPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("Add extra security to your account", color = NavyPrimary.copy(alpha = 0.8f), fontSize = 14.sp)
+              }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            ToggleSwitch(
+              enabled = twoFactorAuth,
+              onChange = { viewModel.toggleTwoFactorAuth() },
+              activeColor = AccentGold,
+              inactiveColor = Color(0xFFE5E7EB),
+              activeBorderColor = AccentGoldDark,
+              inactiveBorderColor = Color(0xFFD1D5DB)
+            )
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          SecurityActionRow(
+            icon = Icons.Outlined.Lock,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Change Password",
+            subtitle = "Update your password"
+          ) { showChangePassword = true }
+
+          SecurityActionRow(
+            icon = Icons.Outlined.UserCheck,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Active Sessions",
+            subtitle = "Manage logged in devices"
+          ) { showActiveSessions = true }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PrivacySection(title = "Data & Privacy") {
+          SecurityActionRow(
+            icon = Icons.Outlined.Download,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Download Your Data",
+            subtitle = "Get a copy of your information"
+          ) { showDownloadData = true }
+
+          SecurityActionRow(
+            icon = Icons.Outlined.FileCopy,
+            iconBackground = Color(0xFF10B981),
+            iconBorder = Color(0xFF059669),
+            title = "Privacy Policy",
+            subtitle = "Read our privacy policy"
+          ) { showPrivacyPolicy = true }
+
+          SecurityActionRow(
+            icon = Icons.Outlined.FileCopy,
+            iconBackground = Color(0xFF10B981),
+            iconBorder = Color(0xFF059669),
+            title = "Terms of Service",
+            subtitle = "Read terms and conditions",
+            showDivider = false
+          ) { showTermsOfService = true }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
           modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFFFF8DC), RoundedCornerShape(8.dp))
-            .border(2.dp, AccentGold, RoundedCornerShape(8.dp))
-            .padding(12.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
+            .background(Color(0xFFFEE2E2), RoundedCornerShape(16.dp))
+            .border(2.dp, Color(0xFFDC2626), RoundedCornerShape(16.dp))
+            .padding(16.dp)
         ) {
+          Text("Danger Zone", color = Color(0xFF991B1B), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+          Spacer(modifier = Modifier.height(12.dp))
           Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(Color.White, RoundedCornerShape(8.dp))
+              .border(2.dp, Color(0xFFDC2626), RoundedCornerShape(8.dp))
+              .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Box(
               modifier = Modifier
                 .size(40.dp)
-                .background(AccentGold, CircleShape)
-                .border(2.dp, AccentGoldDark, CircleShape),
+                .background(Color(0xFFFEE2E2), CircleShape)
+                .border(2.dp, Color(0xFFDC2626), CircleShape),
               contentAlignment = Alignment.Center
             ) {
-              Icon(Icons.Outlined.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+              Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-              Text("Two-Factor Authentication", color = NavyPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-              Text("Add extra security to your account", color = NavyPrimary.copy(alpha = 0.8f), fontSize = 14.sp)
+              Text("Delete Account", color = Color(0xFF991B1B), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+              Text("Permanently delete your account and data", color = Color(0xFFDC2626), fontSize = 14.sp)
             }
           }
-          Spacer(modifier = Modifier.width(12.dp))
-          ToggleSwitch(
-            enabled = twoFactorAuth,
-            onChange = { viewModel.toggleTwoFactorAuth() },
-            activeColor = AccentGold,
-            inactiveColor = Color(0xFFE5E7EB),
-            activeBorderColor = AccentGoldDark,
-            inactiveBorderColor = Color(0xFFD1D5DB)
-          )
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+          text = "We take your privacy seriously. Your data is encrypted and never shared without consent.",
+          color = NavyPrimary.copy(alpha = 0.6f),
+          fontSize = 12.sp,
+          lineHeight = 18.sp,
+          modifier = Modifier.fillMaxWidth()
+        )
+
         Spacer(modifier = Modifier.height(12.dp))
-
-        SecurityActionRow(
-          icon = Icons.Outlined.Lock,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Change Password",
-          subtitle = "Update your password"
-        ) { showChangePassword = true }
-
-        SecurityActionRow(
-          icon = Icons.Outlined.UserCheck,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Active Sessions",
-          subtitle = "Manage logged in devices"
-        ) { showActiveSessions = true }
       }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      PrivacySection(title = "Data & Privacy") {
-        SecurityActionRow(
-          icon = Icons.Outlined.Download,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Download Your Data",
-          subtitle = "Get a copy of your information"
-        ) { showDownloadData = true }
-
-        SecurityActionRow(
-          icon = Icons.Outlined.FileCopy,
-          iconBackground = Color(0xFF10B981),
-          iconBorder = Color(0xFF059669),
-          title = "Privacy Policy",
-          subtitle = "Read our privacy policy"
-        ) { showPrivacyPolicy = true }
-
-        SecurityActionRow(
-          icon = Icons.Outlined.FileCopy,
-          iconBackground = Color(0xFF10B981),
-          iconBorder = Color(0xFF059669),
-          title = "Terms of Service",
-          subtitle = "Read terms and conditions",
-          showDivider = false
-        ) { showTermsOfService = true }
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .background(Color(0xFFFEE2E2), RoundedCornerShape(16.dp))
-          .border(2.dp, Color(0xFFDC2626), RoundedCornerShape(16.dp))
-          .padding(16.dp)
-      ) {
-        Text("Danger Zone", color = Color(0xFF991B1B), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(8.dp))
-            .border(2.dp, Color(0xFFDC2626), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Box(
-            modifier = Modifier
-              .size(40.dp)
-              .background(Color(0xFFFEE2E2), CircleShape)
-              .border(2.dp, Color(0xFFDC2626), CircleShape),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
-          }
-          Spacer(modifier = Modifier.width(12.dp))
-          Column {
-            Text("Delete Account", color = Color(0xFF991B1B), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text("Permanently delete your account and data", color = Color(0xFFDC2626), fontSize = 14.sp)
-          }
-        }
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      Text(
-        text = "We take your privacy seriously. Your data is encrypted and never shared without consent.",
-        color = NavyPrimary.copy(alpha = 0.6f),
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
-        modifier = Modifier.fillMaxWidth()
-      )
-
-      Spacer(modifier = Modifier.height(12.dp))
     }
   }
 }
@@ -397,4 +403,3 @@ private fun SecurityActionRow(
     Spacer(modifier = Modifier.height(12.dp))
   }
 }
-

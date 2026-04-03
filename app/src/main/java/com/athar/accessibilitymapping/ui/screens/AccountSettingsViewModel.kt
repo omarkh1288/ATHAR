@@ -52,7 +52,18 @@ class AccountSettingsViewModel(application: Application) : AndroidViewModel(appl
 
   fun loadIfNeeded(userDisabilityType: String?, userRole: UserRole) {
     if (loaded) return
+    load(userDisabilityType, userRole)
+  }
+
+  fun refresh(userDisabilityType: String?, userRole: UserRole) {
+    loaded = false
+    load(userDisabilityType, userRole)
+  }
+
+  private fun load(userDisabilityType: String?, userRole: UserRole) {
     loaded = true
+    _isLoading.value = true
+    _loadError.value = null
     _disabilityType.value = userDisabilityType ?: ""
     viewModelScope.launch {
       when (val result = repository.getCurrentAccount()) {

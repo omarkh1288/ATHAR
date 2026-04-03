@@ -131,6 +131,42 @@ class InMemoryStoreTest {
   }
 
   @Test
+  fun analyticsStayBoundToTheAuthenticatedVolunteerAfterRestart() {
+    val context = newStoreContext()
+    val initialStore = context.store
+
+    val registeredVolunteer = initialStore.registerVolunteer(
+      request = RegisterVolunteerRequest(
+        fullName = "Second Volunteer",
+        email = "second-volunteer@example.com",
+        phone = "+10000000031",
+        location = "Riyadh",
+        password = "Password123!",
+        idNumber = "4455667799",
+        dateOfBirth = "1996-05-06",
+        motivation = "Verify analytics ownership",
+        languages = listOf("Arabic", "English"),
+        availability = listOf("Weekends")
+      ),
+      passwordHash = org.mindrot.jbcrypt.BCrypt.hashpw("Password123!", org.mindrot.jbcrypt.BCrypt.gensalt())
+    )
+    val volunteerId = assertIs<ServiceResult.Success<AccountRecord>>(registeredVolunteer).value.id
+
+    val restartedStore = InMemoryStore(accountDatabase = AccountDatabase(context.jdbcUrl))
+
+    val seedAnalytics = assertIs<ServiceResult.Success<VolunteerAnalyticsPerformanceResponseDto>>(
+      restartedStore.getVolunteerAnalyticsPerformance("vol-seed-1")
+    ).value
+    val secondVolunteerAnalytics = assertIs<ServiceResult.Success<VolunteerAnalyticsPerformanceResponseDto>>(
+      restartedStore.getVolunteerAnalyticsPerformance(volunteerId)
+    ).value
+
+    assertTrue(seedAnalytics.completed > 0)
+    assertEquals(0, secondVolunteerAnalytics.completed)
+    assertEquals(0, secondVolunteerAnalytics.weekly_activity.sumOf { it.completed })
+  }
+
+  @Test
   fun requestLifecycleCreateAcceptCompleteWorks() {
     val store = newStoreContext().store
 
@@ -282,5 +318,99 @@ class InMemoryStoreTest {
     assertEquals("completed", afterWithdrawal.withdrawal_history.first().status)
     assertEquals(100.0, afterWithdrawal.withdrawal_history.first().amount)
     assertEquals(beforeWithdrawal.available_balance - 100.0, afterWithdrawal.available_balance)
+  }
+
+  @Test
+  fun cashRequestCapturesVolunteerPaymentWhenCompleted() {
+    val store = newStoreContext().store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "Mall",
+        destination = "Gate B",
+        distance = "0.5 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need navigation help",
+        payment_method = PaymentMethod.CASH,
+        service_fee = 200.0,
+        hours = 2,
+        price_per_hour = 100
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+
+    val accept = assertIs<ServiceResult.Success<ActionResultDto>>(store.acceptRequest("vol-seed-1", requestId)).value
+    assertTrue(accept.success)
+
+    val beforeCompletePerformance = assertIs<ServiceResult.Success<VolunteerAnalyticsPerformanceResponseDto>>(
+      store.getVolunteerAnalyticsPerformance("vol-seed-1")
+    ).value
+    val beforeCompleteEarnings = assertIs<ServiceResult.Success<VolunteerAnalyticsEarningsResponseDto>>(
+      store.getVolunteerAnalyticsEarnings("vol-seed-1")
+    ).value
+
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.completeRequest("vol-seed-1", requestId)).value.success)
+
+    val afterCompletePerformance = assertIs<ServiceResult.Success<VolunteerAnalyticsPerformanceResponseDto>>(
+      store.getVolunteerAnalyticsPerformance("vol-seed-1")
+    ).value
+    val afterCompleteEarnings = assertIs<ServiceResult.Success<VolunteerAnalyticsEarningsResponseDto>>(
+      store.getVolunteerAnalyticsEarnings("vol-seed-1")
+    ).value
+
+    assertTrue(afterCompletePerformance.completed >= beforeCompletePerformance.completed + 1)
+    assertTrue(afterCompletePerformance.weekly_activity.sumOf { it.completed } >= beforeCompletePerformance.weekly_activity.sumOf { it.completed } + 1)
+    assertTrue(afterCompleteEarnings.payment_history.any { it.status == "completed" })
+    assertTrue(afterCompleteEarnings.total_net > beforeCompleteEarnings.total_net)
+    assertTrue(afterCompleteEarnings.available_balance > beforeCompleteEarnings.available_balance)
+  }
+
+  @Test
+  fun cardPaymentRefreshMovesVolunteerRequestIntoActiveDashboard() {
+    val store = newStoreContext().store
+
+    val create = store.createAssistanceRequest(
+      userId = "user-seed-1",
+      request = CreateAssistanceRequest(
+        userType = "Wheelchair user",
+        location = "Mall",
+        destination = "Gate B",
+        distance = "0.5 km",
+        urgency = "medium",
+        helpType = "Navigation assistance",
+        description = "Need navigation help",
+        payment_method = PaymentMethod.CARD,
+        service_fee = 200.0,
+        hours = 2,
+        price_per_hour = 100
+      )
+    )
+    val requestId = assertIs<ServiceResult.Success<VolunteerRequestDto>>(create).value.id
+
+    assertTrue(assertIs<ServiceResult.Success<ActionResultDto>>(store.acceptRequest("vol-seed-1", requestId)).value.success)
+
+    val checkout = assertIs<ServiceResult.Success<CheckoutResponseDto>>(
+      store.checkoutCard(userId = "user-seed-1", requestId = requestId, amountEgp = 200.0)
+    ).value
+
+    val beforeRefreshActive = assertIs<ServiceResult.Success<VolunteerActiveResponseDto>>(
+      store.getVolunteerActiveDashboard("vol-seed-1")
+    ).value
+    assertTrue(beforeRefreshActive.requests.any { it.id == requestId })
+
+    val refreshedPayment = assertIs<ServiceResult.Success<PaymentStatusDto>>(
+      store.refreshPayment(checkout.payment_id)
+    ).value
+    assertTrue(refreshedPayment.success)
+    assertEquals("captured", refreshedPayment.status)
+
+    val afterRefreshActive = assertIs<ServiceResult.Success<VolunteerActiveResponseDto>>(
+      store.getVolunteerActiveDashboard("vol-seed-1")
+    ).value
+    assertTrue(afterRefreshActive.requests.any { it.id == requestId })
+    assertTrue(afterRefreshActive.counts.active >= 1)
   }
 }

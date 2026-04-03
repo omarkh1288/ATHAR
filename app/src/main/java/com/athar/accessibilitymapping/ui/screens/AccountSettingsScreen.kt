@@ -60,6 +60,7 @@ import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.ApiUpdateProfileRequest
 import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.data.UserRole
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.components.ProfilePhoto
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.localization.AppLanguage
@@ -136,20 +137,24 @@ fun AccountSettingsScreen(
 
   viewModel.loadIfNeeded(userDisabilityType, userRole)
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color.White)
+  AtharPullToRefresh(
+    isRefreshing = isLoading,
+    onRefresh = { viewModel.refresh(userDisabilityType, userRole) }
   ) {
-    ScreenHeader(title = "Account Settings", onBack = onBack, background = NavyPrimary)
-
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .background(BluePrimary)
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp)
+        .background(Color.White)
     ) {
+      ScreenHeader(title = "Account Settings", onBack = onBack, background = NavyPrimary)
+
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(BluePrimary)
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp)
+      ) {
       Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -421,7 +426,8 @@ fun AccountSettingsScreen(
         Text(saveMessage ?: "", color = Color(0xFF166534), fontSize = 14.sp)
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+      }
     }
   }
 }

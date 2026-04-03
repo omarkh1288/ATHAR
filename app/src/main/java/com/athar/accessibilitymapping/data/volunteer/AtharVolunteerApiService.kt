@@ -33,6 +33,7 @@ interface AtharVolunteerApiService {
   suspend fun getReviews(
     @Header("Authorization") authorization: String,
     @Query("page") page: Int = 1,
-    @Query("per_page") perPage: Int = 100
+    @Query("per_page") perPage: Int = 100,
+    @Query("rating") rating: Int? = null
   ): Response<JsonElement>
 }

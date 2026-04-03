@@ -188,122 +188,139 @@ private val atharGlassHtml = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <style>
-/* Base Styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
   width: 100%;
   height: 100%;
-  margin: 0;
-  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: transparent;
-  font-family: inherit;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
 }
 
-/* ========== BUTTON ========== */
-.button-wrap {
-  position: relative;
-  z-index: 2;
-  border-radius: 999vw;
-  background: transparent;
-}
-
-button {
+/* ========== WEBFLOW GLASS BUTTON ========== */
+.glass-btn {
   all: unset;
   cursor: pointer;
   position: relative;
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-  z-index: 3;
-  
-  /* Thick Milky Framer-style Frosted Glass */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.15) 100%);
-  backdrop-filter: blur(20px) saturate(130%);
-  -webkit-backdrop-filter: blur(20px) saturate(130%);
-  
-  border-radius: 999vw;
-  
-  /* Framer exact shadows */
-  box-shadow: 
-    0px 8px 24px rgba(0, 0, 0, 0.08),  /* main soft drop shadow */
-    0px 2px 6px rgba(0, 0, 0, 0.04), /* tighter drop shadow */
-    inset 0px 4px 12px rgba(255, 255, 255, 1), /* top rim thick white highlight */
-    inset 0px -4px 10px rgba(0, 0, 0, 0.04), /* lower dark inward bevel */
-    inset 0px -8px 16px rgba(255, 255, 255, 0.5), /* lower rim white bounce */
-    0px 0px 0px 1px rgba(255, 255, 255, 0.8); /* crisp outer edge */
-    
-  transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1), box-shadow 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  -webkit-tap-highlight-color: transparent;
+
+  /* Frosted glass base — semi-translucent white with strong blur */
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.38) 50%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+  border-radius: 999px;
+
+  /* Webflow-style layered shadows: inset highlights + outer depth */
+  box-shadow:
+    inset 0px 1px 1px 0px rgba(255, 255, 255, 0.60),   /* top edge highlight */
+    inset 0px 6px 12px 0px rgba(255, 255, 255, 0.25),   /* inner soft glow */
+    inset 0px -2px 6px 0px rgba(8, 8, 8, 0.04),         /* bottom inner bevel */
+    0px 1px 2px 0px rgba(8, 8, 8, 0.12),                /* tight outer shadow */
+    0px 4px 8px 0px rgba(8, 8, 8, 0.06),                /* soft outer depth */
+    0px 0px 0px 0.5px rgba(255, 255, 255, 0.50);        /* thin bright border */
+
+  /* Subtle outer border for glass edge definition */
+  border: 1px solid rgba(255, 255, 255, 0.45);
+
+  transition:
+    transform 320ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 320ms cubic-bezier(0.25, 1, 0.5, 1),
+    background 320ms ease;
 }
 
-button:hover {
-  transform: scale(0.975);
-  box-shadow: 
-    0px 4px 12px rgba(0, 0, 0, 0.08), 
-    0px 1px 4px rgba(0, 0, 0, 0.04),
-    inset 0px 4px 12px rgba(255, 255, 255, 1), 
-    inset 0px -4px 10px rgba(0, 0, 0, 0.05), 
-    inset 0px -8px 16px rgba(255, 255, 255, 0.5),
-    0px 0px 0px 1px rgba(255, 255, 255, 0.9);
+.glass-btn:hover {
+  transform: scale(0.98);
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.80) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0.22) 100%
+  );
+  box-shadow:
+    inset 0px 1px 1px 0px rgba(255, 255, 255, 0.70),
+    inset 0px 6px 14px 0px rgba(255, 255, 255, 0.30),
+    inset 0px -2px 6px 0px rgba(8, 8, 8, 0.03),
+    0px 1px 2px 0px rgba(8, 8, 8, 0.10),
+    0px 3px 6px 0px rgba(8, 8, 8, 0.05),
+    0px 0px 0px 0.5px rgba(255, 255, 255, 0.60);
 }
 
-button:active {
-  transform: scale(0.95);
-  box-shadow: 
-    0px 2px 6px rgba(0, 0, 0, 0.06), 
-    inset 0px 4px 8px rgba(0, 0, 0, 0.08), 
-    inset 0px -2px 10px rgba(255, 255, 255, 0.3),
-    0px 0px 0px 1px rgba(255, 255, 255, 0.5);
+.glass-btn:active {
+  transform: scale(0.96);
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.30) 50%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+  box-shadow:
+    inset 0px 2px 4px 0px rgba(8, 8, 8, 0.08),
+    inset 0px -1px 4px 0px rgba(255, 255, 255, 0.20),
+    0px 1px 1px 0px rgba(8, 8, 8, 0.08),
+    0px 0px 0px 0.5px rgba(255, 255, 255, 0.35);
 }
 
-button span {
+/* ========== TEXT ========== */
+.glass-btn span {
   display: block;
+  position: relative;
   user-select: none;
   -webkit-user-select: none;
-  
-  /* Locked typography constraints matching original app style */
+
   font-family: "Roboto", sans-serif;
-  letter-spacing: -0.05em;
-  font-weight: 600; /* SemiBold */
-  font-size: 26px; /* Scaled down representation of 30.sp */
-  color: #1F3C5B; /* NavyPrimary */
-  -webkit-font-smoothing: antialiased;
-  
-  /* Blurry text reflection seen in the Framer layout */
-  text-shadow: 0px 6px 14px rgba(0, 0, 0, 0.3), 0px 2px 4px rgba(0, 0, 0, 0.1);
-  
-  transition: all 300ms cubic-bezier(0.25, 1, 0.5, 1);
-  padding-inline: 1.0em; 
-  padding-block: 0.4em; 
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.03em;
   line-height: 1.2;
+  color: #1F3C5B;
+  -webkit-font-smoothing: antialiased;
+
+  /* Subtle text shadow for depth — not heavy */
+  text-shadow:
+    0px 1px 2px rgba(31, 60, 91, 0.10),
+    0px 0px 1px rgba(255, 255, 255, 0.40);
+
+  padding: 0.35em 0.9em;
+  transition: all 300ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-button:hover span {
-  text-shadow: 0px 3px 8px rgba(0, 0, 0, 0.2), 0px 1px 2px rgba(0, 0, 0, 0.1);
+.glass-btn:active span {
+  transform: translateY(0.5px);
 }
 
-button:active span {
-  text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.15);
-  transform: translateY(1px);
+/* ========== SPECULAR HIGHLIGHT (the glass "shine" stripe) ========== */
+.glass-btn::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 12%;
+  right: 12%;
+  height: 45%;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.0) 100%
+  );
+  pointer-events: none;
 }
 </style>
 </head>
 <body style="background-color: transparent;">
-<svg style="position: absolute; width: 100%; height: 100%; z-index: 0;" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <pattern id="dottedGrid" width="30" height="30" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1" fill="rgba(0,0,0,0.15)" />
-    </pattern>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#dottedGrid)" />
-</svg>
-<div class="button-wrap">
-  <button>
-    <span>Athar</span>
-  </button>
-</div>
+<button class="glass-btn">
+  <span>Athar</span>
+</button>
 </body>
 </html>
 """

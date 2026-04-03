@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.components.ToggleSwitch
 import com.athar.accessibilitymapping.ui.theme.AccentGold
@@ -64,138 +65,143 @@ fun NotificationsScreen(onBack: () -> Unit) {
   val isLoading by viewModel.isLoading.collectAsState()
   val errorMessage by viewModel.errorMessage.collectAsState()
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color.White)
+  AtharPullToRefresh(
+    isRefreshing = isLoading,
+    onRefresh = viewModel::refresh
   ) {
-    ScreenHeader(title = "Notifications", onBack = onBack, background = NavyPrimary)
-
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .background(BluePrimary)
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp)
+        .background(Color.White)
     ) {
-      if (isLoading) {
-        Text("Loading notification settings...", color = NavyPrimary, fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-      }
-      if (errorMessage != null) {
-        Text(errorMessage ?: "", color = Color(0xFFB91C1C), fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-      }
+      ScreenHeader(title = "Notifications", onBack = onBack, background = NavyPrimary)
 
-      NotificationSection(
-        title = "Notification Channels",
-        subtitle = "Choose how you want to receive notifications"
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(BluePrimary)
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp)
       ) {
-        ChannelRow(
-          icon = Icons.Outlined.Bell,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Push Notifications",
-          subtitle = "On this device",
-          enabled = pushEnabled,
-          onToggle = { viewModel.togglePush() }
-        )
-        ChannelRow(
-          icon = Icons.AutoMirrored.Outlined.Chat,
-          iconBackground = Color(0xFF10B981),
-          iconBorder = Color(0xFF059669),
-          title = "Email Notifications",
-          subtitle = "Updates via email",
-          enabled = emailEnabled,
-          onToggle = { viewModel.toggleEmail() }
-        )
-        ChannelRow(
-          icon = Icons.AutoMirrored.Outlined.Chat,
-          iconBackground = AccentGold,
-          iconBorder = AccentGoldDark,
-          title = "SMS Notifications",
-          subtitle = "Text messages",
-          enabled = smsEnabled,
-          onToggle = { viewModel.toggleSms() },
-          showDivider = false
-        )
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      NotificationSection(title = "What to Notify") {
-        ToggleOnlyRow("Volunteer Requests", "New assistance requests nearby", volunteerRequests) {
-          viewModel.toggleVolunteerRequests()
+        if (isLoading) {
+          Text("Loading notification settings...", color = NavyPrimary, fontSize = 14.sp)
+          Spacer(modifier = Modifier.height(12.dp))
         }
-        ToggleOnlyRow("Request Accepted", "Volunteer accepted your request", volunteerAccepted) {
-          viewModel.toggleVolunteerAccepted()
+        if (errorMessage != null) {
+          Text(errorMessage ?: "", color = Color(0xFFB91C1C), fontSize = 14.sp)
+          Spacer(modifier = Modifier.height(12.dp))
         }
-        ToggleOnlyRow("Location Updates", "New accessible places added", locationUpdates) {
-          viewModel.toggleLocationUpdates()
-        }
-        ToggleOnlyRow("Ratings & Reviews", "Someone rated your contribution", newRatings) {
-          viewModel.toggleNewRatings()
-        }
-        ToggleOnlyRow("Community Updates", "News and feature updates", communityUpdates) {
-          viewModel.toggleCommunityUpdates()
-        }
-        ToggleOnlyRow("Marketing Emails", "Tips and promotional content", marketingEmails, showDivider = false) {
-          viewModel.toggleMarketingEmails()
-        }
-      }
 
-      Spacer(modifier = Modifier.height(16.dp))
-
-      NotificationSection(title = "Sound & Vibration") {
-        ChannelRow(
-          icon = Icons.AutoMirrored.Outlined.VolumeUp,
-          iconBackground = AccentGold,
-          iconBorder = AccentGoldDark,
-          title = "Notification Sound",
-          subtitle = "Play sound on notifications",
-          enabled = soundEnabled,
-          onToggle = { viewModel.toggleSound() }
-        )
-        ChannelRow(
-          icon = Icons.Outlined.Bell,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Vibration",
-          subtitle = "Vibrate on notifications",
-          enabled = vibrationEnabled,
-          onToggle = { viewModel.toggleVibration() },
-          showDivider = false
-        )
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      NotificationSection(title = "Quiet Hours") {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFFF7FAFF), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFFD6E0EC), RoundedCornerShape(12.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-          verticalAlignment = Alignment.CenterVertically
+        NotificationSection(
+          title = "Notification Channels",
+          subtitle = "Choose how you want to receive notifications"
         ) {
-          Column {
-            Text(
-              text = "Set Quiet Hours",
-              color = NavyPrimary,
-              fontSize = 16.sp,
-              fontWeight = FontWeight.SemiBold
-            )
-            Text(
-              text = "Mute notifications during specific times",
-              color = NavyPrimary.copy(alpha = 0.8f),
-              fontSize = 14.sp
-            )
+          ChannelRow(
+            icon = Icons.Outlined.Bell,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Push Notifications",
+            subtitle = "On this device",
+            enabled = pushEnabled,
+            onToggle = { viewModel.togglePush() }
+          )
+          ChannelRow(
+            icon = Icons.AutoMirrored.Outlined.Chat,
+            iconBackground = Color(0xFF10B981),
+            iconBorder = Color(0xFF059669),
+            title = "Email Notifications",
+            subtitle = "Updates via email",
+            enabled = emailEnabled,
+            onToggle = { viewModel.toggleEmail() }
+          )
+          ChannelRow(
+            icon = Icons.AutoMirrored.Outlined.Chat,
+            iconBackground = AccentGold,
+            iconBorder = AccentGoldDark,
+            title = "SMS Notifications",
+            subtitle = "Text messages",
+            enabled = smsEnabled,
+            onToggle = { viewModel.toggleSms() },
+            showDivider = false
+          )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        NotificationSection(title = "What to Notify") {
+          ToggleOnlyRow("Volunteer Requests", "New assistance requests nearby", volunteerRequests) {
+            viewModel.toggleVolunteerRequests()
+          }
+          ToggleOnlyRow("Request Accepted", "Volunteer accepted your request", volunteerAccepted) {
+            viewModel.toggleVolunteerAccepted()
+          }
+          ToggleOnlyRow("Location Updates", "New accessible places added", locationUpdates) {
+            viewModel.toggleLocationUpdates()
+          }
+          ToggleOnlyRow("Ratings & Reviews", "Someone rated your contribution", newRatings) {
+            viewModel.toggleNewRatings()
+          }
+          ToggleOnlyRow("Community Updates", "News and feature updates", communityUpdates) {
+            viewModel.toggleCommunityUpdates()
+          }
+          ToggleOnlyRow("Marketing Emails", "Tips and promotional content", marketingEmails, showDivider = false) {
+            viewModel.toggleMarketingEmails()
           }
         }
-      }
 
-      Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        NotificationSection(title = "Sound & Vibration") {
+          ChannelRow(
+            icon = Icons.AutoMirrored.Outlined.VolumeUp,
+            iconBackground = AccentGold,
+            iconBorder = AccentGoldDark,
+            title = "Notification Sound",
+            subtitle = "Play sound on notifications",
+            enabled = soundEnabled,
+            onToggle = { viewModel.toggleSound() }
+          )
+          ChannelRow(
+            icon = Icons.Outlined.Bell,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Vibration",
+            subtitle = "Vibrate on notifications",
+            enabled = vibrationEnabled,
+            onToggle = { viewModel.toggleVibration() },
+            showDivider = false
+          )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        NotificationSection(title = "Quiet Hours") {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(Color(0xFFF7FAFF), RoundedCornerShape(12.dp))
+              .border(1.dp, Color(0xFFD6E0EC), RoundedCornerShape(12.dp))
+              .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text(
+                text = "Set Quiet Hours",
+                color = NavyPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+              )
+              Text(
+                text = "Mute notifications during specific times",
+                color = NavyPrimary.copy(alpha = 0.8f),
+                fontSize = 14.sp
+              )
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+      }
     }
   }
 }

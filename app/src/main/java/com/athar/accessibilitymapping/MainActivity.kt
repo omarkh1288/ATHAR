@@ -44,6 +44,7 @@ import com.athar.accessibilitymapping.data.AuthRepository
 import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.UserRole
+import com.athar.accessibilitymapping.data.volunteer.AtharVolunteerDashboardRepository
 import com.athar.accessibilitymapping.ui.screens.LoginScreen
 import com.athar.accessibilitymapping.ui.screens.MapScreen
 import com.athar.accessibilitymapping.ui.screens.ProfileScreen
@@ -103,6 +104,10 @@ private enum class MainTab {
   Profile
 }
 
+private object SplashSessionTracker {
+  var hasShownSplashInProcess: Boolean = false
+}
+
 @Composable
 private fun AppRoot() {
   val context = LocalContext.current
@@ -114,7 +119,7 @@ private fun AppRoot() {
   var isAuthenticated by rememberSaveable { mutableStateOf(false) }
   var authView by rememberSaveable { mutableStateOf("login") }
   var currentTab by rememberSaveable { mutableStateOf(MainTab.Map) }
-  var showSplash by rememberSaveable { mutableStateOf(true) }
+  var showSplash by rememberSaveable { mutableStateOf(!SplashSessionTracker.hasShownSplashInProcess) }
   var isVolunteerLive by rememberSaveable { mutableStateOf(false) }
   var currentUserId by rememberSaveable { mutableStateOf("") }
   var currentUserName by rememberSaveable { mutableStateOf("Guest") }
@@ -125,6 +130,7 @@ private fun AppRoot() {
   var preferencesLoaded by rememberSaveable { mutableStateOf(false) }
   var restoredOnce by rememberSaveable { mutableStateOf(false) }
   var authNotice by rememberSaveable { mutableStateOf<String?>(null) }
+  var shouldRefreshAccount by rememberSaveable { mutableStateOf(false) }
 
   val role = userRole
   val userName = if (currentUserName != "Guest") {
@@ -166,6 +172,7 @@ private fun AppRoot() {
       isVolunteerLive = restored.volunteerLive
       currentTab = MainTab.Map
       isAuthenticated = true
+      shouldRefreshAccount = false
     } else {
       userRole = null
       currentUserId = ""
@@ -177,6 +184,7 @@ private fun AppRoot() {
       isAuthenticated = false
       currentTab = MainTab.Map
       authView = "login"
+      shouldRefreshAccount = false
     }
     restoredOnce = true
   }
@@ -197,8 +205,8 @@ private fun AppRoot() {
     }
   }
 
-  LaunchedEffect(isAuthenticated, currentUserId) {
-    if (!isAuthenticated || currentUserId.isBlank()) return@LaunchedEffect
+  LaunchedEffect(shouldRefreshAccount, isAuthenticated, currentUserId) {
+    if (!shouldRefreshAccount || !isAuthenticated || currentUserId.isBlank()) return@LaunchedEffect
     when (val accountResult = repository.getCurrentAccount()) {
       is ApiCallResult.Success -> {
         currentUserId = accountResult.data.id
@@ -209,177 +217,187 @@ private fun AppRoot() {
       }
       is ApiCallResult.Failure -> Unit
     }
+    shouldRefreshAccount = false
   }
 
   Box(modifier = Modifier.fillMaxSize()) {
-    ProvideAppLocalization(language = appLanguage) {
-      if (!isAuthenticated || role == null) {
-        if (authView == "login") {
-          LoginScreen(
-            onLogin = { email, password ->
-              when (val result = authRepository.login(email, password)) {
-                is AuthOperationResult.Success -> {
-                  val session = result.session
-                  currentUserId = session.userId
-                  userRole = session.role
-                  currentUserName = session.fullName
-                  currentUserEmail = session.email
-                  currentUserDisabilityType = session.disabilityType
-                  isVolunteerLive = session.volunteerLive
-                  currentTab = MainTab.Map
-                  isAuthenticated = true
-                  null
+    if (preferencesLoaded) {
+      ProvideAppLocalization(language = appLanguage) {
+        if (!isAuthenticated || role == null) {
+          if (authView == "login") {
+            LoginScreen(
+              onLogin = { email, password ->
+                when (val result = authRepository.login(email, password)) {
+                  is AuthOperationResult.Success -> {
+                    AtharVolunteerDashboardRepository.clearCachedDashboards()
+                    val session = result.session
+                    currentUserId = session.userId
+                    userRole = session.role
+                    currentUserName = session.fullName
+                    currentUserEmail = session.email
+                    currentUserDisabilityType = session.disabilityType
+                    isVolunteerLive = session.volunteerLive
+                    currentTab = MainTab.Map
+                    isAuthenticated = true
+                    shouldRefreshAccount = true
+                    null
+                  }
+                  is AuthOperationResult.Error -> result.message
                 }
-                is AuthOperationResult.Error -> result.message
+              },
+              onRegister = { authView = "register" }
+            )
+          } else if (authView == "register") {
+            BackHandler { authView = "login" }
+            RoleSelectionScreen(
+              onComplete = { session ->
+                AtharVolunteerDashboardRepository.clearCachedDashboards()
+                currentUserId = session.userId
+                userRole = session.role
+                currentUserName = session.fullName
+                currentUserEmail = session.email
+                currentUserDisabilityType = session.disabilityType
+                isVolunteerLive = session.volunteerLive
+                currentTab = MainTab.Map
+                isAuthenticated = true
+                authView = "login"
+                shouldRefreshAccount = true
+              },
+              onBack = { authView = "login" },
+              onRegisterUser = { payload ->
+                authRepository.registerUser(payload)
+              },
+              onRegisterVolunteer = { payload ->
+                authRepository.registerVolunteer(payload)
               }
-            },
-            onRegister = { authView = "register" }
-          )
-        } else if (authView == "register") {
-          BackHandler { authView = "login" }
-          RoleSelectionScreen(
-            onComplete = { session ->
-              currentUserId = session.userId
-              userRole = session.role
-              currentUserName = session.fullName
-              currentUserEmail = session.email
-              currentUserDisabilityType = session.disabilityType
-              isVolunteerLive = session.volunteerLive
-              currentTab = MainTab.Map
-              isAuthenticated = true
-              authView = "login"
-            },
-            onBack = { authView = "login" },
-            onRegisterUser = { payload ->
-              authRepository.registerUser(payload)
-            },
-            onRegisterVolunteer = { payload ->
-              authRepository.registerVolunteer(payload)
-            }
-          )
-        }
-      } else {
-        BackHandler(enabled = currentTab != MainTab.Map) { currentTab = MainTab.Map }
-        Column(modifier = Modifier.fillMaxSize()) {
-          Box(modifier = Modifier.weight(1f)) {
-            // MapScreen stays composed always so Google Map is never destroyed
-            Box(
-              modifier = if (currentTab == MainTab.Map) Modifier.fillMaxSize()
-              else Modifier.size(1.dp)
-            ) {
-              MapScreen(
-                userRole = role,
-                userDisabilityType = userDisabilityType,
-                isVolunteerLive = isVolunteerLive,
-                isVolunteerVerified = isVolunteerVerified,
-                onVolunteerLiveToggle = { isVolunteerLive = it }
-              )
-            }
-
-            // Other tabs swap in/out normally
-            if (currentTab != MainTab.Map) {
-              when (currentTab) {
-                MainTab.Requests -> RequestsScreen(
+            )
+          }
+        } else {
+          BackHandler(enabled = currentTab != MainTab.Map) { currentTab = MainTab.Map }
+          Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+              // MapScreen stays composed always so Google Map is never destroyed
+              Box(
+                modifier = if (currentTab == MainTab.Map) Modifier.fillMaxSize()
+                else Modifier.size(1.dp)
+              ) {
+                MapScreen(
                   userRole = role,
-                  isVolunteerLive = isVolunteerLive,
-                  userName = userName
-                )
-                MainTab.Profile -> ProfileScreen(
-                  userRole = role,
-                  userId = currentUserId,
-                  userName = userName,
-                  userEmail = currentUserEmail,
                   userDisabilityType = userDisabilityType,
-                  profilePhotoPath = currentUserPhotoPath,
-                  currentLanguage = appLanguage,
-                  onLanguageChange = { language ->
-                    appLanguageCode = language.code
-                    coroutineScope.launch {
-                      appPreferences.saveLanguage(language.code)
-                    }
-                  },
-                  onProfilePhotoChanged = { photoPath ->
-                    currentUserPhotoPath = photoPath
-                    val activeUserId = currentUserId
-                    coroutineScope.launch {
-                      if (activeUserId.isNotBlank()) {
-                        appPreferences.saveProfilePhotoPath(activeUserId, photoPath)
+                  isVolunteerLive = isVolunteerLive,
+                  isVolunteerVerified = isVolunteerVerified,
+                  onVolunteerLiveToggle = { isVolunteerLive = it }
+                )
+              }
+
+              // Other tabs swap in/out normally
+              if (currentTab != MainTab.Map) {
+                when (currentTab) {
+                  MainTab.Requests -> RequestsScreen(
+                    userRole = role,
+                    userId = currentUserId,
+                    isVolunteerLive = isVolunteerLive,
+                    userName = userName
+                  )
+                  MainTab.Profile -> ProfileScreen(
+                    userRole = role,
+                    userId = currentUserId,
+                    userName = userName,
+                    userEmail = currentUserEmail,
+                    userDisabilityType = userDisabilityType,
+                    profilePhotoPath = currentUserPhotoPath,
+                    currentLanguage = appLanguage,
+                    onLanguageChange = { language ->
+                      appLanguageCode = language.code
+                      coroutineScope.launch {
+                        appPreferences.saveLanguage(language.code)
+                      }
+                    },
+                    onProfilePhotoChanged = { photoPath ->
+                      currentUserPhotoPath = photoPath
+                      val activeUserId = currentUserId
+                      coroutineScope.launch {
+                        if (activeUserId.isNotBlank()) {
+                          appPreferences.saveProfilePhotoPath(activeUserId, photoPath)
+                        }
+                      }
+                    },
+                    onLogout = {
+                      coroutineScope.launch {
+                        authRepository.logout()
+                        AtharVolunteerDashboardRepository.clearCachedDashboards()
+                        userRole = null
+                        currentUserId = ""
+                        currentUserName = "Guest"
+                        currentUserEmail = ""
+                        currentUserDisabilityType = null
+                        currentUserPhotoPath = null
+                        isVolunteerLive = false
+                        isAuthenticated = false
+                        currentTab = MainTab.Map
+                        authView = "login"
+                        shouldRefreshAccount = false
                       }
                     }
-                  },
-                  onLogout = {
-                    coroutineScope.launch {
-                      authRepository.logout()
-                      userRole = null
-                      currentUserId = ""
-                      currentUserName = "Guest"
-                      currentUserEmail = ""
-                      currentUserDisabilityType = null
-                      currentUserPhotoPath = null
-                      isVolunteerLive = false
-                      isAuthenticated = false
-                      currentTab = MainTab.Map
-                      authView = "login"
-                    }
-                  }
-                )
-                else -> {}
+                  )
+                  else -> {}
+                }
               }
             }
-          }
 
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .background(Color.White)
-          ) {
-            HorizontalDivider(thickness = 2.dp, color = Gray200)
-            Row(
+            Column(
               modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
-              horizontalArrangement = Arrangement.SpaceAround,
-              verticalAlignment = Alignment.CenterVertically
+                .background(Color.White)
             ) {
-              BottomTabButton(
-                modifier = Modifier.weight(1f),
-                label = "Map",
-                selected = currentTab == MainTab.Map,
-                icon = {
-                  Icon(
-                    imageVector = LucideIcons.Map,
-                    contentDescription = "Map view",
-                    modifier = Modifier.size(28.dp)
-                  )
-                },
-                onClick = { currentTab = MainTab.Map }
-              )
-              BottomTabButton(
-                modifier = Modifier.weight(1f),
-                label = if (role == UserRole.Volunteer) "Dashboard" else "Requests",
-                selected = currentTab == MainTab.Requests,
-                icon = {
-                  Icon(
-                    imageVector = LucideIcons.MessageCircle,
-                    contentDescription = "Requests view",
-                    modifier = Modifier.size(28.dp)
-                  )
-                },
-                onClick = { currentTab = MainTab.Requests }
-              )
-              BottomTabButton(
-                modifier = Modifier.weight(1f),
-                label = "Prof\u200Cile",
-                selected = currentTab == MainTab.Profile,
-                icon = {
-                  Icon(
-                    imageVector = LucideIcons.User,
-                    contentDescription = "Profile view",
-                    modifier = Modifier.size(28.dp)
-                  )
-                },
-                onClick = { currentTab = MainTab.Profile }
-              )
+              HorizontalDivider(thickness = 2.dp, color = Gray200)
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(80.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                BottomTabButton(
+                  modifier = Modifier.weight(1f),
+                  label = "Map",
+                  selected = currentTab == MainTab.Map,
+                  icon = {
+                    Icon(
+                      imageVector = LucideIcons.Map,
+                      contentDescription = "Map view",
+                      modifier = Modifier.size(28.dp)
+                    )
+                  },
+                  onClick = { currentTab = MainTab.Map }
+                )
+                BottomTabButton(
+                  modifier = Modifier.weight(1f),
+                  label = if (role == UserRole.Volunteer) "Dashboard" else "Requests",
+                  selected = currentTab == MainTab.Requests,
+                  icon = {
+                    Icon(
+                      imageVector = LucideIcons.MessageCircle,
+                      contentDescription = "Requests view",
+                      modifier = Modifier.size(28.dp)
+                    )
+                  },
+                  onClick = { currentTab = MainTab.Requests }
+                )
+                BottomTabButton(
+                  modifier = Modifier.weight(1f),
+                  label = "Prof\u200Cile",
+                  selected = currentTab == MainTab.Profile,
+                  icon = {
+                    Icon(
+                      imageVector = LucideIcons.User,
+                      contentDescription = "Profile view",
+                      modifier = Modifier.size(28.dp)
+                    )
+                  },
+                  onClick = { currentTab = MainTab.Profile }
+                )
+              }
             }
           }
         }
@@ -387,7 +405,12 @@ private fun AppRoot() {
     }
 
     if (showSplash) {
-      AtharSplashScreen(onComplete = { showSplash = false })
+      AtharSplashScreen(
+        onComplete = {
+          showSplash = false
+          SplashSessionTracker.hasShownSplashInProcess = true
+        }
+      )
     }
   }
 }

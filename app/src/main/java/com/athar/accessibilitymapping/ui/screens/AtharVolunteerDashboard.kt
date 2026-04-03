@@ -1,4 +1,4 @@
-﻿package com.athar.accessibilitymapping.ui.screens
+package com.athar.accessibilitymapping.ui.screens
 
 /**
  * ---------------------------------------------------------------------------
@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,14 +76,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.AssistanceRequest as DomainAssistanceRequest
-import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.data.RequestStatus
 import com.athar.accessibilitymapping.data.VolunteerDashboardCounts
-import com.athar.accessibilitymapping.data.VolunteerImpactDashboard
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 
 // ---------------------------------------------------------------------------
 // ATHAR COLOR PALETTE
@@ -132,12 +130,6 @@ private object VolunteerDashboardColors {
 // ---------------------------------------------------------------------------
 // DATA MODELS
 // ---------------------------------------------------------------------------
-
-private enum class DashboardTab(val label: String) {
-    INCOMING("Incoming"),
-    ACCEPTED("Active"),
-    HISTORY("History")
-}
 
 private enum class Urgency { LOW, MEDIUM, HIGH }
 
@@ -277,7 +269,7 @@ private fun DomainAssistanceRequest.toHistoryItem(): HistoryItem {
     )
 }
 
-private fun AssistanceRequest.toCompletedHistoryItem(): HistoryItem {
+private fun VolunteerDashboardLocalHistoryEntry.toHistoryItem(): HistoryItem {
     return HistoryItem(
         id = id,
         userName = userName,
@@ -388,189 +380,135 @@ private fun extractPhoneNumber(vararg candidates: String): String? {
 
 @Composable
 fun AtharVolunteerDashboard(
+    userId: String,
     isVolunteerLive: Boolean,
     userName: String = "Sara Mohammed",
     onNavigateToMap: () -> Unit = {},
+    viewModel: VolunteerDashboardViewModel = viewModel(key = "volunteer-dashboard-$userId")
 ) {
-    val context = LocalContext.current
-    val repository = remember(context) { AtharRepository(context) }
-    val coroutineScope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(DashboardTab.INCOMING) }
-    var activeRequests by remember { mutableStateOf<List<AssistanceRequest>>(emptyList()) }
-    var acceptedRequest by remember { mutableStateOf<AssistanceRequest?>(null) }
-    var historyItems by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
-    var localCompletedItems by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
-    var actionError by remember { mutableStateOf<String?>(null) }
-    var tabCounts by remember { mutableStateOf(VolunteerDashboardCounts()) }
-    var incomingAlertMessage by remember { mutableStateOf("No incoming requests nearby.") }
-    var activeStatusBanner by remember { mutableStateOf("Assistance in Progress") }
-    var volunteerStats by remember { mutableStateOf(defaultVolunteerStats) }
-
-    suspend fun refreshIncomingData() {
-        val incoming = repository.getVolunteerIncomingDashboard(perPage = 50)
-        val mappedIncomingRequests = incoming.requests.map { it.toDashboardRequest() }
-        tabCounts = incoming.counts
-        val alertCount = if (incoming.incomingAlert.count > 0) {
-            incoming.incomingAlert.count
-        } else {
-            mappedIncomingRequests.size
-        }
-        incomingAlertMessage = incoming.incomingAlert.message.ifBlank {
-            if (alertCount > 0) {
-                "$alertCount ${if (alertCount == 1) "person needs" else "people need"} your help nearby"
-            } else {
-                "No incoming requests nearby."
-            }
-        }
-        activeRequests = mappedIncomingRequests.filter { request -> request.id != acceptedRequest?.id }
+    LaunchedEffect(isVolunteerLive) {
+        // Keep dashboard data in the ViewModel so navigation does not trigger a fresh load.
+        viewModel.loadIfNeeded(isVolunteerLive)
     }
 
-    suspend fun refreshActiveData() {
-        val active = repository.getVolunteerActiveDashboard(perPage = 50)
-        val mappedActiveRequests = active.requests.map { it.toDashboardRequest() }
-        tabCounts = active.counts
-        activeStatusBanner = active.statusBanner.ifBlank { "Assistance in Progress" }
-        acceptedRequest = acceptedRequest?.let { current ->
-            mappedActiveRequests.firstOrNull { request -> request.id == current.id } ?: current
-        } ?: mappedActiveRequests.firstOrNull()
-    }
-
-    suspend fun refreshHistoryData() {
-        val history = repository.getVolunteerHistoryDashboard(perPage = 50)
-        val remoteHistory = history.requests.map { it.toHistoryItem() }
-        tabCounts = history.counts
-        volunteerStats = volunteerStats.copy(
-            totalAssists = history.impact.totalAssists,
-            avgRating = history.impact.avgRating,
-            thisWeek = history.impact.thisWeek
-        )
-        historyItems = mergeHistoryItems(localCompletedItems, remoteHistory)
-    }
-
-    suspend fun refreshImpactData() {
-        val impact: VolunteerImpactDashboard = repository.getVolunteerImpactDashboard()
-        tabCounts = impact.counts
-        volunteerStats = volunteerStats.copy(
-            totalAssists = impact.impact.totalAssists,
-            avgRating = impact.impact.avgRating,
-            thisWeek = impact.impact.thisWeek
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            refreshImpactData()
-            delay(30000L)
-        }
-    }
-
-    LaunchedEffect(isVolunteerLive, activeTab) {
-        actionError = null
-        if (!isVolunteerLive) {
-            activeRequests = emptyList()
-            acceptedRequest = null
-            historyItems = emptyList()
-            localCompletedItems = emptyList()
-            return@LaunchedEffect
-        }
-        while (true) {
-            when (activeTab) {
-                DashboardTab.INCOMING -> refreshIncomingData()
-                DashboardTab.ACCEPTED -> refreshActiveData()
-                DashboardTab.HISTORY -> refreshHistoryData()
-            }
-            val pollDelayMs = when (activeTab) {
-                DashboardTab.INCOMING -> 15000L
-                DashboardTab.ACCEPTED -> 20000L
-                DashboardTab.HISTORY -> 30000L
-            }
-            delay(pollDelayMs)
-        }
-    }
-
-    val onAccept: (AssistanceRequest) -> Unit = { request ->
-        coroutineScope.launch {
-            actionError = null
-            when (val result = repository.acceptRequest(request.id)) {
-                is ApiCallResult.Success -> {
-                    acceptedRequest = request
-                    activeTab = DashboardTab.ACCEPTED
-                    refreshActiveData()
-                    refreshIncomingData()
-                }
-                is ApiCallResult.Failure -> {
-                    actionError = result.message
-                }
-            }
-        }
-    }
-
-    val onDecline: (String) -> Unit = { requestId ->
-        coroutineScope.launch {
-            actionError = null
-            when (val result = repository.declineRequest(requestId)) {
-                is ApiCallResult.Success -> refreshIncomingData()
-                is ApiCallResult.Failure -> {
-                    actionError = result.message
-                }
-            }
-        }
-    }
-
-    val onComplete: () -> Unit = {
-        acceptedRequest?.let { completedRequest ->
-            val requestId = completedRequest.id
-            coroutineScope.launch {
-                actionError = null
-                when (val result = repository.completeRequest(requestId)) {
-                    is ApiCallResult.Success -> {
-                        localCompletedItems = listOf(completedRequest.toCompletedHistoryItem()) +
-                            localCompletedItems.filterNot { existing -> existing.id == completedRequest.id }
-                        acceptedRequest = null
-                        activeTab = DashboardTab.HISTORY
-                        historyItems = mergeHistoryItems(localCompletedItems, historyItems)
-                        refreshHistoryData()
-                        refreshActiveData()
-                        refreshImpactData()
-                    }
-                    is ApiCallResult.Failure -> {
-                        actionError = result.message
-                    }
-                }
-            }
-        }
-    }
+    val volunteerStats = VolunteerStats(
+        totalAssists = uiState.stats.totalAssists,
+        thisWeek = uiState.stats.thisWeek,
+        avgRating = uiState.stats.avgRating,
+        streak = uiState.stats.streak
+    )
+    val weeklyActivity = uiState.weeklyActivity
+    val activeRequests = uiState.incomingRequests.map { it.toDashboardRequest() }
+    val acceptedRequest = uiState.activeRequest?.toDashboardRequest()
+    val historyItems = mergeHistoryItems(
+        localItems = uiState.localCompletedHistory.map { it.toHistoryItem() },
+        remoteItems = uiState.historyRequests.map { it.toHistoryItem() }
+    )
 
     CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = FontFamily.SansSerif)) {
         if (!isVolunteerLive) {
-            OfflineView(
-                userName = userName,
-                onNavigateToMap = onNavigateToMap,
-                stats = volunteerStats
-            )
+            AtharPullToRefresh(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { viewModel.refresh(isVolunteerLive = false) }
+            ) {
+                OfflineView(
+                    userName = userName,
+                    onNavigateToMap = onNavigateToMap,
+                    stats = volunteerStats
+                )
+            }
         } else {
-            LiveDashboard(
-                activeTab = activeTab,
-                onTabSelected = { activeTab = it },
-                tabCounts = tabCounts,
-                stats = volunteerStats,
-                incomingAlertMessage = incomingAlertMessage,
-                activeStatusBanner = activeStatusBanner,
-                activeRequests = activeRequests,
-                acceptedRequest = acceptedRequest,
-                onAccept = onAccept,
-                onDecline = onDecline,
-                onComplete = onComplete,
-                historyItems = historyItems,
-                actionError = actionError,
-            )
+            AtharPullToRefresh(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { viewModel.refresh(isVolunteerLive = true) }
+            ) {
+                LiveDashboard(
+                    activeTab = uiState.activeTab,
+                    onTabSelected = { viewModel.selectTab(it, isVolunteerLive = true) },
+                    tabCounts = uiState.tabCounts,
+                    stats = volunteerStats,
+                    weeklyActivity = weeklyActivity,
+                    incomingAlertMessage = uiState.incomingAlertMessage,
+                    activeStatusBanner = uiState.activeStatusBanner,
+                    activeRequests = activeRequests,
+                    acceptedRequest = acceptedRequest,
+                    onAccept = { request ->
+                        uiState.incomingRequests.firstOrNull { it.id == request.id }?.let(viewModel::acceptRequest)
+                    },
+                    onDecline = viewModel::declineRequest,
+                    onComplete = viewModel::completeAcceptedRequest,
+                    historyItems = historyItems,
+                    actionError = uiState.actionError
+                )
+            }
         }
     }
 }
 
+@Composable
+private fun WeeklyActivityEmptyChartDashboard() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(2.dp, VolunteerDashboardColors.Gray200, RoundedCornerShape(16.dp))
+            .background(VolunteerDashboardColors.White)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "WEEKLY ACTIVITY",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = VolunteerDashboardColors.TextLight,
+                letterSpacing = 0.5.sp
+            )
+            Icon(
+                Icons.Filled.BarChart,
+                contentDescription = null,
+                tint = VolunteerDashboardColors.Accent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        
+        Spacer(Modifier.height(24.dp))
+        
+        Icon(
+            Icons.Outlined.Analytics,
+            contentDescription = "No data",
+            tint = VolunteerDashboardColors.Gray200,
+            modifier = Modifier.size(48.dp)
+        )
+        
+        Spacer(Modifier.height(8.dp))
+        
+        Text(
+            "No weekly activity yet.",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = VolunteerDashboardColors.TextSecondary
+        )
+        Text(
+            "Complete requests to see your activity summary.",
+            fontSize = 13.sp,
+            color = VolunteerDashboardColors.TextLight,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+        
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
 // ---------------------------------------------------------------------------
-// OFFLINE VIEW
+// ITEM ROWS
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -585,7 +523,10 @@ private fun OfflineView(
             .background(VolunteerDashboardColors.Primary)
     ) {
         // Header
-        DashboardHeader(title = "Volunteer Dashboard", subtitle = "Welcome back, $userName")
+        DashboardHeader(
+            title = "Volunteer Dashboard",
+            subtitle = "Welcome back, $userName"
+        )
 
         // Content
         Column(
@@ -664,10 +605,11 @@ private fun OfflineView(
 
 @Composable
 private fun LiveDashboard(
-    activeTab: DashboardTab,
-    onTabSelected: (DashboardTab) -> Unit,
+    activeTab: VolunteerDashboardTab,
+    onTabSelected: (VolunteerDashboardTab) -> Unit,
     tabCounts: VolunteerDashboardCounts,
     stats: VolunteerStats,
+    weeklyActivity: List<VolunteerDashboardWeeklyPoint>,
     incomingAlertMessage: String,
     activeStatusBanner: String,
     activeRequests: List<AssistanceRequest>,
@@ -749,12 +691,12 @@ private fun LiveDashboard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val tabBadgeCounts = mapOf(
-                    DashboardTab.INCOMING to tabCounts.incoming,
-                    DashboardTab.ACCEPTED to tabCounts.active,
-                    DashboardTab.HISTORY to tabCounts.history,
+                    VolunteerDashboardTab.INCOMING to tabCounts.incoming,
+                    VolunteerDashboardTab.ACCEPTED to tabCounts.active,
+                    VolunteerDashboardTab.HISTORY to tabCounts.history,
                 )
 
-                DashboardTab.entries.forEach { tab ->
+                VolunteerDashboardTab.entries.forEach { tab ->
                     val isSelected = activeTab == tab
                     val count = tabBadgeCounts[tab] ?: 0
 
@@ -796,18 +738,18 @@ private fun LiveDashboard(
 
         // --- Tab Content ---
         when (activeTab) {
-            DashboardTab.INCOMING -> IncomingRequestsTab(
+            VolunteerDashboardTab.INCOMING -> IncomingRequestsTab(
                 requests = activeRequests,
                 incomingAlertMessage = incomingAlertMessage,
                 onAccept = onAccept,
                 onDecline = onDecline
             )
-            DashboardTab.ACCEPTED -> AcceptedTab(
+            VolunteerDashboardTab.ACCEPTED -> AcceptedTab(
                 acceptedRequest = acceptedRequest,
                 statusBanner = activeStatusBanner,
                 onComplete = onComplete
             )
-            DashboardTab.HISTORY -> HistoryTab(historyItems = historyItems, stats = stats)
+            VolunteerDashboardTab.HISTORY -> HistoryTab(historyItems = historyItems, stats = stats, weeklyActivity = weeklyActivity)
         }
     }
 }
@@ -1291,10 +1233,11 @@ private fun AcceptedTab(
 private fun HistoryTab(
     historyItems: List<HistoryItem>,
     stats: VolunteerStats,
+    weeklyActivity: List<VolunteerDashboardWeeklyPoint>,
 ) {
     var selectedItem by remember { mutableStateOf<HistoryItem?>(null) }
 
-    if (historyItems.isEmpty()) {
+    if (historyItems.isEmpty() && weeklyActivity.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.Schedule,
             iconTint = VolunteerDashboardColors.Secondary,
@@ -1357,6 +1300,15 @@ private fun HistoryTab(
             }
         }
 
+        // -- Weekly Activity Chart --
+        if (weeklyActivity.isNotEmpty()) {
+            if (weeklyActivity.any { it.completed > 0 }) {
+                WeeklyActivityChart(weeklyActivity = weeklyActivity)
+            } else {
+                WeeklyActivityEmptyChartDashboard()
+            }
+        }
+
         Spacer(Modifier.height(4.dp))
 
         // -- History items --
@@ -1372,6 +1324,123 @@ private fun HistoryTab(
             item = item,
             onDismiss = { selectedItem = null }
         )
+    }
+}
+
+@Composable
+private fun WeeklyActivityChart(weeklyActivity: List<VolunteerDashboardWeeklyPoint>) {
+    val maxValue = remember(weeklyActivity) {
+        weeklyActivity.maxOfOrNull { it.completed }?.coerceAtLeast(1) ?: 1
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(2.dp, VolunteerDashboardColors.Gray200, RoundedCornerShape(16.dp))
+            .background(VolunteerDashboardColors.White)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "WEEKLY ACTIVITY",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = VolunteerDashboardColors.TextLight,
+                letterSpacing = 0.5.sp
+            )
+            Icon(
+                Icons.Filled.BarChart,
+                contentDescription = null,
+                tint = VolunteerDashboardColors.Accent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Bar chart
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            weeklyActivity.forEach { point ->
+                val fraction = point.completed.toFloat() / maxValue
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    // Count label above bar
+                    if (point.completed > 0) {
+                        Text(
+                            "${point.completed}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = VolunteerDashboardColors.Secondary
+                        )
+                        Spacer(Modifier.height(2.dp))
+                    }
+                    // Bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height((90.dp * fraction).coerceAtLeast(if (point.completed > 0) 4.dp else 0.dp))
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                            .background(
+                                if (point.completed > 0) VolunteerDashboardColors.Secondary
+                                else VolunteerDashboardColors.Gray200
+                            )
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // Day labels
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            weeklyActivity.forEach { point ->
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        point.day.take(3),
+                        fontSize = 11.sp,
+                        color = VolunteerDashboardColors.TextLight,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Summary row
+        val totalCompleted = weeklyActivity.sumOf { it.completed }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "$totalCompleted completed this week",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = VolunteerDashboardColors.Success
+            )
+        }
     }
 }
 
@@ -1492,7 +1561,10 @@ private fun HistoryDetailDialog(
 
 /** Navy header bar with title + optional subtitle */
 @Composable
-private fun DashboardHeader(title: String, subtitle: String? = null) {
+private fun DashboardHeader(
+    title: String,
+    subtitle: String? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1501,7 +1573,12 @@ private fun DashboardHeader(title: String, subtitle: String? = null) {
             .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 24.dp)
     ) {
-        Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = VolunteerDashboardColors.White)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = VolunteerDashboardColors.White)
+        }
         if (subtitle != null) {
             Spacer(Modifier.height(4.dp))
             Text(subtitle, fontSize = 14.sp, color = VolunteerDashboardColors.PrimaryGradient.copy(alpha = 0.8f))
@@ -1684,7 +1761,7 @@ private fun Modifier.drawTopBorder(color: Color, width: Float = 2f): Modifier = 
 @Composable
 private fun PreviewOffline() {
     MaterialTheme {
-        AtharVolunteerDashboard(isVolunteerLive = false, userName = "Sara Mohammed")
+        AtharVolunteerDashboard(userId = "preview-volunteer", isVolunteerLive = false, userName = "Sara Mohammed")
     }
 }
 
@@ -1692,7 +1769,7 @@ private fun PreviewOffline() {
 @Composable
 private fun PreviewLive() {
     MaterialTheme {
-        AtharVolunteerDashboard(isVolunteerLive = true, userName = "Sara Mohammed")
+        AtharVolunteerDashboard(userId = "preview-volunteer", isVolunteerLive = true, userName = "Sara Mohammed")
     }
 }
 

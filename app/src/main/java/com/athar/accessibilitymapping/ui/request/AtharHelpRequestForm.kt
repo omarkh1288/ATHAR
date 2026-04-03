@@ -110,6 +110,8 @@ fun AtharHelpRequestForm(
     var showDestinationSuggestions by remember { mutableStateOf(false) }
     var isLocating by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf("") }
+    var lastSelectedLocation by remember { mutableStateOf("") }
+    var lastSelectedDestination by remember { mutableStateOf("") }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -131,7 +133,7 @@ fun AtharHelpRequestForm(
 
     // Debounced search for location field
     LaunchedEffect(location) {
-        if (location.length < 2 || showLocationSuggestions && locationSuggestions.any { it == location }) return@LaunchedEffect
+        if (location.length < 2 || location == lastSelectedLocation) return@LaunchedEffect
         delay(350)
         isSearchingLocation = true
         locationSuggestions = fetchHelpRequestSuggestions(location)
@@ -141,7 +143,7 @@ fun AtharHelpRequestForm(
 
     // Debounced search for destination field
     LaunchedEffect(destination) {
-        if (destination.length < 2 || showDestinationSuggestions && destinationSuggestions.any { it == destination }) return@LaunchedEffect
+        if (destination.length < 2 || destination == lastSelectedDestination) return@LaunchedEffect
         delay(350)
         isSearchingDestination = true
         destinationSuggestions = fetchHelpRequestSuggestions(destination)
@@ -170,9 +172,13 @@ fun AtharHelpRequestForm(
                     val address = reverseGeocodeForForm(context, loc.latitude, loc.longitude)
                     if (forDestination) {
                         destination = address
+                        lastSelectedDestination = address
+                        destinationSuggestions = emptyList()
                         showDestinationSuggestions = false
                     } else {
                         location = address
+                        lastSelectedLocation = address
+                        locationSuggestions = emptyList()
                         showLocationSuggestions = false
                     }
                 }
@@ -238,10 +244,26 @@ fun AtharHelpRequestForm(
                     showDestinationSuggestions = showDestinationSuggestions,
                     isLocating = isLocating,
                     locationError = locationError,
-                    onLocationChange = { location = it; showLocationSuggestions = false },
-                    onLocationQueryChange = { location = it },
-                    onDestinationChange = { destination = it; showDestinationSuggestions = false },
-                    onDestinationQueryChange = { destination = it },
+                    onLocationChange = {
+                        location = it
+                        lastSelectedLocation = it
+                        locationSuggestions = emptyList()
+                        showLocationSuggestions = false
+                    },
+                    onLocationQueryChange = {
+                        location = it
+                        if (it != lastSelectedLocation) lastSelectedLocation = ""
+                    },
+                    onDestinationChange = {
+                        destination = it
+                        lastSelectedDestination = it
+                        destinationSuggestions = emptyList()
+                        showDestinationSuggestions = false
+                    },
+                    onDestinationQueryChange = {
+                        destination = it
+                        if (it != lastSelectedDestination) lastSelectedDestination = ""
+                    },
                     onHelpTypeChange = { helpType = it; showHelpTypeDropdown = false },
                     onUrgencyChange = { urgency = it },
                     onPaymentMethodChange = { paymentMethod = it },
@@ -410,7 +432,7 @@ private fun RequestFormScreen(
 
                 // ── Current Location ──
                 FormField(
-                    label = "Your Current Location *",
+                    label = "Your Current Location",
                     icon = Icons.Filled.LocationOn,
                 ) {
                     Box {
@@ -484,7 +506,7 @@ private fun RequestFormScreen(
 
                 // ── Destination ──
                 FormField(
-                    label = "Where do you need to go? *",
+                    label = "Where do you need to go?",
                     icon = Icons.Filled.Navigation,
                 ) {
                     Box {

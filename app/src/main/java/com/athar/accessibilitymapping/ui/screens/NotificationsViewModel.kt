@@ -56,7 +56,18 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
 
   fun loadIfNeeded() {
     if (loaded) return
+    load()
+  }
+
+  fun refresh() {
+    loaded = false
+    load()
+  }
+
+  private fun load() {
     loaded = true
+    _isLoading.value = true
+    _errorMessage.value = null
     viewModelScope.launch {
       when (val result = repository.getCurrentAccount()) {
         is ApiCallResult.Success -> {

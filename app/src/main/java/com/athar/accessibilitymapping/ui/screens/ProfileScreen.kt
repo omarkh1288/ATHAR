@@ -54,6 +54,7 @@ import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.data.ContributionStats
 import com.athar.accessibilitymapping.data.UserProfile
 import com.athar.accessibilitymapping.data.UserRole
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.components.ProfilePhoto
 import com.athar.accessibilitymapping.ui.icons.LucideIcons as AtharIcons
 import com.athar.accessibilitymapping.ui.localization.AppLanguage
@@ -152,10 +153,11 @@ fun ProfileScreen(
   onProfilePhotoChanged: (String?) -> Unit,
   onLogout: () -> Unit
 ) {
-  val profileViewModel: ProfileViewModel = viewModel()
+  val profileViewModel: ProfileViewModel = viewModel(key = "profile-$userId")
   val profile by profileViewModel.profile.collectAsState()
-  var activeScreen by remember { mutableStateOf("profile") }
-  var showLogoutDialog by remember { mutableStateOf(false) }
+  val isProfileLoaded by profileViewModel.isLoaded.collectAsState()
+  var activeScreen by remember(userId) { mutableStateOf("profile") }
+  var showLogoutDialog by remember(userId) { mutableStateOf(false) }
 
   BackHandler(enabled = activeScreen != "profile") {
     activeScreen = if (activeScreen == "changePassword") "account" else "profile"
@@ -192,7 +194,7 @@ fun ProfileScreen(
     return
   }
   if (activeScreen == "analytics") {
-    VolunteerAnalyticsScreen(onBack = { activeScreen = "profile" })
+    VolunteerAnalyticsScreen(userId = userId, onBack = { activeScreen = "profile" })
     return
   }
   if (activeScreen == "signTranslator") {
@@ -216,67 +218,71 @@ fun ProfileScreen(
     ProfileMenuItem(Lucide.CircleQuestionMark, "Help & Support", "Get help or send feedback", "help")
   )
 
-  var logoutInteractionSourceKey by remember { mutableStateOf(0) }
+  var logoutInteractionSourceKey by remember(userId) { mutableStateOf(0) }
   val logoutInteractionSource = remember(logoutInteractionSourceKey) { MutableInteractionSource() }
   val isLogoutHovered by logoutInteractionSource.collectIsHoveredAsState()
   val isLogoutPressed by logoutInteractionSource.collectIsPressedAsState()
   val isLogoutFocused by logoutInteractionSource.collectIsFocusedAsState()
   var isLogoutHoverInterop by remember { mutableStateOf(false) }
 
-  LazyColumn(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(BluePrimary)
+  AtharPullToRefresh(
+    isRefreshing = !isProfileLoaded,
+    onRefresh = profileViewModel::refresh
   ) {
-    item {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .background(NavyPrimary)
-          .statusBarsPadding()
-          .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 34.dp)
-      ) {
-        Text(
-          text = "Prof\u200Cile",
-          color = Color.White,
-          style = ProfileHeaderTextStyle
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-          modifier = Modifier
-            .background(NavyDark, RoundedCornerShape(999.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Icon(
-            imageVector = if (userRole == UserRole.User) Lucide.User else Lucide.Award,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(16.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = if (userRole == UserRole.User) "User Account" else "Volunteer Account",
-            color = Color.White,
-            style = ProfileBodySmallStyle
-          )
-        }
-      }
-    }
-
-    item {
-      Column(
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .offset(y = (-16).dp)
-      ) {
+    LazyColumn(
+      modifier = Modifier
+        .fillMaxSize()
+        .background(BluePrimary)
+    ) {
+      item {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .shadow(10.dp, RoundedCornerShape(16.dp))
-            .background(Color.White, RoundedCornerShape(16.dp))
-            .padding(24.dp)
+            .background(NavyPrimary)
+            .statusBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 34.dp)
         ) {
+          Text(
+            text = "Prof\u200Cile",
+            color = Color.White,
+            style = ProfileHeaderTextStyle
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+          Row(
+            modifier = Modifier
+              .background(NavyDark, RoundedCornerShape(999.dp))
+              .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = if (userRole == UserRole.User) Lucide.User else Lucide.Award,
+              contentDescription = null,
+              tint = Color.White,
+              modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = if (userRole == UserRole.User) "User Account" else "Volunteer Account",
+              color = Color.White,
+              style = ProfileBodySmallStyle
+            )
+          }
+        }
+      }
+
+      item {
+        Column(
+          modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .offset(y = (-16).dp)
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .shadow(10.dp, RoundedCornerShape(16.dp))
+              .background(Color.White, RoundedCornerShape(16.dp))
+              .padding(24.dp)
+          ) {
           Row(verticalAlignment = Alignment.Top) {
             ProfilePhoto(
               photoPath = profilePhotoPath,
@@ -358,9 +364,9 @@ fun ProfileScreen(
               )
             }
           }
+          }
         }
       }
-    }
 
     item {
       Column(
@@ -538,6 +544,7 @@ fun ProfileScreen(
       }
       Spacer(modifier = Modifier.height(24.dp))
     }
+    }
   }
 
   if (showLogoutDialog) {
@@ -600,4 +607,3 @@ private fun ProfileFeatureButton(
     )
   }
 }
-

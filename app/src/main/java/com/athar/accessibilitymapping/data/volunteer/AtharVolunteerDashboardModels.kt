@@ -33,6 +33,7 @@ data class VolunteerDashboardUiModel(
   val monthlyNetEarnings: List<VolunteerMonthlyNetUiModel> = emptyList(),
   val withdrawalHistory: List<VolunteerWithdrawalHistoryItemUiModel> = emptyList(),
   val paymentHistory: List<VolunteerPaymentHistoryItemUiModel> = emptyList(),
+  val historyRecords: List<VolunteerHistoryRecordUiModel> = emptyList(),
   val performance: VolunteerPerformanceUiModel = VolunteerPerformanceUiModel(),
   val reviews: VolunteerReviewsUiModel = VolunteerReviewsUiModel(),
   val impact: VolunteerImpactUiModel = VolunteerImpactUiModel()
@@ -88,6 +89,18 @@ data class VolunteerPaymentHistoryItemUiModel(
   val status: String,
   val userName: String,
   val hours: Int
+)
+
+data class VolunteerHistoryRecordUiModel(
+  val id: String,
+  val userName: String,
+  val helpType: String,
+  val location: String,
+  val dateLabel: String,
+  val status: String,
+  val hours: Int,
+  val grossAmount: Double,
+  val netAmount: Double
 )
 
 data class VolunteerPerformanceUiModel(
@@ -165,13 +178,15 @@ data class AtharVolunteerHistoryItemDto(
   val assistanceType: String? = null,
   val status: String? = null,
   val eventDateTime: String? = null,
+  val requestTimeLabel: String? = null,
   val createdAt: String? = null,
   val completedAt: String? = null,
   val updatedAt: String? = null,
   val netAmount: Double? = null,
   val grossAmount: Double? = null,
   val hours: Int? = null,
-  val userName: String? = null
+  val userName: String? = null,
+  val location: String? = null
 )
 
 @Serializable
@@ -189,7 +204,11 @@ data class AtharVolunteerEarningsSummaryDto(
   val pendingBalance: Double? = null,
   val grossEarnings: Double? = null,
   val totalFees: Double? = null,
-  val monthlyChangePercent: Double? = null
+  val monthlyChangePercent: Double? = null,
+  val thisWeekNet: Double? = null,
+  val currentMonthLabel: String? = null,
+  val currentMonthNet: Double? = null,
+  val lastMonthNet: Double? = null
 )
 
 @Serializable
@@ -277,12 +296,14 @@ sealed interface VolunteerAnalyticsUiState {
   data object Loading : VolunteerAnalyticsUiState
   data class Content(
     val model: VolunteerDashboardUiModel,
-    val warnings: List<String> = emptyList()
+    val warnings: List<String> = emptyList(),
+    val isRefreshing: Boolean = false
   ) : VolunteerAnalyticsUiState
   data class Empty(
     val model: VolunteerDashboardUiModel,
     val message: String,
-    val warnings: List<String> = emptyList()
+    val warnings: List<String> = emptyList(),
+    val isRefreshing: Boolean = false
   ) : VolunteerAnalyticsUiState
   data class Error(
     val message: String

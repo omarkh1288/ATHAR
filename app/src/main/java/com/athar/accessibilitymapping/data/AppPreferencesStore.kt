@@ -16,6 +16,7 @@ private val Context.appPreferencesDataStore by preferencesDataStore(name = APP_P
 
 class AppPreferencesStore(private val context: Context) {
   private val appLanguageKey = stringPreferencesKey("app_language")
+  private val splashSeenKey = booleanPreferencesKey("splash_seen")
   private val profileLocationKey = stringPreferencesKey("profile_location")
   private val memberSinceKey = stringPreferencesKey("member_since")
 
@@ -51,6 +52,16 @@ class AppPreferencesStore(private val context: Context) {
 
   suspend fun readLanguage(): String {
     return context.appPreferencesDataStore.data.first()[appLanguageKey] ?: "en"
+  }
+
+  suspend fun saveSplashSeen(seen: Boolean = true) {
+    context.appPreferencesDataStore.edit { prefs ->
+      prefs[splashSeenKey] = seen
+    }
+  }
+
+  suspend fun hasSeenSplash(): Boolean {
+    return context.appPreferencesDataStore.data.first()[splashSeenKey] == true
   }
 
   suspend fun readProfileLocation(): String {

@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.AtharRepository
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.components.ScreenHeader
 import com.athar.accessibilitymapping.ui.theme.AccentGold
 import com.athar.accessibilitymapping.ui.theme.AccentGoldDark
@@ -63,6 +64,7 @@ import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private data class FaqItem(
@@ -73,10 +75,12 @@ private data class FaqItem(
 @Composable
 fun HelpSupportScreen(onBack: () -> Unit) {
   val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
   var showContactForm by remember { mutableStateOf(false) }
   var showUserGuide by remember { mutableStateOf(false) }
   var showVideoTutorials by remember { mutableStateOf(false) }
   var showDocumentation by remember { mutableStateOf(false) }
+  var isRefreshing by remember { mutableStateOf(false) }
 
   if (showContactForm) {
     ContactSupportScreen(onBack = { showContactForm = false })
@@ -119,160 +123,173 @@ fun HelpSupportScreen(onBack: () -> Unit) {
   )
   val expandedFaq = remember { mutableStateListOf(*Array(faqItems.size) { false }) }
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color.White)
+  AtharPullToRefresh(
+    isRefreshing = isRefreshing,
+    onRefresh = {
+      if (!isRefreshing) {
+        coroutineScope.launch {
+          isRefreshing = true
+          delay(750)
+          isRefreshing = false
+        }
+      }
+    }
   ) {
-    ScreenHeader(title = "Help & Support", onBack = onBack, background = NavyPrimary)
-
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .background(BluePrimary)
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp)
+        .background(Color.White)
     ) {
-      HelpSection(title = "Get in Touch") {
-        HelpRow(
-          icon = Icons.AutoMirrored.Outlined.Chat,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Contact Support",
-          subtitle = "Send us a message",
-          showChevron = true
-        ) {
-          showContactForm = true
-        }
-        HelpRow(
-          icon = Icons.Outlined.Email,
-          iconBackground = Color(0xFF10B981),
-          iconBorder = Color(0xFF059669),
-          title = "Email Support",
-          subtitle = "support@athar.app",
-          showChevron = false
-        ) {
-          openSupportEmail(context, "support@athar.app")
-        }
-        HelpRow(
-          icon = Icons.Outlined.Phone,
-          iconBackground = AccentGold,
-          iconBorder = AccentGoldDark,
-          title = "Call Support Hotline",
-          subtitle = "+966 800 123 456",
-          showChevron = false,
-          showDivider = false
-        ) {
-          openSupportDialer(context, "+966800123456")
-        }
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      HelpSection(title = "Resources") {
-        HelpRow(
-          icon = Icons.Outlined.Book,
-          iconBackground = AccentGold,
-          iconBorder = AccentGoldDark,
-          title = "User Guide",
-          subtitle = "Learn how to use Athar",
-          showChevron = true
-        ) {
-          showUserGuide = true
-        }
-        HelpRow(
-          icon = Icons.Outlined.VideoLibrary,
-          iconBackground = Color(0xFFDC2626),
-          iconBorder = Color(0xFF991B1B),
-          title = "Video Tutorials",
-          subtitle = "Watch step-by-step guides",
-          showChevron = true
-        ) {
-          showVideoTutorials = true
-        }
-        HelpRow(
-          icon = Icons.Outlined.Description,
-          iconBackground = NavyPrimary,
-          iconBorder = NavyDark,
-          title = "Documentation",
-          subtitle = "Detailed feature guides",
-          showChevron = true,
-          showDivider = false
-        ) {
-          showDocumentation = true
-        }
-      }
-
-      Spacer(modifier = Modifier.height(16.dp))
+      ScreenHeader(title = "Help & Support", onBack = onBack, background = NavyPrimary)
 
       Column(
         modifier = Modifier
-          .fillMaxWidth()
-          .background(Color.White, RoundedCornerShape(16.dp))
-          .border(2.dp, NavyPrimary, RoundedCornerShape(16.dp))
+          .fillMaxSize()
+          .background(BluePrimary)
+          .verticalScroll(rememberScrollState())
           .padding(16.dp)
       ) {
-        Text(
-          text = "Frequently Asked Questions",
-          color = NavyPrimary,
-          fontSize = 20.sp,
-          fontWeight = FontWeight.SemiBold
-        )
+        HelpSection(title = "Get in Touch") {
+          HelpRow(
+            icon = Icons.AutoMirrored.Outlined.Chat,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Contact Support",
+            subtitle = "Send us a message",
+            showChevron = true
+          ) {
+            showContactForm = true
+          }
+          HelpRow(
+            icon = Icons.Outlined.Email,
+            iconBackground = Color(0xFF10B981),
+            iconBorder = Color(0xFF059669),
+            title = "Email Support",
+            subtitle = "support@athar.app",
+            showChevron = false
+          ) {
+            openSupportEmail(context, "support@athar.app")
+          }
+          HelpRow(
+            icon = Icons.Outlined.Phone,
+            iconBackground = AccentGold,
+            iconBorder = AccentGoldDark,
+            title = "Call Support Hotline",
+            subtitle = "+966 800 123 456",
+            showChevron = false,
+            showDivider = false
+          ) {
+            openSupportDialer(context, "+966800123456")
+          }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        faqItems.forEachIndexed { index, item ->
-          Column {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .background(BlueSecondary, RoundedCornerShape(8.dp))
-                .border(2.dp, NavyPrimary, RoundedCornerShape(8.dp))
-                .clickable { expandedFaq[index] = !expandedFaq[index] }
-                .padding(12.dp),
-              verticalAlignment = Alignment.Top
-            ) {
-              Text(
-                text = item.question,
-                color = NavyPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Icon(
-                imageVector = Icons.Outlined.ChevronRight,
-                contentDescription = null,
-                tint = NavyPrimary,
-                modifier = Modifier
-                  .size(20.dp)
-                  .rotate(if (expandedFaq[index]) 90f else 0f)
-              )
-            }
-            AnimatedVisibility(visible = expandedFaq[index]) {
-              Text(
-                text = item.answer,
-                color = NavyPrimary.copy(alpha = 0.8f),
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp)
-              )
-            }
+        HelpSection(title = "Resources") {
+          HelpRow(
+            icon = Icons.Outlined.Book,
+            iconBackground = AccentGold,
+            iconBorder = AccentGoldDark,
+            title = "User Guide",
+            subtitle = "Learn how to use Athar",
+            showChevron = true
+          ) {
+            showUserGuide = true
           }
-          Spacer(modifier = Modifier.height(10.dp))
+          HelpRow(
+            icon = Icons.Outlined.VideoLibrary,
+            iconBackground = Color(0xFFDC2626),
+            iconBorder = Color(0xFF991B1B),
+            title = "Video Tutorials",
+            subtitle = "Watch step-by-step guides",
+            showChevron = true
+          ) {
+            showVideoTutorials = true
+          }
+          HelpRow(
+            icon = Icons.Outlined.Description,
+            iconBackground = NavyPrimary,
+            iconBorder = NavyDark,
+            title = "Documentation",
+            subtitle = "Detailed feature guides",
+            showChevron = true,
+            showDivider = false
+          ) {
+            showDocumentation = true
+          }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(16.dp))
+            .border(2.dp, NavyPrimary, RoundedCornerShape(16.dp))
+            .padding(16.dp)
+        ) {
+          Text(
+            text = "Frequently Asked Questions",
+            color = NavyPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+
+          faqItems.forEachIndexed { index, item ->
+            Column {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .background(BlueSecondary, RoundedCornerShape(8.dp))
+                  .border(2.dp, NavyPrimary, RoundedCornerShape(8.dp))
+                  .clickable { expandedFaq[index] = !expandedFaq[index] }
+                  .padding(12.dp),
+                verticalAlignment = Alignment.Top
+              ) {
+                Text(
+                  text = item.question,
+                  color = NavyPrimary,
+                  fontSize = 16.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                  imageVector = Icons.Outlined.ChevronRight,
+                  contentDescription = null,
+                  tint = NavyPrimary,
+                  modifier = Modifier
+                    .size(20.dp)
+                    .rotate(if (expandedFaq[index]) 90f else 0f)
+                )
+              }
+              AnimatedVisibility(visible = expandedFaq[index]) {
+                Text(
+                  text = item.answer,
+                  color = NavyPrimary.copy(alpha = 0.8f),
+                  fontSize = 14.sp,
+                  lineHeight = 20.sp,
+                  modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp)
+                )
+              }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+          }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          Text(text = "Athar v1.0.0 (MVP)", color = NavyPrimary.copy(alpha = 0.6f), fontSize = 14.sp)
+          Text(text = "(c) 2024 Athar. All rights reserved.", color = NavyPrimary.copy(alpha = 0.6f), fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
       }
-
-      Spacer(modifier = Modifier.height(16.dp))
-
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-      ) {
-        Text(text = "Athar v1.0.0 (MVP)", color = NavyPrimary.copy(alpha = 0.6f), fontSize = 14.sp)
-        Text(text = "(c) 2024 Athar. All rights reserved.", color = NavyPrimary.copy(alpha = 0.6f), fontSize = 14.sp)
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
     }
   }
 }

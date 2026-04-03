@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +74,7 @@ fun LoginScreen(
   var rememberMe by remember { mutableStateOf(false) }
   var authError by remember { mutableStateOf<String?>(null) }
   var isSubmitting by remember { mutableStateOf(false) }
+  val compactTouchTarget = 18.dp
 
   Box(
     modifier = Modifier
@@ -240,27 +243,41 @@ fun LoginScreen(
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Checkbox(
-                checked = rememberMe,
-                onCheckedChange = { rememberMe = it },
-                colors = CheckboxDefaults.colors(
-                  checkedColor = NavyPrimary,
-                  uncheckedColor = Color(0xFFD1D5DB),
-                  checkmarkColor = Color.White
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              androidx.compose.runtime.CompositionLocalProvider(
+                LocalMinimumInteractiveComponentSize provides compactTouchTarget
+              ) {
+                Checkbox(
+                  checked = rememberMe,
+                  onCheckedChange = { rememberMe = it },
+                  modifier = Modifier.size(18.dp),
+                  colors = CheckboxDefaults.colors(
+                    checkedColor = NavyPrimary,
+                    uncheckedColor = Color(0xFFD1D5DB),
+                    checkmarkColor = Color.White
+                  )
                 )
+              }
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = "Remember me",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextLight
               )
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Remember me", style = MaterialTheme.typography.bodySmall, color = TextLight)
             }
             TextButton(
               onClick = { authError = "Password reset is not enabled yet. Please contact support." },
               enabled = !isSubmitting,
               contentPadding = PaddingValues(0.dp),
-              modifier = Modifier.heightIn(min = 0.dp)
+              modifier = Modifier
+                .heightIn(min = 0.dp)
+                .wrapContentWidth(Alignment.End)
             ) {
               Text(
                 text = "Forgot password?",
@@ -296,29 +313,7 @@ fun LoginScreen(
             leadingIcon = if (isSubmitting) null else Icons.AutoMirrored.Outlined.Login
           )
 
-          Spacer(modifier = Modifier.height(24.dp))
-
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-              modifier = Modifier
-                .weight(1f)
-                .height(1.dp)
-                .background(Color(0xFFE5E7EB))
-            )
-            Text(
-              text = "New to Athar?",
-              modifier = Modifier.padding(horizontal = 12.dp),
-              color = Color(0xFF6B7280)
-            )
-            Box(
-              modifier = Modifier
-                .weight(1f)
-                .height(1.dp)
-                .background(Color(0xFFE5E7EB))
-            )
-          }
-
-          Spacer(modifier = Modifier.height(16.dp))
+          Spacer(modifier = Modifier.height(20.dp))
 
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -328,19 +323,19 @@ fun LoginScreen(
             Text(
               text = "Don't have an account? ",
               color = Color(0xFF6B7280),
-              style = MaterialTheme.typography.bodyMedium
+              style = MaterialTheme.typography.bodySmall
             )
             TextButton(
               onClick = onRegister,
               enabled = !isSubmitting,
-              contentPadding = PaddingValues(0.dp),
+              contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
               modifier = Modifier.heightIn(min = 0.dp)
             ) {
               Text(
                 text = "Register here",
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodySmall
               )
             }
           }
@@ -350,16 +345,14 @@ fun LoginScreen(
       Spacer(modifier = Modifier.height(16.dp))
 
       Text(
-        text = "By signing in, you agree to our Terms of Service and\nPrivacy Policy",
+        text = "By signing in, you agree to our\nTerms of Service and Privacy Policy",
         color = BluePrimary,
         style = MaterialTheme.typography.bodySmall,
         textAlign = TextAlign.Center,
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 20.dp)
+          .padding(horizontal = 28.dp)
       )
     }
   }
 }
-
-

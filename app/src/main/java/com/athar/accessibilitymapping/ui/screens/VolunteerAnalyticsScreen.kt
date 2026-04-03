@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.athar.accessibilitymapping.data.volunteer.VolunteerAnalyticsUiState
 import com.athar.accessibilitymapping.data.volunteer.VolunteerDashboardUiModel
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.profile.VolunteerReview
 import com.composables.icons.lucide.*
 import com.composables.icons.lucide.Lucide
@@ -102,18 +103,35 @@ private data class PaymentRecord(
   val status: RecordStatus
 )
 private data class WithdrawalRecord(val id: String, val date: String, val amount: Double, val method: String, val status: RecordStatus)
+private data class HistoryRecord(
+  val id: String,
+  val date: String,
+  val user: String,
+  val helpType: String,
+  val location: String,
+  val hours: Int,
+  val gross: Double,
+  val net: Double,
+  val status: RecordStatus
+)
 private data class ChartPoint(val label: String, val value: Float)
 
 @Composable
 fun VolunteerAnalyticsScreen(
+  userId: String,
   onBack: () -> Unit,
-  viewModel: VolunteerAnalyticsViewModel = viewModel()
+  viewModel: VolunteerAnalyticsViewModel = viewModel(key = "volunteer-analytics-$userId")
 ) {
   val context = LocalContext.current
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  var activeTab by rememberSaveable { mutableStateOf(AnalyticsTab.Overview) }
-  var showFeeInfo by rememberSaveable { mutableStateOf(false) }
-  var expandedPaymentId by rememberSaveable { mutableStateOf<String?>(null) }
+  var activeTab by rememberSaveable(userId) { mutableStateOf(AnalyticsTab.Overview) }
+  var showFeeInfo by rememberSaveable(userId) { mutableStateOf(false) }
+  var expandedPaymentId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(viewModel) {
+    viewModel.loadIfNeeded()
+  }
+
   val model = when (val state = uiState) {
     is VolunteerAnalyticsUiState.Content -> state.model
     is VolunteerAnalyticsUiState.Empty -> state.model
@@ -123,6 +141,11 @@ fun VolunteerAnalyticsScreen(
     is VolunteerAnalyticsUiState.Content -> state.warnings
     is VolunteerAnalyticsUiState.Empty -> state.warnings
     else -> emptyList()
+  }
+  val isRefreshing = when (val state = uiState) {
+    is VolunteerAnalyticsUiState.Content -> state.isRefreshing
+    is VolunteerAnalyticsUiState.Empty -> state.isRefreshing
+    else -> false
   }
 
   val monthlyEarningsData = model.monthlyNetEarnings.map { MonthlyEarning(it.monthLabel, it.netAmount) }
@@ -138,6 +161,19 @@ fun VolunteerAnalyticsScreen(
   }
   val reviewItems = model.reviews.reviews.map { review ->
     VolunteerReview(review.id, review.userName, review.rating, review.comment, review.dateLabel, review.issues)
+  }
+  val historyRecordsData = model.historyRecords.map { record ->
+    HistoryRecord(
+      id = record.id,
+      date = record.dateLabel,
+      user = record.userName,
+      helpType = record.helpType,
+      location = record.location,
+      hours = record.hours,
+      gross = record.grossAmount,
+      net = record.netAmount,
+      status = record.status.toRecordStatus()
+    )
   }
 
   LaunchedEffect(warnings) {
@@ -157,47 +193,51 @@ fun VolunteerAnalyticsScreen(
       return@Box
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
-      item { AnalyticsHeader(onBack) }
-      item { AnalyticsTabs(activeTab = activeTab, onSelect = { activeTab = it }) }
-      if (uiState is VolunteerAnalyticsUiState.Empty) {
-        item {
-          SectionCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text((uiState as VolunteerAnalyticsUiState.Empty).message, color = NavyPrimary, style = AnalyticsBodyStyle)
-          }
-        }
-      }
-      if (warnings.isNotEmpty()) {
-        item {
-          Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, AccentGold),
-            colors = CardDefaults.cardColors(containerColor = AccentGold.copy(alpha = 0.12f))
-          ) {
-            Row(
-              Modifier.padding(12.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              Icon(Lucide.TriangleAlert, null, tint = AccentGoldDark, modifier = Modifier.size(18.dp))
-              Text(
-                warnings.joinToString(separator = "\n"),
-                color = NavyPrimary,
-                style = AnalyticsBodyStyle,
-                modifier = Modifier.weight(1f)
-              )
+    AtharPullToRefresh(
+      isRefreshing = isRefreshing,
+      onRefresh = { viewModel.refresh() }
+    ) {
+      LazyColumn(Modifier.fillMaxSize()) {
+        item { AnalyticsHeader(onBack = onBack) }
+        item { AnalyticsTabs(activeTab = activeTab, onSelect = { activeTab = it }) }
+        if (uiState is VolunteerAnalyticsUiState.Empty) {
+          item {
+            SectionCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+              Text((uiState as VolunteerAnalyticsUiState.Empty).message, color = NavyPrimary, style = AnalyticsBodyStyle)
             }
           }
         }
-      }
-      item { Spacer(Modifier.height(16.dp)) }
-      item {
-        Column(
-          modifier = Modifier.padding(horizontal = 16.dp),
-          verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-          when (activeTab) {
+        if (warnings.isNotEmpty()) {
+          item {
+            Card(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+              shape = RoundedCornerShape(12.dp),
+              border = BorderStroke(1.dp, AccentGold),
+              colors = CardDefaults.cardColors(containerColor = AccentGold.copy(alpha = 0.12f))
+            ) {
+              Row(
+                Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Icon(Lucide.TriangleAlert, null, tint = AccentGoldDark, modifier = Modifier.size(18.dp))
+                Text(
+                  warnings.joinToString(separator = "\n"),
+                  color = NavyPrimary,
+                  style = AnalyticsBodyStyle,
+                  modifier = Modifier.weight(1f)
+                )
+              }
+            }
+          }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+        item {
+          Column(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            when (activeTab) {
             AnalyticsTab.Overview -> OverviewTab(
               totalNet = model.totalNetEarnings,
               currentMonthNet = model.currentMonthNet,
@@ -231,6 +271,7 @@ fun VolunteerAnalyticsScreen(
             AnalyticsTab.History -> HistoryTab(
               thisWeekNet = model.historyThisWeekNet,
               thisMonthNet = model.currentMonthNet,
+              historyRecords = historyRecordsData,
               paymentHistory = paymentHistoryData,
               expandedPaymentId = expandedPaymentId
             ) { expandedPaymentId = if (expandedPaymentId == it) null else it }
@@ -239,10 +280,11 @@ fun VolunteerAnalyticsScreen(
               totalReviews = model.reviews.totalReviews,
               reviews = reviewItems
             )
+            }
           }
         }
+        item { Spacer(Modifier.height(24.dp)) }
       }
-      item { Spacer(Modifier.height(24.dp)) }
     }
 
     if (uiState is VolunteerAnalyticsUiState.Loading) {
@@ -254,7 +296,9 @@ fun VolunteerAnalyticsScreen(
 }
 
 @Composable
-private fun AnalyticsHeader(onBack: () -> Unit) {
+private fun AnalyticsHeader(
+  onBack: () -> Unit
+) {
   Column(
     modifier = Modifier.fillMaxWidth().background(NavyPrimary).statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 22.dp)
   ) {
@@ -265,7 +309,7 @@ private fun AnalyticsHeader(onBack: () -> Unit) {
       ) {
         Icon(Lucide.ArrowLeft, "Go back", tint = Color.White, modifier = Modifier.size(20.dp))
       }
-      Column {
+      Column(modifier = Modifier.weight(1f)) {
         Text("Analytics Dashboard", color = Color.White, style = AnalyticsTitleStyle)
         Text("Track your performance and earnings", color = Color.White.copy(alpha = 0.7f), style = AnalyticsBodyStyle)
       }
@@ -357,7 +401,8 @@ private fun AnalyticsErrorState(
 ) {
   Box(Modifier.fillMaxSize().background(BluePrimary)) {
     LazyColumn(Modifier.fillMaxSize()) {
-      item { AnalyticsHeader(onBack) }
+      item { AnalyticsHeader(onBack = onBack) }
+      
       item {
         Column(
           modifier = Modifier
@@ -448,8 +493,8 @@ private fun OverviewTab(
     SectionCard {
       Text("Weekly Activity", color = NavyPrimary, style = AnalyticsSectionStyle)
       Spacer(Modifier.height(12.dp))
-      if (weeklyRequests.isEmpty()) {
-        Text("No weekly activity yet.", color = TextLight, style = AnalyticsBodyStyle)
+      if (weeklyRequests.isEmpty() || weeklyRequests.all { it.completed == 0 }) {
+        WeeklyActivityEmptyChart(weeklyRequests)
       } else {
         BarChart(weeklyRequests.map { ChartPoint(it.day, it.completed.toFloat()) }, NavyPrimary, 160.dp, "")
         Spacer(Modifier.height(12.dp))
@@ -746,8 +791,8 @@ private fun PerformanceTab(
     SectionCard {
       Text("Weekly Activity", color = NavyPrimary, style = AnalyticsSectionStyle)
       Spacer(Modifier.height(12.dp))
-      if (weeklyRequests.isEmpty()) {
-        Text("No weekly activity yet.", color = TextLight, style = AnalyticsBodyStyle)
+      if (weeklyRequests.isEmpty() || weeklyRequests.all { it.completed == 0 }) {
+        WeeklyActivityEmptyChart(weeklyRequests)
       } else {
         BarChart(weeklyRequests.map { ChartPoint(it.day, it.completed.toFloat()) }, NavyPrimary, 160.dp, "")
         Spacer(Modifier.height(12.dp))
@@ -817,6 +862,64 @@ private fun WeeklyActivityBreakdown(weeklyRequests: List<WeeklyRequest>) {
         )
       }
     }
+  }
+}
+
+@Composable
+private fun WeeklyActivityEmptyChart(weeklyRequests: List<WeeklyRequest>) {
+  if (weeklyRequests.isEmpty()) {
+    Text("No weekly activity yet.", color = TextLight, style = AnalyticsBodyStyle)
+  } else {
+    // Show the day labels with placeholder bars so the user sees the chart frame
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(100.dp),
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      verticalAlignment = Alignment.Bottom
+    ) {
+      weeklyRequests.forEach { point ->
+        Column(
+          modifier = Modifier.weight(1f),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.Bottom
+        ) {
+          Text("0", color = TextLight, style = AnalyticsLabelStyle)
+          Spacer(Modifier.height(4.dp))
+          Box(
+            modifier = Modifier
+              .fillMaxWidth(0.7f)
+              .height(4.dp)
+              .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+              .background(Gray200)
+          )
+        }
+      }
+    }
+    Spacer(Modifier.height(6.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+      weeklyRequests.forEach { point ->
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+          Text(
+            point.day,
+            color = TextLight,
+            style = AnalyticsLabelStyle.copy(fontSize = 11.sp, lineHeight = 13.sp),
+            textAlign = TextAlign.Center
+          )
+        }
+      }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(
+      "Complete assistance requests to see your weekly activity here.",
+      color = TextLight,
+      style = AnalyticsBodyStyle,
+      textAlign = TextAlign.Center,
+      modifier = Modifier.fillMaxWidth()
+    )
   }
 }
 
@@ -928,6 +1031,7 @@ private fun ReviewCard(review: VolunteerReview) {
 private fun HistoryTab(
   thisWeekNet: Double,
   thisMonthNet: Double,
+  historyRecords: List<HistoryRecord>,
   paymentHistory: List<PaymentRecord>,
   expandedPaymentId: String?,
   onToggle: (String) -> Unit
@@ -937,6 +1041,31 @@ private fun HistoryTab(
       { SummaryCard("${formatAmount(thisWeekNet)} EGP", "This Week Net", NavyPrimary) },
       { SummaryCard("${formatAmount(thisMonthNet)} EGP", "This Month Net", AccentGold) }
     )
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(16.dp),
+      border = BorderStroke(2.dp, Gray200),
+      colors = CardDefaults.cardColors(containerColor = Color.White),
+      elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+      Column {
+        Text("Request History", color = NavyPrimary, style = AnalyticsSectionStyle, modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp))
+        HorizontalDivider(color = Gray200, thickness = 2.dp)
+        if (historyRecords.isEmpty()) {
+          Text(
+            "No request history yet.",
+            color = TextLight,
+            style = AnalyticsBodyStyle,
+            modifier = Modifier.padding(16.dp)
+          )
+        } else {
+          historyRecords.forEachIndexed { index, record ->
+            HistoryRecordRow(record = record)
+            if (index < historyRecords.lastIndex) HorizontalDivider(color = Gray200, thickness = 2.dp)
+          }
+        }
+      }
+    }
     Card(
       modifier = Modifier.fillMaxWidth(),
       shape = RoundedCornerShape(16.dp),
@@ -961,6 +1090,50 @@ private fun HistoryTab(
           }
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun HistoryRecordRow(record: HistoryRecord) {
+  val statusBg = if (record.status == RecordStatus.Completed) SuccessBackground else PendingBackground
+  val statusFg = if (record.status == RecordStatus.Completed) SuccessGreenDark else PendingText
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 16.dp, vertical = 14.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp)
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(record.user.ifBlank { "Volunteer request" }, color = NavyPrimary, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.SemiBold))
+          StatusChip(record.status.name.lowercase(), statusBg, statusFg)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(record.date.ifBlank { "Unknown date" }, color = TextLight, style = AnalyticsLabelStyle)
+      }
+      Column(horizontalAlignment = Alignment.End) {
+        Text("${formatAmount(record.net)} EGP", color = SuccessGreenDark, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Bold))
+        if (record.gross > 0.0 && record.gross != record.net) {
+          Text("${formatAmount(record.gross)} EGP gross", color = TextLight, style = AnalyticsLabelStyle)
+        }
+      }
+    }
+    Text(record.helpType.ifBlank { "Assistance" }, color = NavyDark, style = AnalyticsBodyStyle.copy(fontWeight = FontWeight.Medium))
+    if (record.location.isNotBlank() || record.hours > 0) {
+      Text(
+        listOfNotNull(
+          record.location.takeIf { it.isNotBlank() },
+          record.hours.takeIf { it > 0 }?.let { "$it hr${if (it > 1) "s" else ""}" }
+        ).joinToString(" • "),
+        color = TextLight,
+        style = AnalyticsLabelStyle
+      )
     }
   }
 }

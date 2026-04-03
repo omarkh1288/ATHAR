@@ -38,6 +38,11 @@ data class VolunteerDashboardLocalHistoryEntry(
   val rating: Int = 0
 )
 
+data class VolunteerDashboardWeeklyPoint(
+  val day: String,
+  val completed: Int
+)
+
 data class VolunteerDashboardState(
   val activeTab: VolunteerDashboardTab = VolunteerDashboardTab.INCOMING,
   val isRefreshing: Boolean = false,
@@ -46,6 +51,7 @@ data class VolunteerDashboardState(
   val incomingAlertMessage: String = "No incoming requests nearby.",
   val activeStatusBanner: String = "Assistance in Progress",
   val stats: VolunteerDashboardStatsState = VolunteerDashboardStatsState(),
+  val weeklyActivity: List<VolunteerDashboardWeeklyPoint> = emptyList(),
   val incomingRequests: List<AssistanceRequest> = emptyList(),
   val activeRequest: AssistanceRequest? = null,
   val historyRequests: List<AssistanceRequest> = emptyList(),
@@ -251,6 +257,10 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
 
   private suspend fun refreshImpactData(forceRefresh: Boolean) {
     val impact = repository.getVolunteerImpactDashboard()
+    val performance = repository.getVolunteerAnalyticsPerformance()
+    val weeklyPoints = performance.weeklyActivity.map { entry ->
+      VolunteerDashboardWeeklyPoint(day = entry.day, completed = entry.completed)
+    }
     _uiState.update {
       it.copy(
         tabCounts = impact.counts,
@@ -258,7 +268,8 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
           totalAssists = impact.impact.totalAssists,
           avgRating = impact.impact.avgRating,
           thisWeek = impact.impact.thisWeek
-        )
+        ),
+        weeklyActivity = weeklyPoints
       )
     }
     impactLoaded = true

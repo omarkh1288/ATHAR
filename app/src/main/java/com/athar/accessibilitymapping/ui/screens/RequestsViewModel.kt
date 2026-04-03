@@ -8,6 +8,7 @@ import com.athar.accessibilitymapping.data.VolunteerRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class RequestsViewModel(application: Application) : AndroidViewModel(application) {
@@ -15,7 +16,10 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
   private val repository = AtharRepository(application)
 
   private val _requests = MutableStateFlow<List<VolunteerRequest>>(emptyList())
-  val requests: StateFlow<List<VolunteerRequest>> = _requests
+  val requests: StateFlow<List<VolunteerRequest>> = _requests.asStateFlow()
+
+  private val _isRefreshing = MutableStateFlow(false)
+  val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
   private var pollingStarted = false
 
@@ -24,15 +28,32 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
     pollingStarted = true
     viewModelScope.launch {
       while (true) {
-        _requests.value = repository.getRequests()
+        fetchRequests(showRefreshing = false)
         delay(30_000)
       }
     }
   }
 
   fun refreshNow() {
+    refresh(showRefreshing = false)
+  }
+
+  fun refresh(showRefreshing: Boolean = true) {
     viewModelScope.launch {
+      fetchRequests(showRefreshing = showRefreshing)
+    }
+  }
+
+  private suspend fun fetchRequests(showRefreshing: Boolean) {
+    if (showRefreshing) {
+      _isRefreshing.value = true
+    }
+    try {
       _requests.value = repository.getRequests()
+    } finally {
+      if (showRefreshing) {
+        _isRefreshing.value = false
+      }
     }
   }
 }

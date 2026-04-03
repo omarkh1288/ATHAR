@@ -70,6 +70,7 @@ import com.athar.accessibilitymapping.ui.theme.BlueSecondary
 import com.athar.accessibilitymapping.ui.theme.Gray200
 import com.athar.accessibilitymapping.ui.theme.NavyDark
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
+import com.athar.accessibilitymapping.ui.components.AtharPullToRefresh
 import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.payment.AtharPaymentFlow
@@ -108,11 +109,13 @@ private val RequestsBodyStyle = TextStyle(
 @Composable
 fun RequestsScreen(
   userRole: UserRole,
+  userId: String,
   isVolunteerLive: Boolean,
   userName: String
 ) {
   if (userRole == UserRole.Volunteer) {
     VolunteerDashboardScreen(
+      userId = userId,
       isVolunteerLive = isVolunteerLive,
       userName = userName
     )
@@ -127,6 +130,7 @@ fun RequestsScreen(
   requestsViewModel.startPollingIfNeeded()
 
   val requests by requestsViewModel.requests.collectAsState()
+  val isRefreshing by requestsViewModel.isRefreshing.collectAsState()
   var activeTab by remember { mutableStateOf("all") }
   var infoMessage by remember { mutableStateOf<String?>(null) }
 
@@ -160,99 +164,103 @@ fun RequestsScreen(
 
   val tabScrollState = rememberScrollState()
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(BluePrimary)
+  AtharPullToRefresh(
+    isRefreshing = isRefreshing,
+    onRefresh = { requestsViewModel.refresh() }
   ) {
     Column(
       modifier = Modifier
-        .fillMaxWidth()
-        .shadow(8.dp)
-        .background(NavyPrimary)
-        .statusBarsPadding()
-        .padding(top = 20.dp, bottom = 20.dp)
+        .fillMaxSize()
+        .background(BluePrimary)
     ) {
-      Text(
-        text = "Volunteer Requests",
-        color = Color.White,
-        style = RequestsHeaderStyle,
-        modifier = Modifier.padding(horizontal = 16.dp)
-      )
-      if (infoMessage != null) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-          text = infoMessage ?: "",
-          color = Color.White.copy(alpha = 0.9f),
-          style = RequestsBodyStyle.copy(fontSize = 13.sp),
-          modifier = Modifier.padding(horizontal = 16.dp)
-        )
-      }
-      Spacer(modifier = Modifier.height(if (infoMessage == null) 16.dp else 10.dp))
-      Row(
+      Column(
         modifier = Modifier
           .fillMaxWidth()
-          .horizontalScroll(tabScrollState)
-          .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+          .shadow(8.dp)
+          .background(NavyPrimary)
+          .statusBarsPadding()
+          .padding(top = 20.dp, bottom = 20.dp)
       ) {
-        listOf(
-          Triple("all", "All", 0),
-          Triple("pending", "Pending", pendingCount),
-          Triple("active", "Active", activeCount),
-          Triple("history", "History", historyCount)
-        ).forEach { (id, label, count) ->
-          val selected = activeTab == id
-          Box(
-            modifier = Modifier
-              .shadow(4.dp, RoundedCornerShape(10.dp))
-              .background(if (selected) Color.White else NavyDark, RoundedCornerShape(10.dp))
-              .widthIn(min = 64.dp)
-              .height(44.dp)
-              .clickable { activeTab = id }
-              .padding(horizontal = 14.dp),
-            contentAlignment = Alignment.Center
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.Center
+        Text(
+          text = "Volunteer Requests",
+          color = Color.White,
+          style = RequestsHeaderStyle,
+          modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        if (infoMessage != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(
+            text = infoMessage ?: "",
+            color = Color.White.copy(alpha = 0.9f),
+            style = RequestsBodyStyle.copy(fontSize = 13.sp),
+            modifier = Modifier.padding(horizontal = 16.dp)
+          )
+        }
+        Spacer(modifier = Modifier.height(if (infoMessage == null) 16.dp else 10.dp))
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(tabScrollState)
+            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          listOf(
+            Triple("all", "All", 0),
+            Triple("pending", "Pending", pendingCount),
+            Triple("active", "Active", activeCount),
+            Triple("history", "History", historyCount)
+          ).forEach { (id, label, count) ->
+            val selected = activeTab == id
+            Box(
+              modifier = Modifier
+                .shadow(4.dp, RoundedCornerShape(10.dp))
+                .background(if (selected) Color.White else NavyDark, RoundedCornerShape(10.dp))
+                .widthIn(min = 64.dp)
+                .height(44.dp)
+                .clickable { activeTab = id }
+                .padding(horizontal = 14.dp),
+              contentAlignment = Alignment.Center
             ) {
-              Text(
-                text = label,
-                color = if (selected) NavyPrimary else Color.White,
-                style = RequestsTabStyle,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-              )
-              if (id != "all") {
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                  modifier = Modifier
-                    .background(AccentGold, RoundedCornerShape(999.dp))
-                    .border(1.dp, AccentGoldDark, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                  Text(
-                    text = count.toString(),
-                    color = Color.White,
-                    style = RequestsTabStyle.copy(
-                      fontSize = 12.sp,
-                      lineHeight = 14.sp,
-                      fontWeight = FontWeight.SemiBold
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+              ) {
+                Text(
+                  text = label,
+                  color = if (selected) NavyPrimary else Color.White,
+                  style = RequestsTabStyle,
+                  fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                )
+                if (id != "all") {
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Box(
+                    modifier = Modifier
+                      .background(AccentGold, RoundedCornerShape(999.dp))
+                      .border(1.dp, AccentGoldDark, RoundedCornerShape(999.dp))
+                      .padding(horizontal = 8.dp, vertical = 2.dp)
+                  ) {
+                    Text(
+                      text = count.toString(),
+                      color = Color.White,
+                      style = RequestsTabStyle.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                      )
                     )
-                  )
+                  }
                 }
               }
             }
           }
         }
       }
-    }
 
-    Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .weight(1f)
-    ) {
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .weight(1f)
+      ) {
       if (filteredRequests.isEmpty()) {
         Column(
           modifier = Modifier
@@ -608,59 +616,60 @@ fun RequestsScreen(
           }
         }
       }
-    }
+      }
 
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .background(BlueSecondary)
-    ) {
-      Box(
+      Column(
         modifier = Modifier
           .fillMaxWidth()
-          .height(2.dp)
-          .background(NavyPrimary)
-      )
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+          .background(BlueSecondary)
       ) {
-        Icon(
-          imageVector = Icons.Outlined.PersonOutline,
-          contentDescription = null,
-          tint = NavyPrimary,
-          modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-          text = "Want to help?",
-          color = NavyPrimary,
-          style = RequestsBodyStyle.copy(
-            fontSize = 16.sp,
-            lineHeight = 22.sp
-          ),
-          fontWeight = FontWeight.SemiBold,
-          maxLines = 1
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-          text = "Enable volunteer mode",
-          color = AccentGold,
-          style = RequestsBodyStyle.copy(
-            fontSize = 16.sp,
-            lineHeight = 22.sp
-          ),
-          fontWeight = FontWeight.SemiBold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
+        Box(
           modifier = Modifier
-            .clickable {
-              infoMessage = "Enable volunteer mode from Account Settings."
-            }
+            .fillMaxWidth()
+            .height(2.dp)
+            .background(NavyPrimary)
         )
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.Center
+        ) {
+          Icon(
+            imageVector = Icons.Outlined.PersonOutline,
+            contentDescription = null,
+            tint = NavyPrimary,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(12.dp))
+          Text(
+            text = "Want to help?",
+            color = NavyPrimary,
+            style = RequestsBodyStyle.copy(
+              fontSize = 16.sp,
+              lineHeight = 22.sp
+            ),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+          )
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            text = "Enable volunteer mode",
+            color = AccentGold,
+            style = RequestsBodyStyle.copy(
+              fontSize = 16.sp,
+              lineHeight = 22.sp
+            ),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+              .clickable {
+                infoMessage = "Enable volunteer mode from Account Settings."
+              }
+          )
+        }
       }
     }
   }
