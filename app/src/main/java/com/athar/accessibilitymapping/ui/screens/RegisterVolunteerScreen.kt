@@ -1,5 +1,6 @@
 ﻿package com.athar.accessibilitymapping.ui.screens
 
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -17,11 +18,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Event
@@ -37,7 +41,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import com.athar.accessibilitymapping.data.VolunteerRegistrationPayload
 import com.athar.accessibilitymapping.ui.components.PrimaryButton
 import java.text.Normalizer
+import java.util.Calendar
 import kotlinx.coroutines.launch
 
 @Composable
@@ -122,24 +127,40 @@ fun RegisterVolunteerScreen(
         .background(volunteerGreen)
         .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
+      Spacer(modifier = Modifier.height(16.dp))
+
       Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onBack) {
-          Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = Color.White)
-          Spacer(modifier = Modifier.width(6.dp))
-          Text("Back", color = Color.White)
+        Box(
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.15f))
+            .clickable(onClick = onBack),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier.size(22.dp)
+          )
         }
       }
+
+      Spacer(modifier = Modifier.height(16.dp))
+
       Text("Become a Volunteer", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+      Spacer(modifier = Modifier.height(4.dp))
       Text("Help others in your community", color = Color(0xFFD6E4F5))
 
-      Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+      Row(modifier = Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         (1..5).forEach { index ->
           val barColor = if (index <= step) Color.White else volunteerGreenMuted
           Spacer(
             modifier = Modifier
               .height(6.dp)
               .weight(1f)
-              .background(barColor)
+              .background(barColor, RoundedCornerShape(3.dp))
           )
         }
       }
@@ -157,16 +178,29 @@ fun RegisterVolunteerScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        VolunteerTextField("Full Name *", fullName, { fullName = it }, Icons.Outlined.Person, "Enter your full name")
-        VolunteerTextField("Email Address *", email, { email = it }, Icons.Outlined.Email, "your.email@example.com")
-        VolunteerTextField("Phone Number *", phone, { phone = it }, Icons.Outlined.Phone, "+966 50 123 4567")
-        VolunteerTextField("City/Location *", location, { location = it }, Icons.Outlined.LocationOn, "Riyadh, Saudi Arabia")
+        VolunteerTextField("Full Name *", fullName, { fullName = it; submissionError = null }, Icons.Outlined.Person, "Enter your full name")
+        VolunteerTextField("Email Address *", email, { email = it; submissionError = null }, Icons.Outlined.Email, "your.email@example.com")
+        VolunteerTextField("Phone Number *", phone, { phone = it; submissionError = null }, Icons.Outlined.Phone, "+966 50 123 4567")
+        VolunteerTextField("City/Location *", location, { location = it; submissionError = null }, Icons.Outlined.LocationOn, "Riyadh, Saudi Arabia")
+
+        if (submissionError != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(submissionError ?: "", color = colorScheme.error)
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         PrimaryButton(
           text = "Next Step",
-          onClick = { step = 2 },
+          onClick = {
+            when {
+              fullName.isBlank() -> submissionError = "Full name is required."
+              email.isBlank() -> submissionError = "Email is required."
+              phone.isBlank() -> submissionError = "Phone number is required."
+              location.isBlank() -> submissionError = "Location is required."
+              else -> { submissionError = null; step = 2 }
+            }
+          },
           background = volunteerGreen
         )
       }
@@ -247,7 +281,10 @@ fun RegisterVolunteerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
           PrimaryButton(
             text = "Back",
             onClick = { step = 1 },
@@ -257,10 +294,23 @@ fun RegisterVolunteerScreen(
           )
           PrimaryButton(
             text = "Next Step",
-            onClick = { step = 3 },
+            onClick = {
+              val np = normalizePasswordInput(password)
+              val nc = normalizePasswordInput(confirmPassword)
+              when {
+                np.length < 8 -> submissionError = "Password must be at least 8 characters."
+                np != nc -> submissionError = "Passwords do not match."
+                else -> { submissionError = null; step = 3 }
+              }
+            },
             background = volunteerGreen,
             modifier = Modifier.weight(1f)
           )
+        }
+
+        if (submissionError != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(submissionError ?: "", color = colorScheme.error)
         }
       }
 
@@ -271,14 +321,47 @@ fun RegisterVolunteerScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         VolunteerTextField("National ID / Iqama Number *", idNumber, { idNumber = it }, Icons.Outlined.Person, "Enter your ID number")
-        VolunteerTextField("Date of Birth *", dateOfBirth, { dateOfBirth = it }, Icons.Outlined.Event, "YYYY-MM-DD")
+
+        Text("Date of Birth *", color = colorScheme.onSurface)
+        OutlinedTextField(
+          value = dateOfBirth,
+          onValueChange = {},
+          readOnly = true,
+          leadingIcon = {
+            IconButton(onClick = {
+              val calendar = Calendar.getInstance()
+              DatePickerDialog(
+                context,
+                { _, year, month, day ->
+                  dateOfBirth = String.format("%04d-%02d-%02d", year, month + 1, day)
+                },
+                calendar.get(Calendar.YEAR) - 20,
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+              ).show()
+            }) {
+              Icon(Icons.Outlined.Event, contentDescription = "Select date")
+            }
+          },
+          placeholder = { Text("YYYY-MM-DD") },
+          modifier = Modifier.fillMaxWidth(),
+          colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = volunteerGreen,
+            unfocusedBorderColor = colorScheme.outline,
+            focusedLeadingIconColor = volunteerGreen,
+            unfocusedLeadingIconColor = colorScheme.onSurfaceVariant,
+            cursorColor = volunteerGreen
+          )
+        )
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .background(colorScheme.surfaceVariant, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp))
             .clickable { idDocumentPicker.launch(arrayOf("*/*")) }
-            .padding(16.dp)
+            .padding(16.dp),
+          verticalAlignment = Alignment.CenterVertically
         ) {
           Icon(Icons.Outlined.UploadFile, contentDescription = null, tint = colorScheme.onSurfaceVariant)
           Spacer(modifier = Modifier.width(8.dp))
@@ -290,7 +373,10 @@ fun RegisterVolunteerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
           PrimaryButton(
             text = "Back",
             onClick = { step = 2 },
@@ -300,10 +386,21 @@ fun RegisterVolunteerScreen(
           )
           PrimaryButton(
             text = "Next Step",
-            onClick = { step = 4 },
+            onClick = {
+              when {
+                idNumber.isBlank() -> submissionError = "National ID / Iqama number is required."
+                dateOfBirth.isBlank() -> submissionError = "Date of birth is required."
+                else -> { submissionError = null; step = 4 }
+              }
+            },
             background = volunteerGreen,
             modifier = Modifier.weight(1f)
           )
+        }
+
+        if (submissionError != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(submissionError ?: "", color = colorScheme.error)
         }
       }
 
@@ -371,7 +468,10 @@ fun RegisterVolunteerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
           PrimaryButton(
             text = "Back",
             onClick = { step = 3 },
@@ -381,10 +481,21 @@ fun RegisterVolunteerScreen(
           )
           PrimaryButton(
             text = "Next Step",
-            onClick = { step = 5 },
+            onClick = {
+              when {
+                selectedLanguages.isEmpty() -> submissionError = "Please select at least one language."
+                selectedAvailability.isEmpty() -> submissionError = "Please select at least one availability option."
+                else -> { submissionError = null; step = 5 }
+              }
+            },
             background = volunteerGreen,
             modifier = Modifier.weight(1f)
           )
+        }
+
+        if (submissionError != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(submissionError ?: "", color = colorScheme.error)
         }
       }
 
@@ -409,7 +520,10 @@ fun RegisterVolunteerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
           PrimaryButton(
             text = "Back",
             onClick = { step = 4 },

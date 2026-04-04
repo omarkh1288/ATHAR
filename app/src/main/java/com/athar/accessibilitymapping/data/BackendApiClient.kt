@@ -1956,6 +1956,7 @@ class BackendApiClient(private val appContext: Context? = null) {
 
   private fun parseVolunteerRequest(obj: JsonObject): ApiVolunteerRequest? {
     val id = obj.readString("id") ?: return null
+    android.util.Log.d("AtharParse", "parseVolunteerRequest id=$id payment_status=${obj["payment_status"]} payment=${obj["payment"]} isPaid=${obj["is_paid"] ?: obj["isPaid"] ?: obj["paid"]}")
     val requester = obj["requester"]?.asObjectOrNull() ?: obj["user"]?.asObjectOrNull()
     val volunteer = obj["volunteer"]?.asObjectOrNull()
     val payment = obj["payment"]?.asObjectOrNull()
@@ -2011,7 +2012,9 @@ class BackendApiClient(private val appContext: Context? = null) {
       hours = pricing.hours,
       pricePerHour = pricing.pricePerHour,
       totalAmountEgp = pricing.totalAmountEgp,
-      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash",
+      paymentMethod = payment?.readString("method", "payment_method", "paymentMethod")
+        ?: obj.readString("payment_method", "paymentMethod", "pay_method")
+        ?: "cash",
       paymentStatus = paymentStatus,
       isPaid = isPaid
     )
@@ -2058,7 +2061,9 @@ class BackendApiClient(private val appContext: Context? = null) {
       hours = pricing.hours,
       pricePerHour = pricing.pricePerHour,
       totalAmountEgp = pricing.totalAmountEgp,
-      paymentMethod = obj.readString("payment_method", "paymentMethod", "pay_method") ?: "cash",
+      paymentMethod = payment?.readString("method", "payment_method", "paymentMethod")
+        ?: obj.readString("payment_method", "paymentMethod", "pay_method")
+        ?: "cash",
       paymentStatus = paymentStatus,
       isPaid = isPaid
     )

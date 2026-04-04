@@ -1189,16 +1189,24 @@ private fun MetricCard(label: String, value: Float, max: Float, suffix: String, 
 @Composable
 private fun MiniStat(icon: ImageVector, label: String, value: String, color: Color) {
   Row(
-    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(BlueSecondary).padding(12.dp),
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(12.dp))
+      .background(BlueSecondary)
+      .heightIn(min = 72.dp)
+      .padding(12.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     Box(Modifier.size(36.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
       Icon(icon, null, tint = Color.White, modifier = Modifier.size(18.dp))
     }
-    Column {
+    Column(
+      modifier = Modifier.weight(1f),
+      verticalArrangement = Arrangement.Center
+    ) {
       Text(value, color = NavyPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-      Text(label, color = TextLight, style = AnalyticsLabelStyle)
+      Text(label, color = TextLight, style = AnalyticsLabelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
   }
 }

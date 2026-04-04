@@ -761,7 +761,14 @@ fun RequestsScreen(
         when (result) {
           is ApiCallResult.Success -> {
             infoMessage = result.data.message
-            requestsViewModel.markRequestPaid(request.id)
+            val paymentMethod = result.data.paymentMethod.trim().lowercase()
+            val paymentStatus = result.data.status.trim().lowercase()
+            if (
+              paymentMethod == "cash" ||
+              paymentStatus in setOf("paid", "success", "succeeded", "captured", "active", "completed")
+            ) {
+              requestsViewModel.markRequestPaid(request.id)
+            }
           }
           is ApiCallResult.Failure -> infoMessage = result.message
         }
@@ -937,8 +944,8 @@ private fun shouldShowPaymentSection(request: VolunteerRequest): Boolean {
 private fun isRequestPaid(request: VolunteerRequest): Boolean {
   if (request.paymentMethod.lowercase() == "cash") return false
   if (request.isPaid) return true
-  if (normalizeRequestStatus(request.status) in setOf("active", "completed")) return true
   return when (request.paymentStatus?.trim()?.lowercase()) {
+    "paid",
     "success",
     "succeeded",
     "approved",

@@ -70,6 +70,7 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
   private var incomingLoaded = false
   private var activeLoaded = false
   private var historyLoaded = false
+  private var lastKnownActiveRequest: AssistanceRequest? = null
 
   fun loadIfNeeded(isVolunteerLive: Boolean) {
     viewModelScope.launch {
@@ -187,9 +188,6 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
   private fun isRequestPaidByUser(request: AssistanceRequest): Boolean {
     if (request.paymentMethod.lowercase() == "cash") return true
     if (request.isPaid) return true
-    if (request.status == RequestStatus.InProgress || request.status == RequestStatus.Completed || request.status == RequestStatus.Rated || request.status == RequestStatus.Archived) {
-      return true
-    }
     return when (request.paymentStatus?.trim()?.lowercase()) {
       "success", "succeeded", "approved", "paid", "captured", "completed", "settled", "authorized" -> true
       else -> false
@@ -230,15 +228,6 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
           )
         }
 
-        if (!isRequestPaidByUser(refreshedActiveRequest)) {
-          _uiState.update {
-            it.copy(paymentPendingMessage = "The user has not paid for this request yet. Please wait for payment before marking as completed.")
-          }
-          activeLoaded = false
-          refreshActiveData(forceRefresh = true)
-          return@launch
-        }
-
         when (val result = repository.completeRequest(refreshedActiveRequest.id)) {
           is ApiCallResult.Success -> {
             pendingCompleteRequest = null
@@ -266,13 +255,12 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
             pendingCompleteRequest = null
             android.util.Log.e("VolunteerDashboard", "completeRequest FAILED for ${refreshedActiveRequest.id}: ${result.message}")
             val msg = result.message.lowercase()
-            if (
-              msg.contains("payment has not") ||
-              msg.contains("wait for the user to pay") ||
+            val isPaymentIssue = msg.contains("payment") ||
               msg.contains("not paid") ||
-              msg.contains("payment") ||
-              msg.contains("paid")
-            ) {
+              msg.contains("pending") ||
+              msg.contains("confirmed") ||
+              msg.contains("assigned active")
+            if (isPaymentIssue) {
               _uiState.update { it.copy(paymentPendingMessage = "The user has not paid for this request yet. Please wait for payment before marking as completed.") }
             } else {
               _uiState.update { it.copy(actionError = result.message) }
@@ -340,15 +328,25 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
     // Filter out the recently completed request so server lag doesn't bring it back
     val filteredRequests = active.requests.filter { it.id != recentlyCompletedId }
     _uiState.update {
+      val knownHistoryIds = it.historyRequests.map { request -> request.id }.toSet() +
+        it.localCompletedHistory.map { entry -> entry.id }.toSet()
       val resolvedActive = when {
         pendingCompleteRequest != null -> it.activeRequest
         currentAcceptedId != null -> filteredRequests.firstOrNull { request -> request.id == currentAcceptedId }
-          ?: it.activeRequest
-        else -> filteredRequests.firstOrNull()
+          ?: if (currentAcceptedId !in knownHistoryIds) it.activeRequest ?: lastKnownActiveRequest?.takeIf { request -> request.id == currentAcceptedId } else null
+        filteredRequests.isNotEmpty() -> filteredRequests.firstOrNull()
+        else -> lastKnownActiveRequest?.takeIf { request -> request.id !in knownHistoryIds }
+      }
+      if (resolvedActive != null) {
+        lastKnownActiveRequest = resolvedActive
       }
       it.copy(
         tabCounts = active.counts,
-        activeStatusBanner = active.statusBanner.ifBlank { "Assistance in Progress" },
+        activeStatusBanner = if (resolvedActive != null) {
+          "Assistance in Progress"
+        } else {
+          active.statusBanner.ifBlank { "No active assistance right now." }
+        },
         activeRequest = resolvedActive
       )
     }
@@ -367,10 +365,11 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
     // Filter out recently completed request
     val resolvedActiveRequest = active.requests.firstOrNull { it.id != recentlyCompletedId }
     if (resolvedActiveRequest != null) {
+      lastKnownActiveRequest = resolvedActiveRequest
       _uiState.update {
         it.copy(
           tabCounts = active.counts,
-          activeStatusBanner = active.statusBanner.ifBlank { "Assistance in Progress" },
+          activeStatusBanner = "Assistance in Progress",
           activeRequest = resolvedActiveRequest
         )
       }
@@ -380,6 +379,10 @@ class VolunteerDashboardViewModel(application: Application) : AndroidViewModel(a
 
   private suspend fun refreshHistoryData(forceRefresh: Boolean) {
     val history = repository.getVolunteerHistoryDashboard(perPage = 50)
+    val historyIds = history.requests.map { request -> request.id }.toSet()
+    if (lastKnownActiveRequest?.id in historyIds) {
+      lastKnownActiveRequest = null
+    }
     _uiState.update {
       it.copy(
         tabCounts = history.counts,

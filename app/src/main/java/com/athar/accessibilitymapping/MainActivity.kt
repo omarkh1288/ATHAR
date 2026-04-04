@@ -58,11 +58,13 @@ import com.athar.accessibilitymapping.ui.theme.AtharTheme
 import com.athar.accessibilitymapping.ui.theme.Gray200
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.util.resolveMapsApiKey
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.google.android.libraries.places.api.Places
 import kotlinx.coroutines.launch
 
 open class AtharActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    installSplashScreen()
     super.onCreate(savedInstanceState)
 
     initializePlaces()

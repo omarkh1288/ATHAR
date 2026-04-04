@@ -234,7 +234,10 @@ class LocalRequestStore(private val context: Context) {
       description = description,
       hours = hours,
       pricePerHour = pricePerHour,
-      totalAmountEgp = totalAmountEgp
+      totalAmountEgp = totalAmountEgp,
+      paymentMethod = "cash",
+      paymentStatus = null,
+      isPaid = false
     )
   }
 

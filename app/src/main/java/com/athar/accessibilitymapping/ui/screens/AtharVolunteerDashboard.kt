@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.athar.accessibilitymapping.data.AssistanceRequest as DomainAssistanceRequest
 import com.athar.accessibilitymapping.data.RequestStatus
 import com.athar.accessibilitymapping.data.VolunteerDashboardCounts
@@ -440,7 +441,13 @@ fun AtharVolunteerDashboard(
                     onDecline = viewModel::declineRequest,
                     onComplete = viewModel::completeAcceptedRequest,
                     historyItems = historyItems,
-                    actionError = uiState.actionError
+                    acceptBlockMessage = uiState.acceptBlockMessage,
+                    onDismissAcceptBlockMessage = viewModel::clearAcceptBlockMessage,
+                    onGoToActiveTab = { viewModel.selectTab(VolunteerDashboardTab.ACCEPTED, isVolunteerLive = true) },
+                    isLoading = uiState.isRefreshing,
+                    actionError = uiState.actionError,
+                    paymentPendingMessage = uiState.paymentPendingMessage,
+                    onDismissPaymentPending = viewModel::clearPaymentPendingMessage
                 )
             }
         }
@@ -504,6 +511,210 @@ private fun WeeklyActivityEmptyChartDashboard() {
         )
         
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ActiveRequestWarningDialog(
+    message: String,
+    onDismiss: () -> Unit,
+    onGoToActive: () -> Unit = {},
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = VolunteerDashboardColors.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(VolunteerDashboardColors.WarningBg)
+                            .border(2.dp, VolunteerDashboardColors.AccentLight, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PendingActions,
+                            contentDescription = null,
+                            tint = VolunteerDashboardColors.AccentDark,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Finish Current Request First",
+                            color = VolunteerDashboardColors.TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = message,
+                            color = VolunteerDashboardColors.TextSecondary,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(VolunteerDashboardColors.Primary)
+                        .border(1.dp, VolunteerDashboardColors.Gray200, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Mark the active request as completed, then come back and accept another one.",
+                        color = VolunteerDashboardColors.TextLight,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onGoToActive()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = VolunteerDashboardColors.Success),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = "Go to Active Request",
+                        color = VolunteerDashboardColors.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = VolunteerDashboardColors.Gray200),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = "Dismiss",
+                        color = VolunteerDashboardColors.TextSecondary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentPendingDialog(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = VolunteerDashboardColors.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFF3CD))
+                            .border(2.dp, Color(0xFFFFD54F), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Payment,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Payment Required",
+                            color = VolunteerDashboardColors.TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = message,
+                            color = VolunteerDashboardColors.TextSecondary,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFFFF8E1))
+                        .border(1.dp, Color(0xFFFFE082), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Please wait for the user to complete payment before marking this request as done.",
+                        color = Color(0xFF92400E),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = VolunteerDashboardColors.Secondary),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = "Understood",
+                        color = VolunteerDashboardColors.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -618,8 +829,29 @@ private fun LiveDashboard(
     onDecline: (String) -> Unit,
     onComplete: () -> Unit,
     historyItems: List<HistoryItem>,
-    actionError: String?,
+    acceptBlockMessage: String?,
+    onDismissAcceptBlockMessage: () -> Unit,
+    onGoToActiveTab: () -> Unit = {},
+    isLoading: Boolean = false,
+    actionError: String? = null,
+    paymentPendingMessage: String? = null,
+    onDismissPaymentPending: () -> Unit = {},
 ) {
+    if (!acceptBlockMessage.isNullOrBlank()) {
+        ActiveRequestWarningDialog(
+            message = acceptBlockMessage,
+            onDismiss = onDismissAcceptBlockMessage,
+            onGoToActive = onGoToActiveTab
+        )
+    }
+
+    if (!paymentPendingMessage.isNullOrBlank()) {
+        PaymentPendingDialog(
+            message = paymentPendingMessage,
+            onDismiss = onDismissPaymentPending
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -674,14 +906,6 @@ private fun LiveDashboard(
             }
 
             Spacer(Modifier.height(16.dp))
-            if (!actionError.isNullOrBlank()) {
-                Text(
-                    text = actionError,
-                    color = VolunteerDashboardColors.ErrorBg,
-                    fontSize = 13.sp
-                )
-                Spacer(Modifier.height(8.dp))
-            }
 
             // --- Tabs ---
             Row(
@@ -747,7 +971,9 @@ private fun LiveDashboard(
             VolunteerDashboardTab.ACCEPTED -> AcceptedTab(
                 acceptedRequest = acceptedRequest,
                 statusBanner = activeStatusBanner,
-                onComplete = onComplete
+                onComplete = onComplete,
+                isLoading = isLoading,
+                actionError = actionError
             )
             VolunteerDashboardTab.HISTORY -> HistoryTab(historyItems = historyItems, stats = stats, weeklyActivity = weeklyActivity)
         }
@@ -854,12 +1080,25 @@ private fun RequestCard(
                         Icon(Icons.Outlined.Person, contentDescription = null, tint = VolunteerDashboardColors.White, modifier = Modifier.size(24.dp))
                     }
 
-                    Column {
-                        Text(request.userName, fontWeight = FontWeight.SemiBold, color = VolunteerDashboardColors.Secondary, fontSize = 16.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            request.userName,
+                            fontWeight = FontWeight.SemiBold,
+                            color = VolunteerDashboardColors.Secondary,
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Spacer(Modifier.height(2.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(getUserTypeIcon(request.userType), contentDescription = null, tint = VolunteerDashboardColors.TextSecondary, modifier = Modifier.size(16.dp))
-                            Text(request.userType, fontSize = 14.sp, color = VolunteerDashboardColors.TextSecondary)
+                            Text(
+                                request.userType,
+                                fontSize = 14.sp,
+                                color = VolunteerDashboardColors.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
@@ -898,7 +1137,7 @@ private fun RequestCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.LocationOn, contentDescription = null, tint = VolunteerDashboardColors.Secondary, modifier = Modifier.size(16.dp).padding(top = 2.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         buildString {
                             append("From: ")
@@ -906,6 +1145,8 @@ private fun RequestCard(
                         },
                         fontSize = 14.sp,
                         color = VolunteerDashboardColors.TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         buildString {
@@ -914,30 +1155,41 @@ private fun RequestCard(
                         },
                         fontSize = 14.sp,
                         color = VolunteerDashboardColors.TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            // Help type + distance
-            Row(
+            // Help type + pricing
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .background(VolunteerDashboardColors.PrimaryGradient, RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = VolunteerDashboardColors.Secondary, modifier = Modifier.size(16.dp))
-                    Text(request.helpType, fontSize = 14.sp, color = VolunteerDashboardColors.Secondary)
+                    Text(
+                        request.helpType,
+                        fontSize = 14.sp,
+                        color = VolunteerDashboardColors.Secondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.End
+                ) {
                     val displayPricePerHour = request.pricePerHour.coerceAtLeast(1)
                     val displayTotalAmount = request.totalAmountEgp
                         ?: (request.hours.coerceAtLeast(1) * displayPricePerHour).coerceAtLeast(1)
@@ -1012,6 +1264,8 @@ private fun AcceptedTab(
     acceptedRequest: AssistanceRequest?,
     statusBanner: String,
     onComplete: () -> Unit,
+    isLoading: Boolean = false,
+    actionError: String? = null,
 ) {
     if (acceptedRequest == null) {
         EmptyState(
@@ -1209,14 +1463,32 @@ private fun AcceptedTab(
                 // Mark as Completed
                 Button(
                     onClick = onComplete,
+                    enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = VolunteerDashboardColors.Success, contentColor = VolunteerDashboardColors.White),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = VolunteerDashboardColors.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                     Spacer(Modifier.width(8.dp))
-                    Text("Mark as Completed", fontWeight = FontWeight.SemiBold)
+                    Text(if (isLoading) "Completing..." else "Mark as Completed", fontWeight = FontWeight.SemiBold)
+                }
+
+                if (!actionError.isNullOrBlank()) {
+                    Text(
+                        text = actionError,
+                        color = VolunteerDashboardColors.AccentDark,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
         }

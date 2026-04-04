@@ -88,6 +88,7 @@ import com.athar.accessibilitymapping.data.ApiActionResult
 import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.ApiPayRequestResponse
 import com.athar.accessibilitymapping.data.ApiPaymentStatus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -165,6 +166,33 @@ fun AtharPaymentFlow(
                     hasOpenedCheckout = true
                     runCatching { uriHandler.openUri(checkoutUrl) }
                 }
+        }
+    }
+
+    LaunchedEffect(step, activePaymentId) {
+        val paymentId = activePaymentId
+        if (step != PaymentStep.REDIRECTING || paymentId.isNullOrBlank()) return@LaunchedEffect
+
+        while (step == PaymentStep.REDIRECTING && activePaymentId == paymentId && activePaymentStatus?.success != true) {
+            delay(3000)
+            if (isSubmitting) continue
+
+            isSubmitting = true
+            paymentError = null
+            when (val result = onRefreshPaymentStatus(paymentId)) {
+                is ApiCallResult.Success -> {
+                    activePaymentStatus = result.data
+                    paymentMessage = paymentStatusSummary(result.data)
+                        ?: "Waiting for Paymob approval. This updates automatically."
+                    if (result.data.success) {
+                        step = PaymentStep.CONFIRMATION
+                    }
+                }
+                is ApiCallResult.Failure -> {
+                    paymentError = result.message
+                }
+            }
+            isSubmitting = false
         }
     }
 
@@ -702,6 +730,16 @@ private fun ReadOnlyPaymentScreen(
                             SummaryRow("Amount", "${status.amount.toInt()} ${status.currency}")
                         }
                     }
+                }
+
+                if (isRedirecting) {
+                    PaymentFeedbackCard(
+                        text = "Waiting for Paymob approval. This screen updates automatically after payment is approved.",
+                        background = AtharColors.Primary,
+                        border = AtharColors.Secondary,
+                        textColor = AtharColors.Secondary,
+                        icon = Icons.Filled.Refresh
+                    )
                 }
 
                 // ── Pay with Paymob Button ──

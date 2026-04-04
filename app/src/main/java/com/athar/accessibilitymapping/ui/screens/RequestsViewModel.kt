@@ -23,6 +23,9 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
 
   private var pollingStarted = false
 
+  // Track locally-confirmed paid request IDs so polling doesn't revert them
+  private val locallyPaidRequestIds = mutableSetOf<String>()
+
   fun startPollingIfNeeded() {
     if (pollingStarted) return
     pollingStarted = true
@@ -38,6 +41,14 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
     refresh(showRefreshing = false)
   }
 
+  fun markRequestPaid(requestId: String) {
+    locallyPaidRequestIds.add(requestId)
+    _requests.value = _requests.value.map { req ->
+      if (req.id == requestId) req.copy(isPaid = true, paymentStatus = "success")
+      else req
+    }
+  }
+
   fun refresh(showRefreshing: Boolean = true) {
     viewModelScope.launch {
       fetchRequests(showRefreshing = showRefreshing)
@@ -49,7 +60,22 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
       _isRefreshing.value = true
     }
     try {
-      _requests.value = repository.getRequests()
+      val serverRequests = repository.getRequests()
+      // Merge: preserve local paid status for requests the server hasn't caught up on yet
+      _requests.value = serverRequests.map { req ->
+        if (req.id in locallyPaidRequestIds) {
+          if (req.isPaid || req.paymentStatus?.lowercase() in setOf("success", "succeeded", "paid", "completed", "captured")) {
+            // Server caught up — remove from local override
+            locallyPaidRequestIds.remove(req.id)
+            req
+          } else {
+            // Server hasn't caught up yet — keep optimistic state
+            req.copy(isPaid = true, paymentStatus = "success")
+          }
+        } else {
+          req
+        }
+      }
     } finally {
       if (showRefreshing) {
         _isRefreshing.value = false

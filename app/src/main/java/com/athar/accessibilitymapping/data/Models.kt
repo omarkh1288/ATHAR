@@ -52,7 +52,9 @@ data class VolunteerRequest(
   val hours: Int = 1,
   val pricePerHour: Int = 50,
   val totalAmountEgp: Int? = null,
-  val paymentMethod: String = "cash"
+  val paymentMethod: String = "cash",
+  val paymentStatus: String? = null,
+  val isPaid: Boolean = false
 )
 
 data class UserProfile(
@@ -83,7 +85,10 @@ data class AssistanceRequest(
   val status: RequestStatus,
   val hours: Int = 1,
   val pricePerHour: Int = 50,
-  val totalAmountEgp: Int? = null
+  val totalAmountEgp: Int? = null,
+  val paymentMethod: String = "cash",
+  val paymentStatus: String? = null,
+  val isPaid: Boolean = false
 )
 
 data class VolunteerDashboardCounts(

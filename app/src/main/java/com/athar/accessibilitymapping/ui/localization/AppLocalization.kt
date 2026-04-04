@@ -720,6 +720,42 @@ private val overrideTranslations = mapOf(
   "Please select at least one language." to "يرجى اختيار لغة واحدة على الأقل.",
   "Please select at least one availability option." to "يرجى اختيار خيار توفر واحد على الأقل.",
   "Please write your volunteering motivation." to "يرجى كتابة دافع التطوع.",
+  "Please select your accessibility needs." to "يرجى تحديد احتياجات الوصول الخاصة بك.",
+
+  // ── Registration Field Labels (with asterisk) ──
+  "Full Name *" to "الاسم الكامل *",
+  "Email Address *" to "البريد الإلكتروني *",
+  "Phone Number *" to "رقم الهاتف *",
+  "City/Location *" to "المدينة/الموقع *",
+  "Emergency Contact Name *" to "اسم جهة اتصال الطوارئ *",
+  "Emergency Contact Phone *" to "رقم هاتف جهة اتصال الطوارئ *",
+  "National ID / Iqama Number *" to "رقم الهوية الوطنية / الإقامة *",
+  "Date of Birth *" to "تاريخ الميلاد *",
+
+  // ── Registration Placeholders ──
+  "your.email@example.com" to "بريدك@example.com",
+  "+966 50 123 4567" to "+966 50 123 4567",
+  "Enter your ID number" to "أدخل رقم الهوية",
+  "YYYY-MM-DD" to "سنة-شهر-يوم",
+  "Select date" to "اختر التاريخ",
+  "Tap to upload ID document" to "اضغط لتحميل وثيقة الهوية",
+
+  // ── Registration UI ──
+  "Help us serve you better" to "ساعدنا لخدمتك بشكل أفضل",
+  "Submitting..." to "جارٍ التقديم...",
+
+  // ── Availability Options ──
+  "Weekday mornings" to "صباح أيام الأسبوع",
+  "Weekday afternoons" to "ظهر أيام الأسبوع",
+  "Weekday evenings" to "مساء أيام الأسبوع",
+  "Weekend mornings" to "صباح عطلة نهاية الأسبوع",
+  "Weekend afternoons" to "ظهر عطلة نهاية الأسبوع",
+  "Weekend evenings" to "مساء عطلة نهاية الأسبوع",
+  "Flexible/On-demand" to "مرن/حسب الطلب",
+
+  // ── Role Selection ──
+  "Join Athar" to "انضم إلى أثر",
+  "Already have an account? " to "لديك حساب بالفعل؟ ",
 
   // ── Add Place Report (extra) ──
   "Select Location" to "اختر الموقع",
