@@ -15,6 +15,7 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+app/build_backup_before_junction/
 *.aab
 *.apk
 output-metadata.json
