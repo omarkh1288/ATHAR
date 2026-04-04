@@ -14,7 +14,7 @@ internal class AuthService(private val store: InMemoryStore) {
   private val audience = "athar-mobile"
   private val realmName = "athar-api"
   private val jwtSecret = System.getenv("ATHAR_JWT_SECRET")?.takeIf { it.isNotBlank() }
-    ?: "athar-dev-secret-change-in-production"
+    ?: error("ATHAR_JWT_SECRET must be set.")
   private val algorithm = Algorithm.HMAC256(jwtSecret)
   private val accessTokenTtlSeconds = 60L * 60L
   private val refreshTokenTtlSeconds = 60L * 60L * 24L * 30L
