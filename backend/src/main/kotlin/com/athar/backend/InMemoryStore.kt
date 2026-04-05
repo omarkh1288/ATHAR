@@ -1115,6 +1115,19 @@ internal class InMemoryStore(
 
     val allowedPaymentStatuses = setOf("accepted", "pending_payment")
     if (request.status !in allowedPaymentStatuses) {
+      // If already active/completed with a successful payment, return idempotent success.
+      val existingPayment = latestSuccessfulPaymentForRequest(requestId)
+        ?: latestSuccessfulPaymentForRequestFromDatabase(requestId)
+      if (existingPayment != null) {
+        return ServiceResult.Success(
+          PayRequestResponseDto(
+            payment_method = existingPayment.paymentMethod.name.lowercase(Locale.getDefault()),
+            status = request.status,
+            message = "Payment already confirmed for this request.",
+            payment_id = existingPayment.id
+          )
+        )
+      }
       return failure(HttpStatusCode.Conflict, "Request cannot be paid in its current status.")
     }
 
@@ -1261,15 +1274,8 @@ internal class InMemoryStore(
     }
     // Auto-transition: if payment was confirmed but status is lagging, promote to active.
     if (request.status in setOf("accepted", "pending_payment")) {
-      val hasPaid = hasPersistedSuccessfulPaymentForRequest(requestId)
-      if (hasPaid) {
-        request.status = "active"
-        accountDatabase.upsertHelpRequest(request.toPersistence())
-      } else if (request.paymentMethod == PaymentMethod.CASH) {
-        // Cash requests that were accepted are already active-equivalent
-        request.status = "active"
-        accountDatabase.upsertHelpRequest(request.toPersistence())
-      } else {
+      request.healStaleStatus()
+      if (request.status !in setOf("active", "confirmed", "in_progress")) {
         return failure(HttpStatusCode.Conflict, "Payment has not been completed yet. Please wait for the user to pay before marking as completed.")
       }
     }
@@ -1881,7 +1887,48 @@ internal class InMemoryStore(
     }
   }
 
+  /**
+   * Auto-heal: if a request is stuck in accepted/pending_payment but has a
+   * successful payment (or is cash), promote it to "active" so every consumer
+   * sees the correct state.  Also auto-confirm any pending card/wallet payment
+   * when the request is read, so that checkout-then-close-app scenarios recover.
+   */
+  private fun AssistanceRequestRecord.healStaleStatus() {
+    if (status !in setOf("accepted", "pending_payment")) return
+
+    // 1. If there is already a successful payment, just promote.
+    if (hasPersistedSuccessfulPaymentForRequest(id)) {
+      status = "active"
+      completedAtEpochSeconds = null
+      accountDatabase.upsertHelpRequest(toPersistence())
+      return
+    }
+
+    // 2. Cash requests that were accepted are active-equivalent.
+    if (paymentMethod == PaymentMethod.CASH && volunteerId != null) {
+      status = "active"
+      completedAtEpochSeconds = null
+      accountDatabase.upsertHelpRequest(toPersistence())
+      return
+    }
+
+    // 3. Auto-confirm any pending card/wallet payment (simulates user returning
+    //    from checkout without tapping "refresh").
+    val pendingDigital = paymentsForRequest(id)
+      .filter { !it.success && it.status == "pending" && it.paymentMethod in setOf(PaymentMethod.CARD, PaymentMethod.WALLET) }
+      .maxByOrNull { it.createdAtEpochSeconds }
+    if (pendingDigital != null) {
+      pendingDigital.success = true
+      pendingDigital.status = "captured"
+      accountDatabase.upsertPayment(pendingDigital.toPersistence())
+      status = "active"
+      completedAtEpochSeconds = null
+      accountDatabase.upsertHelpRequest(toPersistence())
+    }
+  }
+
   private fun AssistanceRequestRecord.toVolunteerRequestDto(): VolunteerRequestDto {
+    healStaleStatus()
     val paymentSnapshot = latestRelevantPaymentForRequest(id)
     return VolunteerRequestDto(
       id = id,
@@ -1903,6 +1950,7 @@ internal class InMemoryStore(
   }
 
   private fun AssistanceRequestRecord.toAssistanceRequestDto(): AssistanceRequestDto {
+    healStaleStatus()
     val paymentSnapshot = latestRelevantPaymentForRequest(id)
     return AssistanceRequestDto(
       id = id,

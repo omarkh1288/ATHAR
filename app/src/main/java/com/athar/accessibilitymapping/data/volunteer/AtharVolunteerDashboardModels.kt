@@ -169,6 +169,7 @@ data class AtharVolunteerHistoryDto(
 @Serializable
 data class AtharVolunteerHistorySummaryDto(
   val thisMonthNetEarnings: Double? = null,
+  val thisWeekNet: Double? = null,
   val requestsThisWeek: Int? = null
 )
 
@@ -185,6 +186,7 @@ data class AtharVolunteerHistoryItemDto(
   val netAmount: Double? = null,
   val grossAmount: Double? = null,
   val hours: Int? = null,
+  val durationMinutes: Int? = null,
   val userName: String? = null,
   val location: String? = null
 )
@@ -234,7 +236,8 @@ data class AtharVolunteerPaymentHistoryDto(
   val netAmount: Double? = null,
   val status: String? = null,
   val userName: String? = null,
-  val hours: Int? = null
+  val hours: Int? = null,
+  val durationMinutes: Int? = null
 )
 
 @Serializable

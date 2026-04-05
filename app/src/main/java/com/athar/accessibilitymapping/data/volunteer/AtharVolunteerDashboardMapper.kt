@@ -67,10 +67,12 @@ class AtharVolunteerDashboardAssembler(
     } else {
       historyRequestTypes
     }
-    val historyThisWeekNet = earnings.summary.thisWeekNet ?: deriveCurrentWeekNet(history.data)
+    val historyThisWeekNet = history.summary.thisWeekNet
+      ?: earnings.summary.thisWeekNet
+      ?: deriveCurrentWeekNet(history.data)
     val historyThisWeekCount = history.summary.requestsThisWeek ?: deriveCurrentWeekCount(history.data)
-    val currentMonthNet = earnings.summary.currentMonthNet
-      ?: history.summary.thisMonthNetEarnings
+    val currentMonthNet = history.summary.thisMonthNetEarnings
+      ?: earnings.summary.currentMonthNet
       ?: monthlyNetFallback(earnings)
     val historyRecords = history.data.map { item -> item.toHistoryRecordUiModel() }
 
@@ -185,7 +187,7 @@ class AtharVolunteerDashboardAssembler(
           netAmount = item.netAmount ?: amount,
           status = item.status.orEmpty(),
           userName = item.userName.orEmpty(),
-          hours = item.hours ?: 0
+          hours = item.hours ?: item.durationMinutes?.let { kotlin.math.ceil(it / 60.0).toInt() } ?: 0
         )
       }
     if (fromEarnings.isNotEmpty()) return fromEarnings
@@ -199,7 +201,7 @@ class AtharVolunteerDashboardAssembler(
         netAmount = item.netAmount ?: item.grossAmount ?: 0.0,
         status = item.status.orEmpty(),
         userName = item.userName.orEmpty(),
-        hours = item.hours ?: 0
+        hours = item.hours ?: item.durationMinutes?.let { kotlin.math.ceil(it / 60.0).toInt() } ?: 0
       )
     }
   }
@@ -332,7 +334,7 @@ class AtharVolunteerDashboardAssembler(
       dateLabel = formatDisplayDate(eventDateTime ?: completedAt ?: createdAt ?: updatedAt)
         .ifBlank { requestTimeLabel.orEmpty() },
       status = status.orEmpty(),
-      hours = hours ?: 0,
+      hours = hours ?: durationMinutes?.let { kotlin.math.ceil(it / 60.0).toInt() } ?: 0,
       grossAmount = grossAmount ?: netAmount ?: 0.0,
       netAmount = netAmount ?: grossAmount ?: 0.0
     )
@@ -406,7 +408,8 @@ internal object AtharVolunteerPayloadParser {
 
     return AtharVolunteerHistoryDto(
       summary = AtharVolunteerHistorySummaryDto(
-        thisMonthNetEarnings = summarySource.double("this_month_net_earnings", "this_month_net", "current_month_net"),
+        thisMonthNetEarnings = summarySource.double("current_month_net", "this_month_net_earnings", "this_month_net"),
+        thisWeekNet = summarySource.double("this_week_net"),
         requestsThisWeek = summarySource.int("requests_this_week", "this_week", "thisWeek")
       ),
       data = items.map { item ->
@@ -439,6 +442,7 @@ internal object AtharVolunteerPayloadParser {
           netAmount = item.double("net_amount", "net_earnings", "net_amount_egp", "this_month_net_earnings"),
           grossAmount = fallbackGrossAmount,
           hours = hours,
+          durationMinutes = item.int("duration_minutes", "durationMinutes"),
           userName = item.string("user_name", "userName", "name"),
           location = item.string("location")
         )
@@ -480,12 +484,13 @@ internal object AtharVolunteerPayloadParser {
       paymentHistory = (payload.array("payment_history") ?: emptyList()).map { item ->
         AtharVolunteerPaymentHistoryDto(
           id = item.string("id"),
-          dateTime = item.string("date", "created_at", "createdAt"),
+          dateTime = item.string("completed_at", "completedAt", "request_date", "requestDate", "date", "created_at", "createdAt", "updated_at", "updatedAt"),
           amount = item.double("gross", "amount"),
           netAmount = item.double("net", "net_amount"),
           status = item.string("status"),
           userName = item.string("user", "user_name", "userName"),
-          hours = item.int("hours")
+          hours = item.int("hours"),
+          durationMinutes = item.int("duration_minutes", "durationMinutes")
         )
       }
     )

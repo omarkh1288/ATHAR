@@ -265,6 +265,238 @@ class AtharVolunteerDashboardAssemblerTest {
   }
 
   @Test
+  fun `date fallback does not render Unknown date when request_date exists`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          data = listOf(
+            AtharVolunteerHistoryItemDto(
+              id = "dt-1",
+              eventDateTime = "2026-03-25T14:00:00Z",
+              netAmount = 50.0
+            ),
+            AtharVolunteerHistoryItemDto(
+              id = "dt-2",
+              completedAt = null,
+              eventDateTime = null,
+              createdAt = "2026-03-24T10:00:00Z",
+              netAmount = 30.0
+            )
+          )
+        )
+      )
+    )
+
+    // Neither record should produce a blank dateLabel
+    assertTrue(model.historyRecords.all { it.dateLabel.isNotBlank() })
+    assertTrue(model.historyRecords.none { it.dateLabel == "Unknown date" })
+    assertEquals("25 Mar 2026", model.historyRecords[0].dateLabel)
+    assertEquals("24 Mar 2026", model.historyRecords[1].dateLabel)
+  }
+
+  @Test
+  fun `date fallback uses request_date parsed via eventDateTime when completed_at is null`() {
+    val history = AtharVolunteerPayloadParser.parseHistory(
+      Json.parseToJsonElement(
+        """
+          {
+            "data": [
+              {
+                "id": "rd-1",
+                "completed_at": null,
+                "request_date": "2026-03-20T09:00:00Z",
+                "created_at": "2026-03-19T08:00:00Z"
+              }
+            ]
+          }
+        """.trimIndent()
+      )
+    )
+
+    // eventDateTime should pick up request_date since completed_at is null
+    assertEquals("2026-03-20T09:00:00Z", history.data.first().eventDateTime)
+  }
+
+  @Test
+  fun `hours shows non-zero when hours field is present`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          data = listOf(
+            AtharVolunteerHistoryItemDto(
+              id = "h-1",
+              hours = 3,
+              eventDateTime = "2026-03-28T10:00:00Z",
+              netAmount = 90.0
+            )
+          )
+        )
+      )
+    )
+
+    assertEquals(3, model.historyRecords.first().hours)
+  }
+
+  @Test
+  fun `hours derives from duration_minutes when hours is null`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          data = listOf(
+            AtharVolunteerHistoryItemDto(
+              id = "dm-1",
+              hours = null,
+              durationMinutes = 90,
+              eventDateTime = "2026-03-28T10:00:00Z",
+              netAmount = 60.0
+            )
+          )
+        )
+      )
+    )
+
+    // ceil(90 / 60.0) = 2
+    assertEquals(2, model.historyRecords.first().hours)
+  }
+
+  @Test
+  fun `hours defaults to zero when both hours and duration_minutes are null`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          data = listOf(
+            AtharVolunteerHistoryItemDto(
+              id = "z-1",
+              hours = null,
+              durationMinutes = null,
+              eventDateTime = "2026-03-28T10:00:00Z",
+              netAmount = 40.0
+            )
+          )
+        )
+      )
+    )
+
+    assertEquals(0, model.historyRecords.first().hours)
+  }
+
+  @Test
+  fun `weekly net reads this_week_net from history summary when provided`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          summary = AtharVolunteerHistorySummaryDto(
+            thisWeekNet = 999.0
+          )
+        ),
+        earnings = AtharVolunteerEarningsDto(
+          summary = AtharVolunteerEarningsSummaryDto(
+            thisWeekNet = 500.0
+          )
+        )
+      )
+    )
+
+    // history summary.this_week_net (999.0) takes priority over earnings (500.0)
+    assertEquals(999.0, model.historyThisWeekNet, 0.0)
+  }
+
+  @Test
+  fun `weekly net falls back to earnings when history summary this_week_net is null`() {
+    val assembler = AtharVolunteerDashboardAssembler(
+      clock = fixedClock,
+      zoneId = ZoneId.of("UTC")
+    )
+
+    val model = assembler.assemble(
+      AtharVolunteerEndpointBundle(
+        history = AtharVolunteerHistoryDto(
+          summary = AtharVolunteerHistorySummaryDto(
+            thisWeekNet = null
+          )
+        ),
+        earnings = AtharVolunteerEarningsDto(
+          summary = AtharVolunteerEarningsSummaryDto(
+            thisWeekNet = 500.0
+          )
+        )
+      )
+    )
+
+    assertEquals(500.0, model.historyThisWeekNet, 0.0)
+  }
+
+  @Test
+  fun `parser reads this_week_net from history summary`() {
+    val history = AtharVolunteerPayloadParser.parseHistory(
+      Json.parseToJsonElement(
+        """
+          {
+            "summary": {
+              "this_week_net": 777.0,
+              "current_month_net": 1500.0,
+              "requests_this_week": 5
+            },
+            "data": []
+          }
+        """.trimIndent()
+      )
+    )
+
+    assertEquals(777.0, history.summary.thisWeekNet ?: 0.0, 0.0)
+    assertEquals(1500.0, history.summary.thisMonthNetEarnings ?: 0.0, 0.0)
+    assertEquals(5, history.summary.requestsThisWeek)
+  }
+
+  @Test
+  fun `parser reads duration_minutes from history items`() {
+    val history = AtharVolunteerPayloadParser.parseHistory(
+      Json.parseToJsonElement(
+        """
+          {
+            "data": [
+              {
+                "id": "dm-parse-1",
+                "hours": null,
+                "duration_minutes": 150,
+                "net_amount": 100.0
+              }
+            ]
+          }
+        """.trimIndent()
+      )
+    )
+
+    assertEquals(null, history.data.first().hours)
+    assertEquals(150, history.data.first().durationMinutes)
+  }
+
+  @Test
   fun `uses earnings fallback when history current month is missing`() {
     val assembler = AtharVolunteerDashboardAssembler(
       clock = fixedClock,
