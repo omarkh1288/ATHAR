@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.data.VolunteerRequest
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,21 +20,9 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
   private val _isRefreshing = MutableStateFlow(false)
   val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-  private var pollingStarted = false
-
-  // Track locally-confirmed paid request IDs so polling doesn't revert them
+  // Track locally-confirmed request updates so polling does not revert them.
   private val locallyPaidRequestIds = mutableSetOf<String>()
-
-  fun startPollingIfNeeded() {
-    if (pollingStarted) return
-    pollingStarted = true
-    viewModelScope.launch {
-      while (true) {
-        fetchRequests(showRefreshing = false)
-        delay(30_000)
-      }
-    }
-  }
+  private val locallyRatedRequestIds = mutableSetOf<String>()
 
   fun refreshNow() {
     refresh(showRefreshing = false)
@@ -44,8 +31,14 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
   fun markRequestPaid(requestId: String) {
     locallyPaidRequestIds.add(requestId)
     _requests.value = _requests.value.map { req ->
-      if (req.id == requestId) req.copy(isPaid = true, paymentStatus = "success")
-      else req
+      if (req.id == requestId) req.copy(isPaid = true, paymentStatus = "success") else req
+    }
+  }
+
+  fun markRequestRated(requestId: String) {
+    locallyRatedRequestIds.add(requestId)
+    _requests.value = _requests.value.map { req ->
+      if (req.id == requestId) req.copy(status = "rated") else req
     }
   }
 
@@ -61,19 +54,27 @@ class RequestsViewModel(application: Application) : AndroidViewModel(application
     }
     try {
       val serverRequests = repository.getRequests()
-      // Merge: preserve local paid status for requests the server hasn't caught up on yet
       _requests.value = serverRequests.map { req ->
-        if (req.id in locallyPaidRequestIds) {
+        val paidMerged = if (req.id in locallyPaidRequestIds) {
           if (req.isPaid || req.paymentStatus?.lowercase() in setOf("success", "succeeded", "paid", "completed", "captured")) {
-            // Server caught up — remove from local override
             locallyPaidRequestIds.remove(req.id)
             req
           } else {
-            // Server hasn't caught up yet — keep optimistic state
             req.copy(isPaid = true, paymentStatus = "success")
           }
         } else {
           req
+        }
+
+        if (paidMerged.id in locallyRatedRequestIds) {
+          if (paidMerged.status.trim().lowercase() == "rated") {
+            locallyRatedRequestIds.remove(paidMerged.id)
+            paidMerged
+          } else {
+            paidMerged.copy(status = "rated")
+          }
+        } else {
+          paidMerged
         }
       }
     } finally {

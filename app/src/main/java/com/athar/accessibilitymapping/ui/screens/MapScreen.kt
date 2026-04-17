@@ -32,16 +32,18 @@ import androidx.compose.animation.core.tween
 import com.athar.accessibilitymapping.data.SavedLocationsStore
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompletePrediction
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
 import com.google.android.libraries.places.api.model.Place
-import com.google.android.libraries.places.api.model.PlaceTypes
 import com.google.android.libraries.places.api.model.RectangularBounds
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
@@ -53,6 +55,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -179,7 +182,30 @@ import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 import com.athar.accessibilitymapping.ui.payment.AtharPaymentFlow
+import com.athar.accessibilitymapping.util.buildLocationSearchCandidates
+import com.athar.accessibilitymapping.util.scorePlaceSearch
 import com.athar.accessibilitymapping.util.resolveMapsApiKey
+
+private const val MAX_NEARBY_RADIUS_KM = 20
+private const val MAX_NEARBY_RADIUS_METERS = 20000f
+private const val EGYPT_COUNTRY_CODE = "EG"
+private const val EGYPT_MIN_LAT = 21.4
+private const val EGYPT_MAX_LAT = 31.8
+private const val EGYPT_MIN_LNG = 24.6
+private const val EGYPT_MAX_LNG = 36.95
+
+private val EGYPT_BOUNDS = RectangularBounds.newInstance(
+  LatLng(EGYPT_MIN_LAT, EGYPT_MIN_LNG),
+  LatLng(EGYPT_MAX_LAT, EGYPT_MAX_LNG)
+)
+
+private data class NearbyLocationItem(
+  val location: Location,
+  val distanceMeters: Float?
+) {
+  val distanceLabel: String
+    get() = distanceMeters?.let(::formatDistance) ?: location.distance.ifBlank { "Unknown" }
+}
 
 private val atharGlassHtml = """
 <!DOCTYPE html>
@@ -495,6 +521,8 @@ fun MapScreen(
   var isSearching by remember { mutableStateOf(false) }
   var isSearchFieldFocused by remember { mutableStateOf(false) }
   var hasLoadedBefore by rememberSaveable { mutableStateOf(false) }
+  var currentUserLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+  var currentUserLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
   var placesExpanded by remember { mutableStateOf(true) }
   var mapLoaded by remember { mutableStateOf(false) }
   var mapLoadTimedOut by remember { mutableStateOf(false) }
@@ -509,30 +537,54 @@ fun MapScreen(
   var isSubmittingVolunteerRequest by remember { mutableStateOf(false) }
   var isSubmittingRating by remember { mutableStateOf(false) }
   var isUpdatingVolunteerLive by remember { mutableStateOf(false) }
+  val currentUserLocation = currentUserLatitude?.let { lat ->
+    currentUserLongitude?.let { lng -> LatLng(lat, lng) }
+  }
 
+  suspend fun syncNearbyLocationsWithDeviceLocation(centerCamera: Boolean) {
+    val latestDeviceLocation = if (locationPermissionGranted) {
+      fetchCurrentDeviceLocation(fusedLocationClient)
+    } else {
+      null
+    }
+    val effectiveLocation = latestDeviceLocation ?: currentUserLocation
+
+    if (latestDeviceLocation != null) {
+      currentUserLatitude = latestDeviceLocation.latitude
+      currentUserLongitude = latestDeviceLocation.longitude
+    }
+
+    mapViewModel.refresh(
+      lat = effectiveLocation?.latitude,
+      lng = effectiveLocation?.longitude,
+      radiusKm = MAX_NEARBY_RADIUS_KM
+    )
+
+    if (centerCamera && effectiveLocation != null) {
+      cameraPositionState.animate(
+        CameraUpdateFactory.newLatLngZoom(effectiveLocation, 15f)
+      )
+    }
+  }
 
   LaunchedEffect(mapsApiKey) {
-    // Disable Places API client to use free Geocoder fallback instead
-    // To enable Google Places: set up billing at https://console.cloud.google.com
-    placesClient = null
+    if (mapsApiKey.isBlank()) {
+      placesClient = null
+      Log.e("MapScreen", "Maps API key is blank!")
+      return@LaunchedEffect
+    }
 
-    /* Uncomment this block after enabling billing on Google Cloud Console:
-    if (mapsApiKey.isNotBlank() && !Places.isInitialized()) {
-      Log.d("MapScreen", "Initializing Places API with key: ${mapsApiKey.take(10)}...")
-      try {
+    if (!Places.isInitialized()) {
+      runCatching {
         Places.initialize(context.applicationContext, mapsApiKey)
-        Log.d("MapScreen", "Places API initialized successfully")
-      } catch (e: Exception) {
-        Log.e("MapScreen", "Failed to initialize Places API", e)
+      }.onFailure { exception ->
+        Log.e("MapScreen", "Failed to initialize Places API", exception)
       }
     }
-    if (mapsApiKey.isNotBlank() && Places.isInitialized()) {
-      placesClient = Places.createClient(context)
-      Log.d("MapScreen", "Places client created: ${placesClient != null}")
-    } else if (mapsApiKey.isBlank()) {
-      Log.e("MapScreen", "Maps API key is blank!")
-    }
-    */
+
+    placesClient = runCatching { Places.createClient(context) }
+      .onFailure { exception -> Log.e("MapScreen", "Failed to create Places client", exception) }
+      .getOrNull()
   }
   LaunchedEffect(Unit) {
     if (!mapLoaded) {
@@ -542,37 +594,29 @@ fun MapScreen(
       }
     }
   }
+  LaunchedEffect(locationPermissionGranted) {
+    syncNearbyLocationsWithDeviceLocation(centerCamera = false)
+  }
   // Move camera to user's location on first load
   var hasCenteredOnUser by rememberSaveable { mutableStateOf(false) }
-  LaunchedEffect(locationPermissionGranted, mapLoaded) {
-    if (locationPermissionGranted && mapLoaded && !hasCenteredOnUser) {
+  LaunchedEffect(currentUserLatitude, currentUserLongitude, mapLoaded) {
+    if (mapLoaded && currentUserLocation != null && !hasCenteredOnUser) {
       hasCenteredOnUser = true
-      try {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-          if (location != null) {
-            coroutineScope.launch {
-              cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngZoom(
-                  LatLng(location.latitude, location.longitude),
-                  15f
-                )
-              )
-            }
-          }
-        }
-      } catch (_: SecurityException) { }
+      cameraPositionState.animate(
+        CameraUpdateFactory.newLatLngZoom(currentUserLocation, 15f)
+      )
     }
   }
-  LaunchedEffect(searchQuery, locations) {
+  LaunchedEffect(searchQuery, locations, currentUserLatitude, currentUserLongitude, isSearchFieldFocused) {
     val query = searchQuery.trim()
-    val normalizedQuery = query.lowercase(Locale.getDefault())
+    val searchReference = currentUserLocation ?: cameraPositionState.position.target
     if (query.isBlank()) {
       autocompletePredictions = emptyList()
       fallbackSuggestions = emptyList()
       autocompleteError = null
-      showAutocomplete = false
       activeSuggestionQuery = ""
       isAutocompleteLoading = false
+      showAutocomplete = false
       return@LaunchedEffect
     }
     isAutocompleteLoading = true
@@ -580,18 +624,28 @@ fun MapScreen(
     delay(300)
     if (query != searchQuery.trim()) return@LaunchedEffect
 
-    val origin = cameraPositionState.position.target
+    val localSuggestions = buildLocalFallbackSuggestions(query, locations, searchReference)
 
-    // 1. Search loaded locations (case-insensitive)
-    val localSuggestions = buildLocalFallbackSuggestions(query, locations, origin)
-
-    // 2. Search backend DB
-    val backendSuggestions = try {
-      withContext(Dispatchers.IO) {
-        val backendResults = mapViewModel.repository.searchLocations(query)
-        backendResults.map { location ->
+    val googlePredictionsDeferred = async(Dispatchers.IO) {
+      val client = placesClient
+      if (client == null || query.length < 2) {
+        AutocompleteFetchResult(emptyList())
+      } else {
+        fetchAutocompletePredictions(client, query, sessionToken, searchReference)
+      }
+    }
+    val backendSuggestionsDeferred = async(Dispatchers.IO) {
+      try {
+        val backendResults = mapViewModel.repository.searchLocations(
+          query = query,
+          lat = currentUserLocation?.latitude,
+          lng = currentUserLocation?.longitude,
+          radiusKm = MAX_NEARBY_RADIUS_KM
+        )
+        backendResults.mapNotNull { location ->
           val target = LatLng(location.lat, location.lng)
-          val distance = formatDistance(distanceMeters(origin, target))
+          if (!isInEgyptBounds(target)) return@mapNotNull null
+          val distance = formatDistance(distanceMeters(searchReference, target))
           FallbackSuggestion(
             id = "backend:${location.id}",
             title = location.name,
@@ -599,30 +653,55 @@ fun MapScreen(
             latLng = target
           )
         }
+      } catch (_: Exception) {
+        emptyList()
       }
-    } catch (e: Exception) {
-      emptyList<FallbackSuggestion>()
     }
+    val geocoderSuggestionsDeferred = async(Dispatchers.IO) {
+      try {
+        fetchGeocoderFallbackSuggestions(context, query, searchReference)
+      } catch (_: Exception) {
+        emptyList()
+      }
+    }
+    val googlePredictionsResult = googlePredictionsDeferred.await()
+    val backendSuggestions = backendSuggestionsDeferred.await()
+    val geocoderSuggestions = geocoderSuggestionsDeferred.await()
     if (query != searchQuery.trim()) return@LaunchedEffect
 
-    // 3. Merge local + backend results (local first)
-    val dbSuggestions = mergeFallbackSuggestions(localSuggestions, backendSuggestions)
+    val googlePredictions = googlePredictionsResult.predictions
+      .mapNotNull { prediction ->
+        val score = scorePlaceSearch(
+          query,
+          listOf(
+            prediction.getPrimaryText(null).toString(),
+            prediction.getFullText(null).toString()
+          )
+        ) ?: return@mapNotNull null
+        prediction to score
+      }
+      .sortedWith(
+        compareBy<Pair<AutocompletePrediction, com.athar.accessibilitymapping.util.SearchScore>> { it.second }
+          .thenBy { it.first.getPrimaryText(null).length }
+      )
+      .map { it.first }
+      .take(5)
 
-    // 4. Try Nominatim/Geocoder as supplement (non-blocking)
-    val geocoderSuggestions = try {
-      fetchGeocoderFallbackSuggestions(context, query, origin)
-    } catch (e: Exception) {
-      emptyList<FallbackSuggestion>()
+    val databaseSuggestions = mergeFallbackSuggestions(backendSuggestions, localSuggestions)
+    val allSuggestions = when {
+      geocoderSuggestions.isNotEmpty() -> mergeFallbackSuggestions(geocoderSuggestions, databaseSuggestions)
+      else -> databaseSuggestions
     }
-    if (query != searchQuery.trim()) return@LaunchedEffect
 
-    val allSuggestions = mergeFallbackSuggestions(dbSuggestions, geocoderSuggestions)
-
-    autocompletePredictions = emptyList()
+    autocompletePredictions = googlePredictions
     fallbackSuggestions = allSuggestions
-    showAutocomplete = allSuggestions.isNotEmpty()
-    autocompleteError = if (allSuggestions.isEmpty()) "No places found for \"$query\"" else null
-    activeSuggestionQuery = normalizedQuery
+    showAutocomplete = isSearchFieldFocused && (googlePredictions.isNotEmpty() || allSuggestions.isNotEmpty())
+    autocompleteError = when {
+      googlePredictions.isEmpty() && allSuggestions.isEmpty() ->
+        googlePredictionsResult.errorMessage ?: "No places found in Egypt for \"$query\""
+      else -> null
+    }
+    activeSuggestionQuery = query.lowercase(Locale.getDefault())
     isAutocompleteLoading = false
   }
 
@@ -657,6 +736,17 @@ fun MapScreen(
         matchesFilters
       }
     }
+  }
+  val listLocations = remember(filteredLocations, currentUserLatitude, currentUserLongitude) {
+    buildNearbyLocationItems(
+      locations = filteredLocations,
+      reference = currentUserLocation
+    )
+  }
+  val noNearbyPlacesMessage = if (currentUserLocation == null) {
+    "Enable location to see nearby accessible places within 20 km."
+  } else {
+    "Try removing a filter or moving closer. Nearby places are limited to 20 km."
   }
 
   val runSearch = runSearch@{
@@ -707,7 +797,31 @@ fun MapScreen(
           return@launch
         }
       }
+      val backendMatches = withContext(Dispatchers.IO) {
+        mapViewModel.repository.searchLocations(
+          query = query,
+          lat = currentUserLocation?.latitude,
+          lng = currentUserLocation?.longitude,
+          radiusKm = MAX_NEARBY_RADIUS_KM
+        )
+      }
+      val bestBackendMatch = backendMatches.firstOrNull { location ->
+        isInEgyptBounds(LatLng(location.lat, location.lng))
+      }
+      if (bestBackendMatch != null) {
+        val latLng = LatLng(bestBackendMatch.lat, bestBackendMatch.lng)
+        searchResult = latLng
+        searchError = null
+        searchQuery = bestBackendMatch.name
+        autocompletePredictions = emptyList()
+        fallbackSuggestions = emptyList()
+        sessionToken = AutocompleteSessionToken.newInstance()
+        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 14f))
+        isSearching = false
+        return@launch
+      }
       val bestLocalMatch = findBestLocalLocationMatch(query, locations)
+        ?.takeIf { location -> isInEgyptBounds(LatLng(location.lat, location.lng)) }
       if (bestLocalMatch != null) {
         val latLng = LatLng(bestLocalMatch.lat, bestLocalMatch.lng)
         searchResult = latLng
@@ -728,8 +842,7 @@ fun MapScreen(
       }
       val result = withContext(Dispatchers.IO) {
         try {
-          @Suppress("DEPRECATION")
-          Geocoder(context, Locale.getDefault()).getFromLocationName(query, 1)
+          searchEgyptAddresses(context, query, 1)
         } catch (_: IOException) {
           null
         } catch (_: Exception) {
@@ -749,7 +862,7 @@ fun MapScreen(
         }
       } else {
         searchResult = null
-        searchError = "No results found for \"$query\"."
+        searchError = "No results found in Egypt for \"$query\"."
       }
       isSearching = false
     }
@@ -812,8 +925,6 @@ fun MapScreen(
     selectSearchTarget(suggestion.title, suggestion.latLng)
   }
 
-  val listLocations = filteredLocations.sortedBy { parseDistanceMeters(it.distance) }
-
   Box(
     modifier = Modifier
       .fillMaxSize()
@@ -835,7 +946,8 @@ fun MapScreen(
         )
       }
 
-      filteredLocations.forEach { location ->
+      listLocations.forEach { item ->
+        val location = item.location
         val position = LatLng(location.lat, location.lng)
         Marker(
           state = MarkerState(position = position),
@@ -1043,7 +1155,7 @@ fun MapScreen(
           },
           placeholder = {
             Text(
-              "Search for accessible places...",
+              "Search in Egypt...",
               color = NavyPrimary,
               style = MapBodySmallStyle
             )
@@ -1339,7 +1451,7 @@ fun MapScreen(
 
       // (zoom and location controls removed – geolocation is now part of bottom panel)
 
-      if (filteredLocations.isEmpty()) {
+      if (listLocations.isEmpty()) {
         Card(
           modifier = Modifier
             .align(Alignment.TopStart)
@@ -1348,8 +1460,11 @@ fun MapScreen(
           shape = RoundedCornerShape(12.dp)
         ) {
           Column(modifier = Modifier.padding(12.dp)) {
-            Text("No places match your filters", color = NavyPrimary, fontWeight = FontWeight.SemiBold)
-            Text("Try removing a filter to see more locations.", color = NavyPrimary.copy(alpha = 0.7f))
+            Text("No nearby places match your filters", color = NavyPrimary, fontWeight = FontWeight.SemiBold)
+            Text(
+              noNearbyPlacesMessage,
+              color = NavyPrimary.copy(alpha = 0.7f)
+            )
           }
         }
       }
@@ -1372,17 +1487,9 @@ fun MapScreen(
           .size(48.dp)
           .clickable {
             if (locationPermissionGranted) {
-              fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                  coroutineScope.launch {
-                    cameraPositionState.animate(
-                      CameraUpdateFactory.newLatLngZoom(
-                        LatLng(location.latitude, location.longitude),
-                        15f
-                      )
-                    )
-                  }
-                }
+              coroutineScope.launch {
+                hasCenteredOnUser = true
+                syncNearbyLocationsWithDeviceLocation(centerCamera = true)
               }
             } else {
               locationPermissionLauncher.launch(
@@ -1445,7 +1552,8 @@ fun MapScreen(
               .fillMaxWidth()
               .height(220.dp)
           ) {
-            itemsIndexed(listLocations, key = { _, location -> location.id }) { index, location ->
+            itemsIndexed(listLocations, key = { _, item -> item.location.id }) { index, item ->
+              val location = item.location
               Row(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -1463,7 +1571,7 @@ fun MapScreen(
                     style = MapTitleSmallStyle.copy(fontWeight = FontWeight.SemiBold)
                   )
                   Text(
-                    "${location.category} • ${location.distance}",
+                    "${location.category} • ${item.distanceLabel}",
                     color = NavyPrimary.copy(alpha = 0.75f),
                     style = MapBodySmallStyle
                   )
@@ -1516,6 +1624,7 @@ fun MapScreen(
 
   if (selectedLocation != null) {
     val location = selectedLocation!!
+    val selectedLocationDistance = formatLocationDistance(location, currentUserLocation)
     BackHandler { selectedLocation = null }
     Box(
       modifier = Modifier
@@ -1540,6 +1649,7 @@ fun MapScreen(
       ) {
         LocationDetailSheet(
           location = location,
+          distanceLabel = selectedLocationDistance,
           onNavigate = { openDirections(context, LatLng(location.lat, location.lng)) },
           onClose = { selectedLocation = null },
           onRate = {
@@ -1635,7 +1745,11 @@ fun MapScreen(
             coroutineScope.launch {
               when (val result = repository.submitLocationRating(location.id, score, comment.ifBlank { null })) {
                 is ApiCallResult.Success -> {
-                  mapViewModel.refresh()
+                  mapViewModel.refresh(
+                    lat = currentUserLatitude,
+                    lng = currentUserLongitude,
+                    radiusKm = MAX_NEARBY_RADIUS_KM
+                  )
                   selectedLocation = null
                   showRatingModal = false
                 }
@@ -1693,6 +1807,7 @@ private fun MapFeatureChip(label: String) {
 @Composable
 private fun LocationDetailSheet(
   location: Location,
+  distanceLabel: String,
   onNavigate: () -> Unit,
   onClose: () -> Unit,
   onRate: () -> Unit
@@ -1793,7 +1908,7 @@ private fun LocationDetailSheet(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = "${location.distance} away from your location",
+          text = "$distanceLabel away from your location",
           color = NavyPrimary,
           style = MapBodyMediumStyle
         )
@@ -2505,22 +2620,15 @@ private fun findBestLocalLocationMatch(
   locations: List<Location>
 ): Location? {
   if (locations.isEmpty()) return null
-  val normalizedQuery = query.trim().lowercase(Locale.getDefault())
-  if (normalizedQuery.isBlank()) return null
-  val requirePrefixOnly = isPrefixOnlyQuery(normalizedQuery)
+  if (query.isBlank()) return null
 
   return locations
     .map { location ->
-      val rank = rankTextMatch(
-        normalizedQuery = normalizedQuery,
-        candidates = listOf(location.name, location.category),
-        requirePrefixOnly = requirePrefixOnly
-      )
-      location to rank
+      location to scorePlaceSearch(query, buildLocationSearchCandidates(location))
     }
-    .filter { (_, rank) -> rank <= if (requirePrefixOnly) 2 else 5 }
+    .filter { (_, score) -> score != null }
     .sortedWith(
-      compareBy<Pair<Location, Int>> { it.second }
+      compareBy<Pair<Location, com.athar.accessibilitymapping.util.SearchScore?>> { it.second }
         .thenBy { it.first.name.length }
     )
     .firstOrNull()
@@ -2532,52 +2640,19 @@ private fun pickBestFallbackSuggestion(
   suggestions: List<FallbackSuggestion>
 ): FallbackSuggestion? {
   if (suggestions.isEmpty()) return null
-  val normalizedQuery = query.trim().lowercase(Locale.getDefault())
-  if (normalizedQuery.isBlank()) return suggestions.first()
-  val requirePrefixOnly = isPrefixOnlyQuery(normalizedQuery)
+  if (query.isBlank()) return suggestions.first()
 
   return suggestions
     .map { suggestion ->
-      val rank = rankTextMatch(
-        normalizedQuery = normalizedQuery,
-        candidates = listOf(suggestion.title, suggestion.subtitle),
-        requirePrefixOnly = requirePrefixOnly
-      )
-      suggestion to rank
+      suggestion to scorePlaceSearch(query, listOf(suggestion.title, suggestion.subtitle))
     }
-    .filter { (_, rank) -> rank <= if (requirePrefixOnly) 2 else 5 }
+    .filter { (_, score) -> score != null }
     .sortedWith(
-      compareBy<Pair<FallbackSuggestion, Int>> { it.second }
+      compareBy<Pair<FallbackSuggestion, com.athar.accessibilitymapping.util.SearchScore?>> { it.second }
         .thenBy { it.first.title.length }
     )
     .firstOrNull()
     ?.first
-}
-
-private fun rankTextMatch(
-  normalizedQuery: String,
-  candidates: List<String>,
-  requirePrefixOnly: Boolean = false
-): Int {
-  val tokens = normalizedQuery
-    .split("\\s+".toRegex())
-    .map { it.trim() }
-    .filter { it.isNotBlank() }
-
-  return candidates.minOfOrNull { rawCandidate ->
-    val candidate = rawCandidate.lowercase(Locale.getDefault())
-    val hasWordPrefixMatch = hasWordPrefix(candidate, normalizedQuery)
-    when {
-      candidate == normalizedQuery -> 0
-      candidate.startsWith(normalizedQuery) -> 1
-      hasWordPrefixMatch -> 2
-      requirePrefixOnly -> 6
-      candidate.contains(normalizedQuery) -> 3
-      tokens.isNotEmpty() && tokens.all { candidate.contains(it) } -> 4
-      tokens.isNotEmpty() && tokens.any { candidate.contains(it) } -> 5
-      else -> 6
-    }
-  } ?: 6
 }
 
 private fun buildLocalFallbackSuggestions(
@@ -2586,24 +2661,19 @@ private fun buildLocalFallbackSuggestions(
   reference: LatLng
 ): List<FallbackSuggestion> {
   if (locations.isEmpty()) return emptyList()
-  val normalizedQuery = query.trim().lowercase(Locale.getDefault())
-  val requirePrefixOnly = isPrefixOnlyQuery(normalizedQuery)
-  val ranked = locations.map { location ->
-    val target = LatLng(location.lat, location.lng)
-    val matchRank = rankTextMatch(
-      normalizedQuery = normalizedQuery,
-      candidates = listOf(location.name, location.category),
-      requirePrefixOnly = requirePrefixOnly
-    )
-    Triple(location, target, matchRank)
-  }
-  return ranked
-    .filter { it.third <= if (requirePrefixOnly) 2 else 5 }
+  return locations
+    .mapNotNull { location ->
+      val target = LatLng(location.lat, location.lng)
+      if (!isInEgyptBounds(target)) return@mapNotNull null
+      val score = scorePlaceSearch(query, buildLocationSearchCandidates(location))
+        ?: return@mapNotNull null
+      Triple(location, target, score)
+    }
     .sortedWith(
-      compareBy<Triple<Location, LatLng, Int>> { it.third }
+      compareBy<Triple<Location, LatLng, com.athar.accessibilitymapping.util.SearchScore>> { it.third }
         .thenBy { distanceMeters(reference, it.second) }
     )
-    .take(6)
+    .take(8)
     .map { (location, target, _) ->
       val distance = formatDistance(distanceMeters(reference, target))
       FallbackSuggestion(
@@ -2657,10 +2727,8 @@ private suspend fun fetchGeocoderFallbackSuggestions(
 
   // Android Geocoder as final fallback
   if (!Geocoder.isPresent()) return emptyList()
-  val requirePrefixOnly = isPrefixOnlyQuery(normalizedQuery.lowercase(Locale.getDefault()))
   val addresses = try {
-    @Suppress("DEPRECATION")
-    Geocoder(context, Locale.getDefault()).getFromLocationName(query, 10)
+    searchEgyptAddresses(context, query, 10)
   } catch (_: IOException) {
     null
   } catch (_: Exception) {
@@ -2669,29 +2737,31 @@ private suspend fun fetchGeocoderFallbackSuggestions(
 
   return addresses.orEmpty()
     .mapNotNull { address ->
+      if (!address.isEgyptResult()) return@mapNotNull null
       val lat = address.latitude
       val lng = address.longitude
       if (lat == 0.0 && lng == 0.0) return@mapNotNull null
       val target = LatLng(lat, lng)
+      if (!isInEgyptBounds(target)) return@mapNotNull null
       val title = address.featureName?.takeIf { it.isNotBlank() }
         ?: address.locality?.takeIf { it.isNotBlank() }
         ?: address.getAddressLine(0)?.takeIf { it.isNotBlank() }
         ?: return@mapNotNull null
-      val rank = rankTextMatch(
-        normalizedQuery = normalizedQuery.lowercase(Locale.getDefault()),
-        candidates = listOf(title, address.getAddressLine(0).orEmpty()),
-        requirePrefixOnly = requirePrefixOnly
-      )
-      if (rank > if (requirePrefixOnly) 2 else 5) return@mapNotNull null
+      val score = scorePlaceSearch(query, listOf(title, address.getAddressLine(0).orEmpty()))
+        ?: return@mapNotNull null
       val subtitle = buildAddressSubtitle(address, reference, target)
       FallbackSuggestion(
         id = "geo:${title.lowercase(Locale.getDefault())}:${lat}:${lng}",
         title = title,
         subtitle = subtitle,
         latLng = target
-      )
+      ) to score
     }
-    .sortedBy { distanceMeters(reference, it.latLng) }
+    .sortedWith(
+      compareBy<Pair<FallbackSuggestion, com.athar.accessibilitymapping.util.SearchScore>> { it.second }
+        .thenBy { distanceMeters(reference, it.first.latLng) }
+    )
+    .map { it.first }
     .take(8)
 }
 
@@ -2716,7 +2786,7 @@ private fun mergeFallbackSuggestions(
   if (second.isEmpty()) return first
   val merged = linkedMapOf<String, FallbackSuggestion>()
   (first + second).forEach { suggestion ->
-    val key = suggestion.title.lowercase(Locale.getDefault())
+    val key = com.athar.accessibilitymapping.util.normalizePlaceSearchText(suggestion.title)
     if (!merged.containsKey(key)) {
       merged[key] = suggestion
     }
@@ -2724,31 +2794,70 @@ private fun mergeFallbackSuggestions(
   return merged.values.take(8)
 }
 
-private fun isPrefixOnlyQuery(normalizedQuery: String): Boolean {
-  return normalizedQuery.length <= 2
+private fun buildNearbyLocationItems(
+  locations: List<Location>,
+  reference: LatLng?
+): List<NearbyLocationItem> {
+  if (reference == null) return emptyList()
+  return locations
+    .map { location ->
+      val distance = reference?.let { distanceMeters(it, LatLng(location.lat, location.lng)) }
+      NearbyLocationItem(location = location, distanceMeters = distance)
+    }
+    .filter { item ->
+      item.distanceMeters?.let { it <= MAX_NEARBY_RADIUS_METERS } ?: true
+    }
+    .sortedBy { item ->
+      item.distanceMeters ?: parseDistanceMeters(item.location.distance)
+    }
 }
 
-private fun hasWordPrefix(candidate: String, normalizedQuery: String): Boolean {
-  if (normalizedQuery.isBlank()) return false
-  return candidate
-    .split("[^\\p{L}\\p{N}]+".toRegex())
-    .filter { it.isNotBlank() }
-    .any { it.startsWith(normalizedQuery) }
+private fun formatLocationDistance(
+  location: Location,
+  reference: LatLng?
+): String {
+  return reference
+    ?.let { distanceMeters(it, LatLng(location.lat, location.lng)) }
+    ?.let(::formatDistance)
+    ?: location.distance.ifBlank { "Unknown" }
 }
 
-private fun rankPredictionMatch(
-  prediction: AutocompletePrediction,
-  normalizedQuery: String,
-  requirePrefixOnly: Boolean
-): Int {
-  return rankTextMatch(
-    normalizedQuery = normalizedQuery,
-    candidates = listOf(
-      prediction.getPrimaryText(null).toString(),
-      prediction.getFullText(null).toString()
-    ),
-    requirePrefixOnly = requirePrefixOnly
-  )
+private suspend fun fetchCurrentDeviceLocation(
+  fusedLocationClient: FusedLocationProviderClient
+): LatLng? = suspendCancellableCoroutine { continuation ->
+  fun resumeIfActive(location: LatLng?) {
+    if (continuation.isActive) {
+      continuation.resume(location)
+    }
+  }
+
+  try {
+    fusedLocationClient.lastLocation
+      .addOnSuccessListener { lastLocation ->
+        if (lastLocation != null) {
+          resumeIfActive(LatLng(lastLocation.latitude, lastLocation.longitude))
+          return@addOnSuccessListener
+        }
+
+        val cancellationTokenSource = CancellationTokenSource()
+        continuation.invokeOnCancellation { cancellationTokenSource.cancel() }
+        fusedLocationClient
+          .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.token)
+          .addOnSuccessListener { currentLocation ->
+            resumeIfActive(
+              currentLocation?.let { LatLng(it.latitude, it.longitude) }
+            )
+          }
+          .addOnFailureListener {
+            resumeIfActive(null)
+          }
+      }
+      .addOnFailureListener {
+        resumeIfActive(null)
+      }
+  } catch (_: SecurityException) {
+    resumeIfActive(null)
+  }
 }
 
 private fun distanceMeters(from: LatLng, to: LatLng): Float {
@@ -2787,15 +2896,12 @@ private suspend fun fetchAutocompletePredictions(
   token: AutocompleteSessionToken,
   origin: LatLng
 ): AutocompleteFetchResult = suspendCancellableCoroutine { continuation ->
-  val bounds = RectangularBounds.newInstance(
-    LatLng(origin.latitude - 1.2, origin.longitude - 1.2),
-    LatLng(origin.latitude + 1.2, origin.longitude + 1.2)
-  )
   val request = FindAutocompletePredictionsRequest.builder()
     .setQuery(query)
     .setSessionToken(token)
-    .setLocationBias(bounds)
     .setOrigin(origin)
+    .setCountries(listOf(EGYPT_COUNTRY_CODE))
+    .setLocationRestriction(EGYPT_BOUNDS)
     .build()
   client.findAutocompletePredictions(request)
     .addOnSuccessListener { response ->
@@ -2835,6 +2941,7 @@ private suspend fun resolveBestPrediction(
       FetchPlaceRequest.newInstance(prediction.placeId, listOf(Place.Field.LAT_LNG, Place.Field.NAME, Place.Field.ADDRESS))
     )
     val latLng = place?.latLng ?: return@forEach
+    if (!isInEgyptBounds(latLng)) return@forEach
     return prediction to latLng
   }
 
@@ -2845,7 +2952,7 @@ private fun openDirections(context: Context, destination: LatLng) {
   val destinationParam = "${destination.latitude},${destination.longitude}"
   val navigationIntent = Intent(
     Intent.ACTION_VIEW,
-    Uri.parse("google.navigation:q=$destinationParam&mode=w")
+    Uri.parse("google.navigation:q=$destinationParam&mode=d")
   ).apply {
     setPackage("com.google.android.apps.maps")
     if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -2853,7 +2960,7 @@ private fun openDirections(context: Context, destination: LatLng) {
   val browserIntent = Intent(
     Intent.ACTION_VIEW,
     Uri.parse(
-      "https://www.google.com/maps/dir/?api=1&destination=$destinationParam&travelmode=walking"
+      "https://www.google.com/maps/dir/?api=1&destination=$destinationParam&travelmode=driving"
     )
   ).apply {
     if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -2872,12 +2979,11 @@ private suspend fun fetchNominatimSuggestions(
 ): List<FallbackSuggestion> = withContext(Dispatchers.IO) {
   try {
     val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
-    // Prioritize Egypt but allow worldwide search
     val url = "https://nominatim.openstreetmap.org/search?" +
       "q=$encodedQuery&" +
+      "countrycodes=eg&" +
       "format=json&" +
-      "limit=10&" +
-      "countrycodes=eg&" +  // Prioritize Egypt
+      "limit=12&" +
       "addressdetails=1&" +
       "accept-language=en"
 
@@ -2939,6 +3045,7 @@ private fun parseNominatimResponse(json: String, reference: LatLng): List<Fallba
     }
 
     return results
+      .filter { isInEgyptBounds(it.latLng) }
       .sortedBy { distanceMeters(reference, it.latLng) }
       .distinctBy { it.title }
   } catch (e: Exception) {
@@ -2951,6 +3058,35 @@ private fun extractJsonValue(json: String, key: String): String? {
   val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\""
   val regex = Regex(pattern)
   return regex.find(json)?.groupValues?.get(1)
+}
+
+private fun isInEgyptBounds(latLng: LatLng): Boolean {
+  return latLng.latitude in EGYPT_MIN_LAT..EGYPT_MAX_LAT &&
+    latLng.longitude in EGYPT_MIN_LNG..EGYPT_MAX_LNG
+}
+
+private fun Address.isEgyptResult(): Boolean {
+  val normalizedCountryCode = countryCode?.uppercase(Locale.ROOT)
+  if (normalizedCountryCode == EGYPT_COUNTRY_CODE) return true
+
+  val normalizedCountryName = countryName?.trim()?.lowercase(Locale.ROOT)
+  return normalizedCountryName == "egypt" || normalizedCountryName == "مصر"
+}
+
+private fun searchEgyptAddresses(
+  context: Context,
+  query: String,
+  maxResults: Int
+): List<Address>? {
+  @Suppress("DEPRECATION")
+  return Geocoder(context, Locale.getDefault()).getFromLocationName(
+    query,
+    maxResults,
+    EGYPT_MIN_LAT,
+    EGYPT_MIN_LNG,
+    EGYPT_MAX_LAT,
+    EGYPT_MAX_LNG
+  )
 }
 
 @Composable

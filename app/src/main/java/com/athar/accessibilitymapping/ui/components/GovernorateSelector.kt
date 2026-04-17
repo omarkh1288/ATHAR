@@ -1,15 +1,12 @@
-﻿package com.athar.accessibilitymapping.ui.components
-import com.athar.accessibilitymapping.ui.theme.ssp
-
-import com.athar.accessibilitymapping.ui.theme.sdp
+package com.athar.accessibilitymapping.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -17,16 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,13 +28,10 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,8 +43,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.athar.accessibilitymapping.ui.theme.sdp
+import com.athar.accessibilitymapping.ui.theme.ssp
 
 private object AtharColors {
   val Secondary = Color(0xFF1F3C5B)
@@ -63,51 +54,25 @@ private object AtharColors {
   val BgSecondary = Color(0xFFD6E4F5)
   val Gray200 = Color(0xFFE2E8F0)
   val White = Color(0xFFFFFFFF)
+  val Error = Color(0xFFB91C1C)
 }
 
 data class Governorate(
   val id: Int,
   val name: String,
-  val arabicName: String
+  val arabicName: String? = null
 )
 
-val egyptGovernorates = listOf(
-  Governorate(1, "Cairo", "القاهرة"),
-  Governorate(2, "Alexandria", "الإسكندرية"),
-  Governorate(3, "Giza", "الجيزة"),
-  Governorate(4, "Qalyubia", "القليوبية"),
-  Governorate(5, "Port Said", "بورسعيد"),
-  Governorate(6, "Suez", "السويس"),
-  Governorate(7, "Dakahlia", "الدقهلية"),
-  Governorate(8, "Sharqia", "الشرقية"),
-  Governorate(9, "Kafr El Sheikh", "كفر الشيخ"),
-  Governorate(10, "Gharbia", "الغربية"),
-  Governorate(11, "Monufia", "المنوفية"),
-  Governorate(12, "Beheira", "البحيرة"),
-  Governorate(13, "Ismailia", "الإسماعيلية"),
-  Governorate(14, "Damietta", "دمياط"),
-  Governorate(15, "North Sinai", "شمال سيناء"),
-  Governorate(16, "South Sinai", "جنوب سيناء"),
-  Governorate(17, "Faiyum", "الفيوم"),
-  Governorate(18, "Beni Suef", "بني سويف"),
-  Governorate(19, "Minya", "المنيا"),
-  Governorate(20, "Assiut", "أسيوط"),
-  Governorate(21, "Sohag", "سوهاج"),
-  Governorate(22, "Qena", "قنا"),
-  Governorate(23, "Luxor", "الأقصر"),
-  Governorate(24, "Aswan", "أسوان"),
-  Governorate(25, "Red Sea", "البحر الأحمر"),
-  Governorate(26, "Matruh", "مطروح"),
-  Governorate(27, "New Valley", "الوادي الجديد")
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GovernorateSelector(
+  governorates: List<Governorate>,
   selectedGovernorate: Governorate?,
+  isLoading: Boolean = false,
+  errorMessage: String? = null,
   onGovernorateSelected: (Governorate) -> Unit
 ) {
   var showSheet by remember { mutableStateOf(false) }
+  val canOpenSelector = governorates.isNotEmpty() && !isLoading
 
   Box(
     modifier = Modifier
@@ -139,18 +104,47 @@ fun GovernorateSelector(
 
         GovernorateSelectorButton(
           selected = selectedGovernorate,
-          onClick = { showSheet = !showSheet }
+          enabled = canOpenSelector,
+          placeholder = when {
+            isLoading -> "Loading governorates..."
+            governorates.isEmpty() -> "No governorates available"
+            else -> "Select Governorate"
+          },
+          onClick = {
+            if (canOpenSelector) {
+              showSheet = !showSheet
+            }
+          }
         )
 
+        if (!errorMessage.isNullOrBlank()) {
+          Text(
+            text = errorMessage,
+            fontSize = 12.ssp,
+            color = AtharColors.Error,
+            modifier = Modifier.padding(top = 10.sdp)
+          )
+        }
+
+        if (!isLoading && governorates.isEmpty() && errorMessage.isNullOrBlank()) {
+          Text(
+            text = "The server did not return any governorates yet.",
+            fontSize = 12.ssp,
+            color = AtharColors.Secondary.copy(alpha = 0.7f),
+            modifier = Modifier.padding(top = 10.sdp)
+          )
+        }
+
         AnimatedVisibility(
-          visible = showSheet,
+          visible = showSheet && governorates.isNotEmpty(),
           enter = fadeIn(),
           exit = fadeOut()
         ) {
           GovernorateDropdownPanel(
+            governorates = governorates,
             selectedGovernorate = selectedGovernorate,
-            onGovernorateSelected = { gov ->
-              onGovernorateSelected(gov)
+            onGovernorateSelected = { governorate ->
+              onGovernorateSelected(governorate)
               showSheet = false
             },
             onDismiss = { showSheet = false }
@@ -164,6 +158,8 @@ fun GovernorateSelector(
 @Composable
 private fun GovernorateSelectorButton(
   selected: Governorate?,
+  enabled: Boolean,
+  placeholder: String,
   onClick: () -> Unit
 ) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -171,15 +167,17 @@ private fun GovernorateSelectorButton(
 
   val hasSelection = selected != null
   val bgColor = when {
+    !enabled -> AtharColors.Gray200
     hasSelection && isPressed -> AtharColors.SecondaryDark
     hasSelection -> AtharColors.Secondary
     else -> AtharColors.BgSecondary
   }
-  val borderColor = if (hasSelection) AtharColors.SecondaryDark else AtharColors.Secondary
-  val iconTint = if (hasSelection) AtharColors.White else AtharColors.Secondary
+  val borderColor = if (hasSelection && enabled) AtharColors.SecondaryDark else AtharColors.Secondary
+  val iconTint = if (hasSelection && enabled) AtharColors.White else AtharColors.Secondary
 
   Surface(
     onClick = onClick,
+    enabled = enabled,
     modifier = Modifier.fillMaxWidth(),
     shape = RoundedCornerShape(12.sdp),
     color = bgColor,
@@ -213,15 +211,17 @@ private fun GovernorateSelectorButton(
               fontWeight = FontWeight.SemiBold,
               color = AtharColors.White
             )
-            Text(
-              text = selected.arabicName,
-              fontSize = 12.ssp,
-              color = AtharColors.White.copy(alpha = 0.8f)
-            )
+            selected.arabicName?.takeIf { it.isNotBlank() }?.let { arabicName ->
+              Text(
+                text = arabicName,
+                fontSize = 12.ssp,
+                color = AtharColors.White.copy(alpha = 0.8f)
+              )
+            }
           }
         } else {
           Text(
-            text = "Select Governorate",
+            text = placeholder,
             fontSize = 14.ssp,
             fontWeight = FontWeight.SemiBold,
             color = AtharColors.Secondary
@@ -243,6 +243,7 @@ private fun GovernorateSelectorButton(
 
 @Composable
 private fun GovernorateDropdownPanel(
+  governorates: List<Governorate>,
   selectedGovernorate: Governorate?,
   onGovernorateSelected: (Governorate) -> Unit,
   onDismiss: () -> Unit
@@ -264,12 +265,19 @@ private fun GovernorateDropdownPanel(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Text(
-          text = "Select Governorate",
-          fontSize = 15.ssp,
-          fontWeight = FontWeight.SemiBold,
-          color = AtharColors.Secondary
-        )
+        Column {
+          Text(
+            text = "Select Governorate",
+            fontSize = 15.ssp,
+            fontWeight = FontWeight.SemiBold,
+            color = AtharColors.Secondary
+          )
+          Text(
+            text = "${governorates.size} options from server",
+            fontSize = 12.ssp,
+            color = AtharColors.Secondary.copy(alpha = 0.65f)
+          )
+        }
 
         Surface(
           onClick = onDismiss,
@@ -298,130 +306,15 @@ private fun GovernorateDropdownPanel(
           .fillMaxWidth()
           .heightIn(max = 320.sdp)
       ) {
-        items(items = egyptGovernorates, key = { it.id }) { gov ->
+        itemsIndexed(governorates, key = { _, governorate -> governorate.id }) { index, governorate ->
           GovernorateRow(
-            governorate = gov,
-            isSelected = selectedGovernorate?.id == gov.id,
-            onSelect = { onGovernorateSelected(gov) }
+            governorate = governorate,
+            isSelected = selectedGovernorate?.id == governorate.id,
+            onSelect = { onGovernorateSelected(governorate) }
           )
-          if (gov.id < egyptGovernorates.size) {
+          if (index < governorates.lastIndex) {
             HorizontalDivider(color = AtharColors.Gray200, thickness = 1.sdp)
           }
-        }
-      }
-    }
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GovernorateBottomSheet(
-  sheetState: SheetState,
-  selectedGovernorate: Governorate?,
-  onGovernorateSelected: (Governorate) -> Unit,
-  onDismiss: () -> Unit
-) {
-  ModalBottomSheet(
-    onDismissRequest = onDismiss,
-    sheetState = sheetState,
-    shape = RoundedCornerShape(topStart = 24.sdp, topEnd = 24.sdp),
-    containerColor = AtharColors.BgPrimary,
-    scrimColor = Color(0x8C1F3C5B),
-    dragHandle = {
-      Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(top = 12.sdp, bottom = 4.sdp)
-      ) {
-        Box(
-          modifier = Modifier
-            .width(40.sdp)
-            .height(4.sdp)
-            .clip(CircleShape)
-            .background(AtharColors.Gray200)
-        )
-      }
-    },
-    modifier = Modifier.fillMaxHeight(0.80f)
-  ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.sdp, vertical = 16.sdp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.sdp),
-        modifier = Modifier.weight(1f)
-      ) {
-        Box(
-          modifier = Modifier
-            .size(40.sdp)
-            .clip(CircleShape)
-            .background(AtharColors.Secondary)
-            .border(2.sdp, AtharColors.SecondaryDark, CircleShape),
-          contentAlignment = Alignment.Center
-        ) {
-          Icon(
-            imageVector = Icons.Default.Business,
-            contentDescription = null,
-            tint = AtharColors.White,
-            modifier = Modifier.size(20.sdp)
-          )
-        }
-
-        Column {
-          Text(
-            text = "Select Governorate",
-            fontSize = 20.ssp,
-            fontWeight = FontWeight.SemiBold,
-            color = AtharColors.Secondary
-          )
-          Text(
-            text = "27 governorates of Egypt",
-            fontSize = 14.ssp,
-            color = AtharColors.Secondary.copy(alpha = 0.65f)
-          )
-        }
-      }
-
-      val closeInteraction = remember { MutableInteractionSource() }
-      val closePressed by closeInteraction.collectIsPressedAsState()
-
-      Surface(
-        onClick = onDismiss,
-        shape = RoundedCornerShape(12.sdp),
-        color = if (closePressed) AtharColors.Secondary else AtharColors.BgSecondary,
-        border = BorderStroke(2.sdp, AtharColors.Secondary),
-        interactionSource = closeInteraction,
-        modifier = Modifier.size(40.sdp)
-      ) {
-        Box(contentAlignment = Alignment.Center) {
-          Icon(
-            imageVector = Icons.Default.Close,
-            contentDescription = "Close",
-            tint = if (closePressed) AtharColors.White else AtharColors.Secondary,
-            modifier = Modifier.size(20.sdp)
-          )
-        }
-      }
-    }
-
-    HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
-
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-      items(items = egyptGovernorates, key = { it.id }) { gov ->
-        GovernorateRow(
-          governorate = gov,
-          isSelected = selectedGovernorate?.id == gov.id,
-          onSelect = { onGovernorateSelected(gov) }
-        )
-
-        if (gov.id < egyptGovernorates.size) {
-          HorizontalDivider(color = AtharColors.Gray200, thickness = 2.sdp)
         }
       }
     }
@@ -488,11 +381,13 @@ private fun GovernorateRow(
           fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
           color = AtharColors.Secondary
         )
-        Text(
-          text = governorate.arabicName,
-          fontSize = 12.ssp,
-          color = AtharColors.Secondary.copy(alpha = 0.6f)
-        )
+        governorate.arabicName?.takeIf { it.isNotBlank() }?.let { arabicName ->
+          Text(
+            text = arabicName,
+            fontSize = 12.ssp,
+            color = AtharColors.Secondary.copy(alpha = 0.6f)
+          )
+        }
       }
     }
 
@@ -518,4 +413,3 @@ private fun GovernorateRow(
     }
   }
 }
-

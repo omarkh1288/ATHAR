@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class MapViewModel(application: Application) : AndroidViewModel(application) {
+  companion object {
+    private const val DEFAULT_NEARBY_RADIUS_KM = 20
+  }
 
   val repository = AtharRepository(application)
 
@@ -23,15 +26,23 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     loadLocations()
   }
 
-  private fun loadLocations() {
+  private fun loadLocations(
+    lat: Double? = null,
+    lng: Double? = null,
+    radiusKm: Int = DEFAULT_NEARBY_RADIUS_KM
+  ) {
     viewModelScope.launch {
-      _locations.value = repository.getLocations()
+      _locations.value = repository.getLocations(lat = lat, lng = lng, radiusKm = radiusKm)
       _isLoaded.value = true
     }
   }
 
-  fun refresh() {
+  fun refresh(
+    lat: Double? = null,
+    lng: Double? = null,
+    radiusKm: Int = DEFAULT_NEARBY_RADIUS_KM
+  ) {
     _isLoaded.value = false
-    loadLocations()
+    loadLocations(lat = lat, lng = lng, radiusKm = radiusKm)
   }
 }

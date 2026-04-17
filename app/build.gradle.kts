@@ -56,6 +56,10 @@ android {
   }
 
 
+  androidResources {
+    noCompress += "tflite"
+  }
+
   packaging {
     resources {
       excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -129,6 +133,10 @@ dependencies {
 
   // MediaPipe for hand landmark detection
   implementation("com.google.mediapipe:tasks-vision:0.10.14")
+
+  // TensorFlow Lite for ESL LSTM model inference
+  implementation("org.tensorflow:tensorflow-lite:2.16.1")
+  implementation("org.tensorflow:tensorflow-lite-select-tf-ops:2.16.1")
 
   debugImplementation("androidx.compose.ui:ui-tooling:1.10.3")
   debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.3")

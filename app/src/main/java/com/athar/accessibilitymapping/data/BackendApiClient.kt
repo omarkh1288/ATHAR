@@ -54,7 +54,12 @@ import kotlinx.serialization.json.longOrNull
 
 sealed class ApiCallResult<out T> {
   data class Success<T>(val data: T) : ApiCallResult<T>()
-  data class Failure(val message: String, val statusCode: Int? = null) : ApiCallResult<Nothing>()
+  data class Failure(
+    val message: String,
+    val statusCode: Int? = null,
+    val validationField: String? = null,
+    val validationErrors: Map<String, String> = emptyMap()
+  ) : ApiCallResult<Nothing>()
 }
 
 @Serializable
@@ -468,6 +473,18 @@ data class ApiLocationReportRequest(
   val notes: String? = null
 )
 
+data class ApiGovernment(
+  val id: Int,
+  val name: String,
+  val arabicName: String? = null
+)
+
+data class ApiCategory(
+  val id: Int,
+  val name: String,
+  val icon: String? = null
+)
+
 @Serializable
 data class ApiLocationFeatures(
   val ramp: Boolean,
@@ -536,8 +553,8 @@ data class ApiInterpretEgyptianSignResponse(
 
 class BackendApiClient(private val appContext: Context? = null) {
   companion object {
-    private const val DEFAULT_LAT = 30.0444
-    private const val DEFAULT_LNG = 31.2357
+    const val DEFAULT_LAT = 30.0444
+    const val DEFAULT_LNG = 31.2357
     // Max valid EGP total: 200 EGP/h * 8h = 1600. Anything above is likely piasters.
     private const val MAX_VALID_TOTAL_EGP = 1600.0
   }
@@ -895,16 +912,97 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  suspend fun getLocations(): ApiCallResult<List<ApiLocation>> {
-    return getNearbyLocations(search = null)
+  suspend fun getLocations(
+    lat: Double = DEFAULT_LAT,
+    lng: Double = DEFAULT_LNG,
+    radiusKm: Int = 20
+  ): ApiCallResult<List<ApiLocation>> {
+    return getNearbyLocations(
+      search = null,
+      lat = lat,
+      lng = lng,
+      radiusKm = radiusKm
+    )
   }
 
-  suspend fun searchLocations(query: String): ApiCallResult<ApiLocationSearchResponse> {
-    return when (val result = getNearbyLocations(search = query.trim())) {
+  suspend fun getAllLocations(): ApiCallResult<List<ApiLocation>> {
+    return when (val response = get("/locations")) {
       is ApiCallResult.Success -> ApiCallResult.Success(
-        ApiLocationSearchResponse(query = query, results = result.data)
+        extractItems(response.data).mapNotNull { parseLocation(it) }
       )
-      is ApiCallResult.Failure -> result
+      is ApiCallResult.Failure -> {
+        when (val fallback = get("/locations?page=1&per_page=500")) {
+          is ApiCallResult.Success -> {
+            val items = extractItems(fallback.data)
+            ApiCallResult.Success(items.mapNotNull { parseLocation(it) })
+          }
+          is ApiCallResult.Failure -> response
+        }
+      }
+    }
+  }
+
+  suspend fun getGovernments(token: String? = null): ApiCallResult<List<ApiGovernment>> {
+    return when (val response = get("/governments", token = token)) {
+      is ApiCallResult.Success -> {
+        val governments = extractObjectListFromElement(response.data)
+          .mapNotNull { parseGovernment(it) }
+        if (governments.isEmpty()) {
+          ApiCallResult.Failure("Failed to parse governments list.")
+        } else {
+          ApiCallResult.Success(governments)
+        }
+      }
+      is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun getCategories(token: String? = null): ApiCallResult<List<ApiCategory>> {
+    return when (val response = get("/categories", token = token)) {
+      is ApiCallResult.Success -> {
+        val categories = extractObjectListFromElement(response.data)
+          .mapNotNull { parseCategory(it) }
+        if (categories.isEmpty()) {
+          ApiCallResult.Failure("Failed to parse categories list.")
+        } else {
+          ApiCallResult.Success(categories)
+        }
+      }
+      is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun searchLocations(
+    query: String
+  ): ApiCallResult<ApiLocationSearchResponse> {
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isBlank()) {
+      return when (val allLocations = getAllLocations()) {
+        is ApiCallResult.Success -> ApiCallResult.Success(
+          ApiLocationSearchResponse(query = normalizedQuery, results = allLocations.data)
+        )
+        is ApiCallResult.Failure -> allLocations
+      }
+    }
+
+    return when (val response = get("/locations/search?q=${encodeQuery(normalizedQuery)}")) {
+      is ApiCallResult.Success -> {
+        val items = extractItems(response.data)
+        ApiCallResult.Success(
+          ApiLocationSearchResponse(
+            query = normalizedQuery,
+            results = items.mapNotNull { parseLocation(it) }
+          )
+        )
+      }
+      is ApiCallResult.Failure -> {
+        when (val fallback = getAllLocations()) {
+          is ApiCallResult.Success -> ApiCallResult.Success(
+            ApiLocationSearchResponse(query = normalizedQuery, results = fallback.data)
+          )
+          is ApiCallResult.Failure -> response
+        }
+      }
     }
   }
 
@@ -1716,10 +1814,15 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  private suspend fun getNearbyLocations(search: String?): ApiCallResult<List<ApiLocation>> {
+  private suspend fun getNearbyLocations(
+    search: String?,
+    lat: Double = DEFAULT_LAT,
+    lng: Double = DEFAULT_LNG,
+    radiusKm: Int = 20
+  ): ApiCallResult<List<ApiLocation>> {
     val path = buildString {
       append("/locations/nearby")
-      append("?lat=$DEFAULT_LAT&lng=$DEFAULT_LNG&radius_km=5")
+      append("?lat=$lat&lng=$lng&radius_km=$radiusKm")
       append("&search=${encodeQuery(search.orEmpty())}")
       append("&category_id=&government_id=")
     }
@@ -1951,6 +2054,55 @@ class BackendApiClient(private val appContext: Context? = null) {
       features = features,
       recentReports = emptyList(),
       distance = distanceLabel
+    )
+  }
+
+  private fun parseGovernment(obj: JsonObject): ApiGovernment? {
+    val id = obj.readInt("id", "government_id", "governmentId") ?: return null
+    val englishName = obj.readString(
+      "name",
+      "english_name",
+      "englishName",
+      "name_en",
+      "nameEn",
+      "title",
+      "label"
+    )?.trim()
+    val arabicName = obj.readString(
+      "arabic_name",
+      "arabicName",
+      "name_ar",
+      "nameAr",
+      "title_ar",
+      "titleAr",
+      "label_ar",
+      "labelAr"
+    )?.trim()
+    val fallbackName = obj.readString("accessible_locations")?.trim()
+    val displayName = englishName
+      ?.takeIf { it.isNotBlank() }
+      ?: arabicName?.takeIf { it.isNotBlank() }
+      ?: fallbackName?.takeIf { it.isNotBlank() }
+      ?: return null
+
+    return ApiGovernment(
+      id = id,
+      name = displayName,
+      arabicName = arabicName?.takeIf { it.isNotBlank() && !it.equals(displayName, ignoreCase = false) }
+    )
+  }
+
+  private fun parseCategory(obj: JsonObject): ApiCategory? {
+    val id = obj.readInt("id", "category_id", "categoryId") ?: return null
+    val name = obj.readString("name", "title", "label")?.trim()
+      ?.takeIf { it.isNotBlank() }
+      ?: return null
+    val icon = obj.readString("icon", "icon_name", "iconName")?.trim()?.takeIf { it.isNotBlank() }
+
+    return ApiCategory(
+      id = id,
+      name = name,
+      icon = icon
     )
   }
 
@@ -2816,6 +2968,8 @@ class BackendApiClient(private val appContext: Context? = null) {
 
   private fun parseResponse(status: HttpStatusCode, rawBody: String): ApiCallResult<JsonElement?> {
     val parsed = runCatching { json.parseToJsonElement(rawBody) }.getOrNull()
+    val validationErrors = extractValidationErrors(parsed?.asObjectOrNull()?.get("errors"))
+    val validationIssue = validationErrors.entries.firstOrNull()?.let { ValidationIssue(it.key, it.value) }
 
     if (status.value in 200..299) {
       val payload = parsed?.asObjectOrNull()
@@ -2823,8 +2977,10 @@ class BackendApiClient(private val appContext: Context? = null) {
         val isSuccess = payload["success"]?.jsonPrimitive?.booleanOrNull == true
         if (!isSuccess) {
           return ApiCallResult.Failure(
-            message = extractMessage(payload, rawBody, status.value),
-            statusCode = status.value
+            message = extractMessage(payload, rawBody, status.value, validationIssue),
+            statusCode = status.value,
+            validationField = validationIssue?.field,
+            validationErrors = validationErrors
           )
         }
         val normalizedPayload = payload["data"]?.takeUnless { it is JsonNull }
@@ -2837,41 +2993,61 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
 
     return ApiCallResult.Failure(
-      message = extractMessage(parsed?.asObjectOrNull(), rawBody, status.value),
-      statusCode = status.value
+      message = extractMessage(parsed?.asObjectOrNull(), rawBody, status.value, validationIssue),
+      statusCode = status.value,
+      validationField = validationIssue?.field,
+      validationErrors = validationErrors
     )
   }
 
-  private fun extractMessage(payload: JsonObject?, rawBody: String, statusCode: Int): String {
+  private fun extractMessage(
+    payload: JsonObject?,
+    rawBody: String,
+    statusCode: Int,
+    validationIssue: ValidationIssue?
+  ): String {
     if (payload == null) {
       return rawBody.ifBlank { "Request failed with status $statusCode." }
     }
 
     val message = payload.readString("message")?.takeIf { it.isNotBlank() }
-    val firstError = extractFirstError(payload["errors"])
+    val firstError = validationIssue?.message
 
     return when {
-      !firstError.isNullOrBlank() && (message == null || message.equals("Validation failed.", ignoreCase = true)) -> firstError
       !firstError.isNullOrBlank() && message != null -> "$message $firstError"
+      !firstError.isNullOrBlank() -> firstError
       !message.isNullOrBlank() -> message
       else -> "Request failed with status $statusCode."
     }
   }
 
-  private fun extractFirstError(errors: JsonElement?): String? {
-    val obj = errors?.asObjectOrNull() ?: return null
-    obj.values.forEach { value ->
+  private fun extractValidationErrors(errors: JsonElement?): Map<String, String> {
+    val obj = errors?.asObjectOrNull() ?: return emptyMap()
+    val extracted = linkedMapOf<String, String>()
+    obj.entries.forEach { (field, value) ->
       when (value) {
-        is JsonPrimitive -> return value.contentOrNull
+        is JsonPrimitive -> {
+          val message = value.contentOrNull?.takeIf { it.isNotBlank() }
+          if (message != null) {
+            extracted[field] = message
+          }
+        }
         is JsonArray -> {
           val first = value.firstOrNull()?.jsonPrimitive?.contentOrNull
-          if (!first.isNullOrBlank()) return first
+          if (!first.isNullOrBlank()) {
+            extracted[field] = first
+          }
         }
         else -> Unit
       }
     }
-    return null
+    return extracted
   }
+
+  private data class ValidationIssue(
+    val field: String,
+    val message: String
+  )
 
   private fun urlFor(path: String): String {
     val normalizedPath = if (path.startsWith('/')) path else "/$path"

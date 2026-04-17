@@ -12,6 +12,8 @@ import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.gesturerecognizer.GestureRecognizer
 import com.google.mediapipe.tasks.vision.gesturerecognizer.GestureRecognizerResult
+import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
+import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import kotlin.math.roundToInt
 
 internal const val MinimumAcceptedConfidence = 70
@@ -30,6 +32,10 @@ internal data class GestureFrameResult(
   val handCount: Int = 0,
   val rawLabel: String? = null,
   val landmarks: List<GestureLandmark> = emptyList(),
+  /** Raw right-hand landmark coordinates for ESL LSTM model: List of [x, y, z]. */
+  val rightHandCoords: List<FloatArray>? = null,
+  /** Raw left-hand landmark coordinates for ESL LSTM model: List of [x, y, z]. */
+  val leftHandCoords: List<FloatArray>? = null,
   val errorMessage: String? = null,
   val analyzedAtMillis: Long = 0L
 )
@@ -152,6 +158,116 @@ private fun NormalizedLandmark.toGestureLandmark(index: Int): GestureLandmark {
 private fun Category.resolvedLabel(): String {
   val categoryName = categoryName()
   return if (categoryName.isNotBlank()) categoryName else displayName()
+}
+
+// ── HandLandmarker for ESL LSTM (tracks 2 hands) ─────────────────────
+
+private const val HandLandmarkerAsset = "hand_landmarker.task"
+
+/**
+ * Extracts hand landmarks (up to 2 hands) from camera frames.
+ * Used alongside [MediaPipeGestureRecognizer] to feed the ESL LSTM model.
+ */
+internal class MediaPipeHandLandmarker(context: Context) : AutoCloseable {
+  private val appContext = context.applicationContext
+  private var initError: String? = null
+
+  private val handLandmarker: HandLandmarker? = runCatching {
+    val baseOptions = BaseOptions.builder()
+      .setModelAssetPath(HandLandmarkerAsset)
+      .build()
+    val options = HandLandmarker.HandLandmarkerOptions.builder()
+      .setBaseOptions(baseOptions)
+      .setRunningMode(RunningMode.VIDEO)
+      .setNumHands(2)
+      .setMinHandDetectionConfidence(0.5f)
+      .setMinHandPresenceConfidence(0.5f)
+      .setMinTrackingConfidence(0.5f)
+      .build()
+    HandLandmarker.createFromOptions(appContext, options)
+  }.onFailure { e ->
+    initError = e.message
+  }.getOrNull()
+
+  val isReady: Boolean get() = handLandmarker != null
+
+  /**
+   * Extract hand landmarks from an image frame.
+   *
+   * @return Pair of (rightHandCoords, leftHandCoords), each a list of 21 [x,y,z] arrays.
+   *         Null if that hand is not detected.
+   */
+  fun extractLandmarks(
+    imageProxy: ImageProxy,
+    frameTimestampMs: Long
+  ): HandLandmarkResult {
+    val landmarker = handLandmarker ?: return HandLandmarkResult()
+    val bitmap = try {
+      imageProxy.toRgbaBitmap()
+    } catch (e: Exception) {
+      return HandLandmarkResult()
+    }
+
+    return try {
+      val image = BitmapImageBuilder(bitmap).build()
+      val options = ImageProcessingOptions.builder()
+        .setRotationDegrees(imageProxy.imageInfo.rotationDegrees)
+        .build()
+      val result = landmarker.detectForVideo(image, options, frameTimestampMs)
+      result.toHandLandmarkResult()
+    } catch (_: Exception) {
+      HandLandmarkResult()
+    } finally {
+      bitmap.recycle()
+    }
+  }
+
+  override fun close() {
+    handLandmarker?.close()
+  }
+}
+
+internal data class HandLandmarkResult(
+  val rightHandCoords: List<FloatArray>? = null,
+  val leftHandCoords: List<FloatArray>? = null,
+  val handCount: Int = 0
+)
+
+private fun HandLandmarkerResult.toHandLandmarkResult(): HandLandmarkResult {
+  val handLandmarksList = landmarks()
+  if (handLandmarksList.isEmpty()) return HandLandmarkResult()
+
+  // MediaPipe returns hands in detection order; use handedness to determine left/right
+  val handednessList = handednesses()
+  var rightHand: List<FloatArray>? = null
+  var leftHand: List<FloatArray>? = null
+
+  for (i in handLandmarksList.indices) {
+    val coords = handLandmarksList[i].map { lm ->
+      floatArrayOf(lm.x(), lm.y(), lm.z())
+    }
+    val label = handednessList.getOrNull(i)?.firstOrNull()?.categoryName() ?: ""
+    // Note: "Left" in MediaPipe means the camera sees it on the left side,
+    // which is actually the signer's RIGHT hand (mirror). So we swap.
+    if (label.equals("Left", ignoreCase = true)) {
+      rightHand = coords
+    } else {
+      leftHand = coords
+    }
+  }
+
+  // If only one hand and we couldn't determine handedness, use as right
+  if (rightHand == null && leftHand == null && handLandmarksList.isNotEmpty()) {
+    rightHand = handLandmarksList[0].map { lm ->
+      floatArrayOf(lm.x(), lm.y(), lm.z())
+    }
+  }
+
+  return HandLandmarkResult(
+    rightHandCoords = rightHand,
+    leftHandCoords = leftHand,
+    handCount = handLandmarksList.size
+  )
 }
 
 private fun ImageProxy.toRgbaBitmap(): Bitmap {

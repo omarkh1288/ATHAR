@@ -1,6 +1,9 @@
 package com.athar.accessibilitymapping.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -130,7 +133,13 @@ fun RequestsScreen(
   val coroutineScope = rememberCoroutineScope()
 
   val requestsViewModel: RequestsViewModel = viewModel()
-  requestsViewModel.startPollingIfNeeded()
+  
+  LaunchedEffect(Unit) {
+    while (true) {
+      requestsViewModel.refreshNow()
+      delay(30_000L)
+    }
+  }
 
   LaunchedEffect(userId) {
     requestsViewModel.refreshNow()
@@ -322,9 +331,32 @@ fun RequestsScreen(
             )
           }
           itemsIndexed(filteredRequests, key = { _, item -> item.id }) { _, request ->
+            val rawStatus = request.status.trim().lowercase()
             val normalizedStatus = normalizeRequestStatus(request.status)
+            val isAlreadyRated = rawStatus == "rated"
+            val canRateRequest = rawStatus == "completed"
             val cardInteractionSource = remember(request.id) { MutableInteractionSource() }
             val isCardHovered by cardInteractionSource.collectIsHoveredAsState()
+            val ratingButtonContainerColor by animateColorAsState(
+              targetValue = if (!canRateRequest) NavyPrimary else Color.White,
+              animationSpec = tween(durationMillis = 220),
+              label = "ratingButtonContainerColor"
+            )
+            val ratingButtonContentColor by animateColorAsState(
+              targetValue = if (!canRateRequest) Color.White else NavyPrimary,
+              animationSpec = tween(durationMillis = 220),
+              label = "ratingButtonContentColor"
+            )
+            val ratingButtonBorderColor by animateColorAsState(
+              targetValue = if (!canRateRequest) NavyDark else NavyPrimary,
+              animationSpec = tween(durationMillis = 220),
+              label = "ratingButtonBorderColor"
+            )
+            val ratingButtonElevation by animateDpAsState(
+              targetValue = if (!canRateRequest) 8.dp else 4.dp,
+              animationSpec = tween(durationMillis = 220),
+              label = "ratingButtonElevation"
+            )
 
             Column(
               modifier = Modifier
@@ -635,7 +667,7 @@ fun RequestsScreen(
                     } // else
                   } // shouldShowPaymentSection
 
-                  if (normalizedStatus == "completed") {
+                  if (canRateRequest) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                       onClick = {
@@ -643,25 +675,33 @@ fun RequestsScreen(
                         showReviewFlow = true
                       },
                       colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = NavyPrimary
+                        containerColor = ratingButtonContainerColor,
+                        contentColor = ratingButtonContentColor,
+                        disabledContainerColor = ratingButtonContainerColor,
+                        disabledContentColor = ratingButtonContentColor
                       ),
-                      border = BorderStroke(2.dp, NavyPrimary),
+                      border = BorderStroke(2.dp, ratingButtonBorderColor),
                       shape = RoundedCornerShape(10.dp),
                       contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                       modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .shadow(4.dp, RoundedCornerShape(10.dp))
+                        .shadow(ratingButtonElevation, RoundedCornerShape(10.dp)),
+                      enabled = canRateRequest
                     ) {
-                      Text(
-                        text = "Rate Experience",
-                        style = RequestsBodyStyle.copy(
-                          fontSize = 16.sp,
-                          lineHeight = 22.sp
-                        ),
-                        fontWeight = FontWeight.SemiBold,
-                      )
+                      Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Text(
+                          text = "Rate Experience",
+                          style = RequestsBodyStyle.copy(
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp
+                          ),
+                          fontWeight = FontWeight.SemiBold,
+                        )
+                      }
                     }
                   }
                 }
@@ -820,10 +860,13 @@ fun RequestsScreen(
     AtharEndOfRideReview(
       volunteerName = activeRequestForFlow?.volunteerName ?: "Sara Mohammed",
       onSubmit = { rating, comment, issues, reportText ->
-        val requestId = activeRequestForFlow?.id
+        val activeRequest = activeRequestForFlow
+        val requestId = activeRequest?.id
         showReviewFlow = false
         if (requestId == null) {
           infoMessage = "Unable to submit review right now."
+        } else if (activeRequest.status.trim().lowercase() != "completed") {
+          infoMessage = "You can only rate requests that are completed."
         } else {
           coroutineScope.launch {
             when (
@@ -835,11 +878,16 @@ fun RequestsScreen(
               )
             ) {
               is ApiCallResult.Success -> {
+                requestsViewModel.markRequestRated(requestId)
                 requestsViewModel.refreshNow()
                 infoMessage = result.data.message.ifBlank { "Thank you for rating $rating stars!" }
               }
               is ApiCallResult.Failure -> {
-                infoMessage = result.message
+                infoMessage = if (result.statusCode == 422) {
+                  "You can only rate requests that are completed."
+                } else {
+                  result.message
+                }
               }
             }
           }

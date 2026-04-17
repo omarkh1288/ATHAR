@@ -134,7 +134,7 @@ private val ProfileStatLabelStyle = TextStyle(
 )
 
 private val RoleLockBackground = Color(0xFFFFF8DC)
-private val LogoutBorder = Color(0xFFDC2626)
+private val LogoutBorder = Color(0xFFB91C1C)
 private val LogoutText = Color(0xFFB91C1C)
 private val LogoutHoverBackground = Color(0xFFFEE2E2)
 private val HelpfulGreen = Color(0xFF16A34A)

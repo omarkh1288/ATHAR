@@ -2,9 +2,18 @@ package com.athar.accessibilitymapping.data
 
 import android.content.Context
 import android.util.Log
+import com.athar.accessibilitymapping.util.SearchScore
+import com.athar.accessibilitymapping.util.buildLocationSearchCandidates
+import com.athar.accessibilitymapping.util.normalizePlaceSearchText
+import com.athar.accessibilitymapping.util.scorePlaceSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 class AtharRepository(
   context: Context,
@@ -13,25 +22,77 @@ class AtharRepository(
   private val localRequestStore: LocalRequestStore = LocalRequestStore(context.applicationContext),
   private val appPreferences: AppPreferencesStore = AppPreferencesStore(context.applicationContext)
 ) {
-  suspend fun getLocations(): List<Location> = withContext(Dispatchers.IO) {
-    when (val result = api.getLocations()) {
+  @Volatile
+  private var cachedSearchableLocations: List<Location>? = null
+
+  suspend fun getLocations(
+    lat: Double? = null,
+    lng: Double? = null,
+    radiusKm: Int = 20
+  ): List<Location> = withContext(Dispatchers.IO) {
+    when (
+      val result = api.getLocations(
+        lat = lat ?: BackendApiClient.DEFAULT_LAT,
+        lng = lng ?: BackendApiClient.DEFAULT_LNG,
+        radiusKm = radiusKm
+      )
+    ) {
       is ApiCallResult.Success -> result.data.map { it.toDomainLocation() }
       is ApiCallResult.Failure -> mockLocations
     }
   }
 
-  suspend fun searchLocations(query: String): List<Location> = withContext(Dispatchers.IO) {
+  suspend fun searchLocations(
+    query: String,
+    lat: Double? = null,
+    lng: Double? = null,
+    radiusKm: Int = 20
+  ): List<Location> = withContext(Dispatchers.IO) {
     val normalizedQuery = query.trim()
     if (normalizedQuery.isBlank()) return@withContext emptyList()
 
-    val localMatches = searchLocalLocations(normalizedQuery, getLocations())
+    val searchableLocations = getSearchableLocations(lat = lat, lng = lng, radiusKm = radiusKm)
+    val localMatches = searchLocalLocations(
+      normalizedQuery,
+      searchableLocations,
+      lat = lat,
+      lng = lng
+    )
 
     when (val result = api.searchLocations(normalizedQuery)) {
       is ApiCallResult.Success -> {
         val remoteMatches = result.data.results.map { it.toDomainLocation() }
-        mergeSearchLocations(remoteMatches, localMatches, normalizedQuery)
+        mergeSearchLocations(
+          remoteMatches = remoteMatches,
+          localMatches = localMatches,
+          query = normalizedQuery,
+          lat = lat,
+          lng = lng
+        )
       }
       is ApiCallResult.Failure -> localMatches
+    }
+  }
+
+  private suspend fun getSearchableLocations(
+    lat: Double? = null,
+    lng: Double? = null,
+    radiusKm: Int = 20
+  ): List<Location> = withContext(Dispatchers.IO) {
+    cachedSearchableLocations?.takeIf { it.isNotEmpty() }?.let { return@withContext it }
+
+    when (val result = api.getAllLocations()) {
+      is ApiCallResult.Success -> {
+        val locations = result.data.map { it.toDomainLocation() }
+        if (locations.isNotEmpty()) {
+          cachedSearchableLocations = locations
+        }
+        locations
+      }
+      is ApiCallResult.Failure -> {
+        cachedSearchableLocations
+          ?: getLocations(lat = lat, lng = lng, radiusKm = radiusKm)
+      }
     }
   }
 
@@ -923,6 +984,18 @@ class AtharRepository(
     callAuthorized { token -> api.submitRating(token, locationId, score, comment) }
   }
 
+  suspend fun getGovernments(): ApiCallResult<List<ApiGovernment>> = withContext(Dispatchers.IO) {
+    val accessToken = ensureValidAccessToken()
+      ?.takeUnless { it.startsWith("local-") }
+    api.getGovernments(token = accessToken)
+  }
+
+  suspend fun getCategories(): ApiCallResult<List<ApiCategory>> = withContext(Dispatchers.IO) {
+    val accessToken = ensureValidAccessToken()
+      ?.takeUnless { it.startsWith("local-") }
+    api.getCategories(token = accessToken)
+  }
+
   suspend fun submitLocationReport(request: ApiLocationReportRequest): ApiCallResult<ApiActionResult> = withContext(Dispatchers.IO) {
     callAuthorized { token -> api.submitLocationReport(token, request) }
   }
@@ -1216,75 +1289,85 @@ class AtharRepository(
     )
   }
 
-  private fun searchLocalLocations(query: String, locations: List<Location>): List<Location> {
-    val normalizedQuery = query.normalizedSearchText()
-    val queryTokens = normalizedQuery.split(' ').filter { it.isNotBlank() }
-
-    return locations
-      .mapNotNull { location ->
-        val searchable = listOf(location.name, location.category)
-        val rank = searchable.minOfOrNull { candidate ->
-          rankSearchCandidate(candidate, normalizedQuery, queryTokens)
-        } ?: Int.MAX_VALUE
-
-        if (rank == Int.MAX_VALUE) null else location to rank
-      }
-      .sortedWith(
-        compareBy<Pair<Location, Int>> { it.second }
-          .thenBy { it.first.name.length }
-      )
-      .map { it.first }
+  private fun searchLocalLocations(
+    query: String,
+    locations: List<Location>,
+    lat: Double? = null,
+    lng: Double? = null
+  ): List<Location> {
+    return rankLocations(locations, query, lat, lng).map { it.location }
   }
 
   private fun mergeSearchLocations(
     remoteMatches: List<Location>,
     localMatches: List<Location>,
-    query: String
+    query: String,
+    lat: Double? = null,
+    lng: Double? = null
   ): List<Location> {
-    val normalizedQuery = query.normalizedSearchText()
-    val queryTokens = normalizedQuery.split(' ').filter { it.isNotBlank() }
-
-    return (remoteMatches + localMatches)
+    return rankLocations(
+      locations = (remoteMatches + localMatches)
       .distinctBy { location ->
-        listOf(location.id, location.name.normalizedSearchText()).firstOrNull { it.isNotBlank() }.orEmpty()
-      }
-      .map { location ->
-        val rank = listOf(location.name, location.category).minOfOrNull { candidate ->
-          rankSearchCandidate(candidate, normalizedQuery, queryTokens)
-        } ?: Int.MAX_VALUE
-        location to rank
+        listOf(location.id, normalizePlaceSearchText(location.name))
+          .firstOrNull { it.isNotBlank() }
+          .orEmpty()
+      },
+      query = query,
+      lat = lat,
+      lng = lng
+    ).map { it.location }
+  }
+
+  private fun rankLocations(
+    locations: List<Location>,
+    query: String,
+    lat: Double? = null,
+    lng: Double? = null
+  ): List<RankedLocation> {
+    return locations
+      .mapNotNull { location ->
+        val score = scorePlaceSearch(query, buildLocationSearchCandidates(location))
+          ?: return@mapNotNull null
+        RankedLocation(
+          location = location,
+          score = score,
+          distanceMeters = if (lat != null && lng != null) {
+            haversineDistanceMeters(lat, lng, location.lat, location.lng)
+          } else {
+            null
+          }
+        )
       }
       .sortedWith(
-        compareBy<Pair<Location, Int>> { it.second }
-          .thenBy { it.first.name.length }
+        compareBy<RankedLocation> { it.score }
+          .thenBy { it.distanceMeters ?: Double.MAX_VALUE }
+          .thenByDescending { it.location.rating }
+          .thenBy { it.location.name.length }
       )
-      .map { it.first }
   }
 
-  private fun rankSearchCandidate(candidate: String, normalizedQuery: String, queryTokens: List<String>): Int {
-    val normalizedCandidate = candidate.normalizedSearchText()
-    val candidateWords = normalizedCandidate.split(' ').filter { it.isNotBlank() }
-
-    return when {
-      normalizedCandidate.isBlank() -> Int.MAX_VALUE
-      normalizedCandidate == normalizedQuery -> 0
-      normalizedCandidate.startsWith(normalizedQuery) -> 1
-      candidateWords.any { it.startsWith(normalizedQuery) } -> 2
-      normalizedCandidate.contains(normalizedQuery) -> 3
-      queryTokens.isNotEmpty() && queryTokens.all { token -> candidateWords.any { it.startsWith(token) } } -> 4
-      queryTokens.isNotEmpty() && queryTokens.all { token -> normalizedCandidate.contains(token) } -> 5
-      queryTokens.isNotEmpty() && queryTokens.any { token -> normalizedCandidate.contains(token) } -> 6
-      else -> Int.MAX_VALUE
-    }
+  private fun haversineDistanceMeters(
+    fromLat: Double,
+    fromLng: Double,
+    toLat: Double,
+    toLng: Double
+  ): Double {
+    val earthRadiusMeters = 6371000.0
+    val latDistance = Math.toRadians(toLat - fromLat)
+    val lngDistance = Math.toRadians(toLng - fromLng)
+    val startLat = Math.toRadians(fromLat)
+    val endLat = Math.toRadians(toLat)
+    val a = sin(latDistance / 2).pow(2.0) +
+      sin(lngDistance / 2).pow(2.0) * cos(startLat) * cos(endLat)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return earthRadiusMeters * c
   }
 
-  private fun String.normalizedSearchText(): String {
-    return trim()
-      .lowercase()
-      .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-      .replace(Regex("\\s+"), " ")
-      .trim()
-  }
+  private data class RankedLocation(
+    val location: Location,
+    val score: SearchScore,
+    val distanceMeters: Double?
+  )
 
   private fun VolunteerRequest.normalizeMoney(): VolunteerRequest {
     return copy(

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -29,12 +30,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Accessible
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
@@ -42,8 +45,6 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.outlined.DoorFront
 import androidx.compose.material.icons.outlined.Wc
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
@@ -81,6 +82,8 @@ import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 import androidx.core.app.ActivityCompat
 import com.athar.accessibilitymapping.data.ApiCallResult
+import com.athar.accessibilitymapping.data.ApiCategory
+import com.athar.accessibilitymapping.data.ApiGovernment
 import com.athar.accessibilitymapping.data.ApiLocationReportRequest
 import com.athar.accessibilitymapping.data.AtharRepository
 import com.athar.accessibilitymapping.ui.components.Governorate
@@ -118,14 +121,14 @@ object AtharColors {
 }
 
 data class AccessibilityFeature(val id: String, val label: String, val icon: ImageVector)
+data class PlaceCategoryOption(val id: Int, val name: String, val icon: String? = null)
 
 val accessibilityFeatures = listOf(
-  AccessibilityFeature("ramp", "Ramps", Icons.Default.TrendingUp),
-  AccessibilityFeature("elevator", "Elevators", Icons.Default.SwapVert),
-  AccessibilityFeature("parking", "Accessible Parking", Icons.Default.DirectionsCar),
-  AccessibilityFeature("braille", "Braille", Icons.Default.Fingerprint),
-  AccessibilityFeature("toilet", "Accessible Toilet", Icons.Outlined.Wc),
-  AccessibilityFeature("wideEntrance", "Wide Entrance", Icons.Outlined.DoorFront)
+  AccessibilityFeature("wheelchair", "Wheelchair", Icons.AutoMirrored.Filled.Accessible),
+  AccessibilityFeature("ramp", "Ramp", Icons.AutoMirrored.Filled.TrendingUp),
+  AccessibilityFeature("elevator", "Elevator", Icons.Default.SwapVert),
+  AccessibilityFeature("parking", "Parking", Icons.Default.DirectionsCar),
+  AccessibilityFeature("toilet", "Toilet", Icons.Outlined.Wc)
 )
 
 data class LocationSuggestion(val name: String, val lat: Double, val lng: Double)
@@ -144,6 +147,14 @@ val mockSuggestions = listOf(
 )
 
 val ratingLabels = listOf("", "Poor", "Fair", "Good", "Very Good", "Excellent")
+
+private val accessibilityValidationFields = setOf(
+  "wheelchair_accessible",
+  "ramp_available",
+  "elevator_available",
+  "parking",
+  "accessible_toilet"
+)
 
 @Composable
 fun AddPlaceReportButton(onClick: () -> Unit) {
@@ -210,7 +221,15 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   var locationError by remember { mutableStateOf("") }
   var submitted by remember { mutableStateOf(false) }
   var selectedGovernorate by remember { mutableStateOf<Governorate?>(null) }
+  var governorates by remember { mutableStateOf<List<Governorate>>(emptyList()) }
+  var governoratesError by remember { mutableStateOf("") }
+  var isLoadingGovernorates by remember { mutableStateOf(true) }
+  var selectedCategory by remember { mutableStateOf<PlaceCategoryOption?>(null) }
+  var categories by remember { mutableStateOf<List<PlaceCategoryOption>>(emptyList()) }
+  var categoriesError by remember { mutableStateOf("") }
+  var isLoadingCategories by remember { mutableStateOf(true) }
   var submitError by remember { mutableStateOf("") }
+  var submitValidationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
   var isSubmitting by remember { mutableStateOf(false) }
 
   val context = LocalContext.current
@@ -218,7 +237,17 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   val coroutineScope = rememberCoroutineScope()
   var suggestions by remember { mutableStateOf(listOf<LocationSuggestion>()) }
   var isSearching by remember { mutableStateOf(false) }
-  val canSubmit = selectedLocation.isNotEmpty() && rating > 0 && selectedGovernorate != null && !isSubmitting
+  val categoryValidationError = submitValidationErrors["category_id"]
+  val accessibilityValidationError = submitValidationErrors
+    .filterKeys { it in accessibilityValidationFields }
+    .entries
+    .joinToString("\n") { (field, message) -> "${formatLocationReportFieldLabel(field)}: $message" }
+    .trim()
+  val canSubmit = selectedLocation.isNotEmpty() &&
+    rating > 0 &&
+    selectedGovernorate != null &&
+    !isSubmitting &&
+    !isLoadingGovernorates
   val mapLatLng = remember(mapCenter) { LatLng(mapCenter.first, mapCenter.second) }
   val markerState = remember { MarkerState(position = mapLatLng) }
   val cameraPositionState = rememberCameraPositionState {
@@ -232,6 +261,52 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
   LaunchedEffect(mapLatLng) {
     markerState.position = mapLatLng
     cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(mapLatLng, 14f))
+  }
+
+  LaunchedEffect(Unit) {
+    isLoadingGovernorates = true
+    governoratesError = ""
+    when (val result = repository.getGovernments()) {
+      is ApiCallResult.Success -> {
+        val loadedGovernorates = result.data.map { it.toGovernorateUi() }
+        governorates = loadedGovernorates
+        selectedGovernorate = selectedGovernorate?.let { selected ->
+          loadedGovernorates.find { it.id == selected.id }
+        }
+        if (loadedGovernorates.isEmpty()) {
+          governoratesError = "No governorates available from the server."
+        }
+      }
+      is ApiCallResult.Failure -> {
+        governorates = emptyList()
+        selectedGovernorate = null
+        governoratesError = result.message.ifBlank { "Failed to load governorates." }
+      }
+    }
+    isLoadingGovernorates = false
+  }
+
+  LaunchedEffect(Unit) {
+    isLoadingCategories = true
+    categoriesError = ""
+    when (val result = repository.getCategories()) {
+      is ApiCallResult.Success -> {
+        val loadedCategories = result.data.map { it.toCategoryUi() }
+        categories = loadedCategories
+        selectedCategory = selectedCategory?.let { selected ->
+          loadedCategories.find { it.id == selected.id }
+        }
+        if (loadedCategories.isEmpty()) {
+          categoriesError = "No categories available from the server."
+        }
+      }
+      is ApiCallResult.Failure -> {
+        categories = emptyList()
+        selectedCategory = null
+        categoriesError = result.message.ifBlank { "Failed to load categories." }
+      }
+    }
+    isLoadingCategories = false
   }
 
   LaunchedEffect(searchQuery) {
@@ -763,8 +838,31 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
       }
       item {
         GovernorateSelector(
+          governorates = governorates,
           selectedGovernorate = selectedGovernorate,
-          onGovernorateSelected = { selectedGovernorate = it }
+          isLoading = isLoadingGovernorates,
+          errorMessage = governoratesError,
+          onGovernorateSelected = {
+            selectedGovernorate = it
+            submitValidationErrors = submitValidationErrors - "government_id"
+          }
+        )
+      }
+      item {
+        CategorySelectorCard(
+          categories = categories,
+          selectedCategory = selectedCategory,
+          isLoading = isLoadingCategories,
+          errorMessage = categoriesError,
+          validationError = categoryValidationError,
+          onCategorySelected = {
+            selectedCategory = it
+            submitValidationErrors = submitValidationErrors - "category_id"
+          },
+          onClearSelection = {
+            selectedCategory = null
+            submitValidationErrors = submitValidationErrors - "category_id"
+          }
         )
       }
       item {
@@ -876,6 +974,7 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                         } else {
                           selectedFeatures + feature.id
                         }
+                        submitValidationErrors = submitValidationErrors - accessibilityValidationFields
                       },
                     shape = RoundedCornerShape(12.dp),
                     color = chipBg,
@@ -907,6 +1006,15 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 }
               }
             }
+
+            if (accessibilityValidationError.isNotBlank()) {
+              Text(
+                text = accessibilityValidationError,
+                fontSize = 13.sp,
+                color = AtharColors.ErrorRed,
+                modifier = Modifier.padding(top = 8.dp)
+              )
+            }
           }
         }
       }
@@ -919,29 +1027,39 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
             onClick = {
               val governorate = selectedGovernorate ?: return@Button
               submitError = ""
+              submitValidationErrors = emptyMap()
               isSubmitting = true
               val selectedLabels = accessibilityFeatures
                 .filter { selectedFeatures.contains(it.id) }
                 .joinToString { it.label }
+              val hasWheelchair = selectedFeatures.contains("wheelchair")
+              val hasRamp = selectedFeatures.contains("ramp")
+              val hasElevator = selectedFeatures.contains("elevator")
+              val hasParking = selectedFeatures.contains("parking")
+              val hasAccessibleToilet = selectedFeatures.contains("toilet")
               val request = ApiLocationReportRequest(
                 name = selectedLocation.ifBlank { "New Place From Mobile" },
                 address = selectedLocation.ifBlank { "Unknown address" },
                 governmentId = governorate.id,
                 latitude = mapCenter.first,
                 longitude = mapCenter.second,
-                categoryId = null,
+                categoryId = selectedCategory?.id,
                 rating = rating,
                 comment = ratingLabels.getOrNull(rating)
                   ?.takeIf { it.isNotBlank() }
                   ?.let { "$it accessibility" },
-                rampAvailable = selectedFeatures.contains("ramp"),
-                elevatorAvailable = selectedFeatures.contains("elevator"),
-                parking = selectedFeatures.contains("parking"),
-                wheelchairAccessible = selectedFeatures.contains("ramp") || selectedFeatures.contains("elevator"),
-                wideEntrance = selectedFeatures.contains("wideEntrance"),
-                accessibleToilet = selectedFeatures.contains("toilet"),
+                rampAvailable = hasRamp,
+                elevatorAvailable = hasElevator,
+                parking = hasParking,
+                wheelchairAccessible = hasWheelchair,
+                wideEntrance = false,
+                accessibleToilet = hasAccessibleToilet,
                 notes = buildString {
                   append("Submitted from Add Place Report screen")
+                  selectedCategory?.name?.takeIf { it.isNotBlank() }?.let { categoryName ->
+                    append(" | Category: ")
+                    append(categoryName)
+                  }
                   if (selectedLabels.isNotBlank()) {
                     append(" | Selected features: ")
                     append(selectedLabels)
@@ -953,9 +1071,11 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                   is ApiCallResult.Success -> {
                     submitted = true
                     submitError = ""
+                    submitValidationErrors = emptyMap()
                   }
                   is ApiCallResult.Failure -> {
-                    submitError = result.message.ifBlank { "Failed to submit report." }
+                    submitValidationErrors = result.validationErrors
+                    submitError = formatLocationReportFailure(result)
                   }
                 }
                 isSubmitting = false
@@ -995,7 +1115,11 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
 
           if (!canSubmit) {
             Text(
-              text = "Select a location, governorate, and rating to continue",
+              text = if (isLoadingGovernorates) {
+                "Loading governorates from the server..."
+              } else {
+                "Select a location, governorate, and rating to continue"
+              },
               fontSize = 14.sp,
               color = AtharColors.Secondary.copy(alpha = 0.6f),
               textAlign = TextAlign.Center,
@@ -1006,6 +1130,229 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
       }
     }
   }
+}
+
+private fun ApiGovernment.toGovernorateUi(): Governorate {
+  return Governorate(
+    id = id,
+    name = name,
+    arabicName = arabicName
+  )
+}
+
+private fun ApiCategory.toCategoryUi(): PlaceCategoryOption {
+  return PlaceCategoryOption(
+    id = id,
+    name = name,
+    icon = icon
+  )
+}
+
+@Composable
+private fun CategorySelectorCard(
+  categories: List<PlaceCategoryOption>,
+  selectedCategory: PlaceCategoryOption?,
+  isLoading: Boolean,
+  errorMessage: String,
+  validationError: String?,
+  onCategorySelected: (PlaceCategoryOption) -> Unit,
+  onClearSelection: () -> Unit
+) {
+  var showOptions by remember { mutableStateOf(false) }
+  val canOpen = categories.isNotEmpty() && !isLoading
+
+  Card(
+    modifier = Modifier
+      .padding(horizontal = 16.dp)
+      .padding(bottom = 16.dp)
+      .fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    border = BorderStroke(2.dp, AtharColors.Gray200),
+    colors = CardDefaults.cardColors(containerColor = AtharColors.White),
+    elevation = CardDefaults.cardElevation(8.dp)
+  ) {
+    Column(modifier = Modifier.padding(20.dp)) {
+      Text(
+        text = "Category",
+        fontSize = 20.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AtharColors.Secondary,
+        modifier = Modifier.padding(bottom = 4.dp)
+      )
+      Text(
+        text = "Select a category for this place. This is optional.",
+        fontSize = 14.sp,
+        color = AtharColors.Secondary.copy(alpha = 0.7f),
+        modifier = Modifier.padding(bottom = 12.dp)
+      )
+
+      Surface(
+        onClick = {
+          if (canOpen) {
+            showOptions = !showOptions
+          }
+        },
+        enabled = canOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selectedCategory != null && canOpen) AtharColors.Secondary else AtharColors.BgSecondary,
+        border = BorderStroke(2.dp, AtharColors.Secondary)
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Text(
+            text = when {
+              selectedCategory != null -> selectedCategory.name
+              isLoading -> "Loading categories..."
+              categories.isEmpty() -> "No categories available"
+              else -> "Select Category"
+            },
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selectedCategory != null && canOpen) AtharColors.White else AtharColors.Secondary
+          )
+
+          Icon(
+            imageVector = Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = if (selectedCategory != null && canOpen) AtharColors.White else AtharColors.Secondary,
+            modifier = Modifier.size(20.dp)
+          )
+        }
+      }
+
+      if (selectedCategory != null) {
+        Text(
+          text = "Clear category",
+          fontSize = 13.sp,
+          fontWeight = FontWeight.SemiBold,
+          color = AtharColors.AccentDark,
+          modifier = Modifier
+            .padding(top = 10.dp)
+            .clickable {
+              showOptions = false
+              onClearSelection()
+            }
+        )
+      }
+
+      if (errorMessage.isNotBlank()) {
+        Text(
+          text = errorMessage,
+          fontSize = 13.sp,
+          color = AtharColors.ErrorRed,
+          modifier = Modifier.padding(top = 8.dp)
+        )
+      }
+
+      if (!validationError.isNullOrBlank()) {
+        Text(
+          text = "Category: $validationError",
+          fontSize = 13.sp,
+          color = AtharColors.ErrorRed,
+          modifier = Modifier.padding(top = 8.dp)
+        )
+      }
+
+      AnimatedVisibility(visible = showOptions && categories.isNotEmpty()) {
+        Surface(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+          shape = RoundedCornerShape(14.dp),
+          color = AtharColors.White,
+          shadowElevation = 6.dp,
+          border = BorderStroke(2.dp, AtharColors.Gray200)
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(max = 320.dp)
+          ) {
+            categories.forEachIndexed { index, category ->
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable {
+                    onCategorySelected(category)
+                    showOptions = false
+                  }
+                  .background(
+                    if (selectedCategory?.id == category.id) {
+                      AtharColors.BgSecondary
+                    } else {
+                      AtharColors.White
+                    }
+                  )
+                  .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Text(
+                  text = category.name,
+                  fontSize = 14.sp,
+                  fontWeight = if (selectedCategory?.id == category.id) FontWeight.Bold else FontWeight.SemiBold,
+                  color = AtharColors.Secondary,
+                  modifier = Modifier.weight(1f)
+                )
+
+                if (selectedCategory?.id == category.id) {
+                  Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = AtharColors.AccentDark,
+                    modifier = Modifier.size(18.dp)
+                  )
+                }
+              }
+
+              if (index < categories.lastIndex) {
+                HorizontalDivider(color = AtharColors.Gray200, thickness = 1.dp)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private fun formatLocationReportFieldLabel(field: String): String {
+  return when (field) {
+    "category_id" -> "Category"
+    "government_id" -> "Governorate"
+    "wheelchair_accessible" -> "Wheelchair"
+    "ramp_available" -> "Ramp"
+    "elevator_available" -> "Elevator"
+    "parking" -> "Parking"
+    "accessible_toilet" -> "Toilet"
+    else -> field.replace('_', ' ').replaceFirstChar { it.uppercase() }
+  }
+}
+
+private fun formatLocationReportFailure(result: ApiCallResult.Failure): String {
+  val lines = mutableListOf<String>()
+  val baseMessage = result.message.ifBlank { "Failed to submit report." }
+  if (baseMessage.isNotBlank()) {
+    lines += baseMessage
+  }
+
+  result.validationErrors
+    .filterKeys { it == "category_id" || it == "government_id" || it in accessibilityValidationFields }
+    .forEach { (field, message) ->
+      lines += "${formatLocationReportFieldLabel(field)}: $message"
+    }
+
+  return lines
+    .filter { it.isNotBlank() }
+    .distinct()
+    .joinToString("\n")
+    .ifBlank { "Failed to submit report." }
 }
 
 private suspend fun fetchPlaceSuggestions(

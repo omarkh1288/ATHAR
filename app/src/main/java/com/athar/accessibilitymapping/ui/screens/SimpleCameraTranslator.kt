@@ -15,6 +15,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -42,6 +44,7 @@ import com.athar.accessibilitymapping.data.ApiInterpretEgyptianSignRequest
 import com.athar.accessibilitymapping.data.ApiSignLandmark
 import com.athar.accessibilitymapping.data.ApiSignObservation
 import com.athar.accessibilitymapping.data.BackendApiClient
+import com.athar.accessibilitymapping.data.signlanguage.SignTranslationPipeline
 import com.athar.accessibilitymapping.ui.theme.*
 import com.composables.icons.lucide.*
 import java.util.concurrent.Executors
@@ -49,7 +52,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.UUID
 
-private const val AnalysisCooldownMs = 250L
+private const val AnalysisCooldownMs = 100L
 private const val StableDetectionsRequired = 2
 private const val TranscriptCooldownMs = 1800L
 
@@ -58,6 +61,7 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
   val context = LocalContext.current
   val clipboard = LocalClipboardManager.current
   val apiClient = remember(context) { BackendApiClient(context.applicationContext) }
+  val translationPipeline = remember(context) { SignTranslationPipeline(context.applicationContext) }
   val interpretationSessionId = rememberSaveable { UUID.randomUUID().toString() }
   var hasCameraPermission by remember {
     mutableStateOf(
@@ -88,13 +92,18 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
   val arabicTranscript by remember {
     derivedStateOf { transcript.joinToString(" ") { it.translation.arabic } }
   }
+  val instantGestureCount = SupportedGestureTranslations.size
+  val eslSequenceCount = translationPipeline.eslClassCount
+  val totalRecognizedSignCount = instantGestureCount + eslSequenceCount
+  val lexiconEntryCount = translationPipeline.lexicon.allEntries.size
+  val phraseRuleCount = translationPipeline.lexicon.allPhraseRules.size
 
   val permissionLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestPermission()
   ) { granted ->
     hasCameraPermission = granted
     if (granted) {
-      statusText = "Camera ready. Start detection to analyze supported gestures."
+      statusText = "Camera ready. Start detection to recognize $totalRecognizedSignCount camera signs."
     } else {
       isDetecting = false
       statusText = "Camera permission is required for live gesture recognition."
@@ -112,6 +121,7 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
       interpreterMode = null
       interpreterNotes = emptyList()
       interpreterError = null
+      translationPipeline.clear()
     }
     currentDetection = null
     pendingLabel = null
@@ -129,6 +139,40 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
     }
 
     errorText = null
+
+    // Feed every frame into the translation pipeline (including no-hand frames)
+    val pipelineUpdated = translationPipeline.feedFrame(
+      label = result.rawLabel.orEmpty(),
+      confidence = result.confidencePercent / 100f,
+      timestampMs = result.analyzedAtMillis,
+      handCount = result.handCount
+    )
+
+    // Feed landmarks into the ESL LSTM model for Egyptian Sign Language recognition
+    val eslUpdated = translationPipeline.feedLandmarks(
+      rightHandLandmarks = result.rightHandCoords,
+      leftHandLandmarks = result.leftHandCoords,
+      timestampMs = result.analyzedAtMillis,
+      handCount = result.handCount
+    )
+
+    if (pipelineUpdated || eslUpdated) {
+      val pipelineResult = translationPipeline.currentTranslation
+      if (pipelineResult.arabicText.isNotBlank()) {
+        volunteerArabicSentence = pipelineResult.arabicText
+        volunteerEnglishSentence = pipelineResult.englishText
+        interpreterMode = if (eslUpdated) "esl_lstm" else "local_pipeline"
+        interpreterNotes = buildList {
+          add("Translated from ${pipelineResult.signSequence.size} recognized signs.")
+          if (eslUpdated) add("ESL LSTM model active (66 Egyptian signs).")
+          if (pipelineResult.isPartial) add("Partial — still signing.")
+          pipelineResult.debugInfo?.phraseMatches?.forEach { add("Phrase: $it") }
+        }
+        interpreterError = null
+        interpreterPending = false
+      }
+    }
+
     if (result.handCount == 0) {
       currentDetection = null
       pendingLabel = null
@@ -144,7 +188,7 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
       statusText = if (result.rawLabel != null) {
         "Detected ${result.rawLabel}, but it is outside the bilingual map."
       } else {
-        "Hand detected. Try one of the supported gestures below."
+        "Hand detected. Analyzing sign language..."
       }
       return
     }
@@ -186,6 +230,10 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
     lastAcceptedAt = result.analyzedAtMillis
   }
 
+  DisposableEffect(Unit) {
+    onDispose { translationPipeline.close() }
+  }
+
   LaunchedEffect(hasCameraPermission) {
     if (!hasCameraPermission) {
       reset(clearTranscript = false)
@@ -195,11 +243,11 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
   LaunchedEffect(isDetecting) {
     if (isDetecting) {
-      statusText = "Listening for a supported gesture."
+      statusText = "Listening for signs ($totalRecognizedSignCount camera signs supported)."
       errorText = null
     } else if (hasCameraPermission) {
       reset(clearTranscript = false)
-      statusText = "Camera ready. Start detection to analyze supported gestures."
+      statusText = "Camera ready. Start detection to recognize $totalRecognizedSignCount camera signs."
       errorText = null
     }
   }
@@ -215,6 +263,13 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
       interpreterPending = false
       return@LaunchedEffect
     }
+
+    // The local translation pipeline already provides Arabic/English output
+    // via handleFrame → translationPipeline.feedFrame. The pipeline output
+    // is set immediately on each committed sign. Here we optionally enhance
+    // with the backend API for richer interpretation.
+    val pipelineResult = translationPipeline.currentTranslation
+    val hasPipelineOutput = pipelineResult.arabicText.isNotBlank()
 
     interpreterPending = true
     interpreterError = null
@@ -241,17 +296,45 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
 
     when (val response = apiClient.interpretEgyptianSign(request)) {
       is ApiCallResult.Success -> {
-        volunteerArabicSentence = response.data.arabicSentence
-        volunteerEnglishSentence = response.data.englishSentence
-        interpreterMode = response.data.mode
-        interpreterNotes = response.data.notes
+        val backendLooksLikeFallback = response.data.mode.contains("fallback", ignoreCase = true)
+        val backendLooksShorterThanPipeline = hasPipelineOutput &&
+          response.data.arabicSentence.trim().length < pipelineResult.arabicText.trim().length
+        val shouldPreferPipeline = hasPipelineOutput &&
+          (backendLooksLikeFallback || (pipelineResult.signSequence.size > 1 && backendLooksShorterThanPipeline))
+
+        if (shouldPreferPipeline) {
+          volunteerArabicSentence = pipelineResult.arabicText
+          volunteerEnglishSentence = pipelineResult.englishText
+          interpreterMode = "local_pipeline"
+          interpreterNotes = buildList {
+            add("Using the local translation pipeline because it preserved more of the signed sequence.")
+            addAll(response.data.notes)
+            if (pipelineResult.isPartial) add("Partial — still signing.")
+          }
+        } else {
+          volunteerArabicSentence = response.data.arabicSentence
+          volunteerEnglishSentence = response.data.englishSentence
+          interpreterMode = response.data.mode
+          interpreterNotes = response.data.notes
+        }
         interpreterError = null
       }
       is ApiCallResult.Failure -> {
-        volunteerArabicSentence = observations.joinToString(" ") { it.translation.arabic }
-        volunteerEnglishSentence = observations.joinToString(" ") { it.translation.english }
-        interpreterMode = "local_fallback"
-        interpreterNotes = listOf("Backend unavailable. Showing the local transcript only.")
+        // Fall back to pipeline output (phrase-matched, cleaned Arabic text)
+        if (hasPipelineOutput) {
+          volunteerArabicSentence = pipelineResult.arabicText
+          volunteerEnglishSentence = pipelineResult.englishText
+          interpreterMode = "local_pipeline"
+          interpreterNotes = buildList {
+            add("Using local translation pipeline with phrase matching.")
+            if (pipelineResult.isPartial) add("Partial — still signing.")
+          }
+        } else {
+          volunteerArabicSentence = observations.joinToString(" ") { it.translation.arabic }
+          volunteerEnglishSentence = observations.joinToString(" ") { it.translation.english }
+          interpreterMode = "local_fallback"
+          interpreterNotes = listOf("Backend unavailable. Showing the local transcript only.")
+        }
         interpreterError = response.message
       }
     }
@@ -323,7 +406,12 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
           } else if (!isDetecting) {
             CenterOverlay(title = "Camera ready", message = "Tap start detection to begin live recognition.", buttonText = null, onButtonClick = null)
           } else if (currentDetection == null) {
-            CenterOverlay(title = "Listening", message = "Show one supported gesture with one hand.", buttonText = null, onButtonClick = null)
+            CenterOverlay(
+              title = "Listening",
+              message = "Sign with one hand. $totalRecognizedSignCount camera signs are supported by the current model.",
+              buttonText = null,
+              onButtonClick = null
+            )
           }
 
           if (isDetecting && currentDetection != null) {
@@ -527,6 +615,7 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
         }
       }
 
+      // ── Instant Gestures (7 MediaPipe) ───────────────────────────────
       Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.sdp),
@@ -534,7 +623,8 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
         border = BorderStroke(2.sdp, Gray200)
       ) {
         Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(12.sdp)) {
-          Text("Supported Gestures", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
+          Text("Instant Gestures ($instantGestureCount)", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
+          Text("Recognized instantly from a single frame.", color = TextLight, fontSize = 13.ssp)
           SupportedGestureTranslations.forEach { gesture ->
             Column(
               Modifier.fillMaxWidth().background(BluePrimary, RoundedCornerShape(16.sdp))
@@ -548,6 +638,68 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
         }
       }
 
+      // ── Egyptian Sign Language (66 ESL signs) ────────────────────────
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.sdp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(2.sdp, Gray200)
+      ) {
+        Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(12.sdp)) {
+          Text("Egyptian Sign Language ($eslSequenceCount signs)", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
+          Text("Recognized from hand movement sequences using the ESL LSTM model.", color = TextLight, fontSize = 13.ssp)
+
+          EslSignCategory("Question Words", listOf(
+            "ازاى - How" to "ازاى",  "ايه - What" to "ايه",  "فين - Where" to "فين",
+            "ليه - Why" to "ليه",  "مين - Who" to "مين",  "امتى - When" to "امتى"
+          ))
+          EslSignCategory("Days", listOf(
+            "الأحد - Sunday" to "الاحد",  "الثلاثاء - Tuesday" to "الثلاثاء",
+            "الأربعاء - Wednesday" to "الاربعاء",  "الخميس - Thursday" to "الخميس",
+            "الجمعة - Friday" to "الجمعة",  "السبت - Saturday" to "السبت"
+          ))
+          EslSignCategory("Colors", listOf(
+            "أبيض - White" to "ابيض",  "أحمر - Red" to "احمر",  "أزرق - Blue" to "ازرق",
+            "أسود - Black" to "اسود",  "برتقالي - Orange" to "برتقالي",
+            "بنفسجي - Purple" to "بنفسجى",  "ألوان - Colors" to "الوان"
+          ))
+          EslSignCategory("Jobs", listOf(
+            "دكتور - Doctor" to "دكتور",  "معلم - Teacher" to "معلم",
+            "مهندس - Engineer" to "مهندس",  "طيار - Pilot" to "طيار",
+            "عامل - Worker" to "عامل"
+          ))
+          EslSignCategory("Expressions", listOf(
+            "شكرا - Thank you" to "شكرا",  "آسف - Sorry" to "اسف",
+            "بحبك - I love you" to "بحبك",  "مع السلامة - Goodbye" to "مع السلامة",
+            "أكيد - Sure" to "اكيد",  "ممكن - Maybe" to "ممكن",
+            "كويس - Good" to "جيد - كويس"
+          ))
+          EslSignCategory("Descriptions", listOf(
+            "جميل - Beautiful" to "جميل",  "طويل - Tall" to "طويل",
+            "قصير - Short" to "قصير",  "خفيف - Light" to "خفيف",
+            "مشغول - Busy" to "مشغول",  "فاضي - Free" to "فاضي",
+            "نشيط - Active" to "نشيط",  "متفائل - Optimistic" to "متفائل",
+            "قبيح - Ugly" to "قبيح",  "فقير - Poor" to "فقير"
+          ))
+          EslSignCategory("Common Words", listOf(
+            "احنا - We" to "احنا",  "بتاعي - Mine" to "بتاعى",
+            "بتاعه - His/Hers" to "بتاعه",  "في - In" to "فى",
+            "فوق - Up" to "فوق",  "جنب - Next to" to "جمب",
+            "بعد - After" to "بعد",  "غير - Other" to "غير",  "و - And" to "و"
+          ))
+          EslSignCategory("More", listOf(
+            "الأسرة - Family" to "الاسرة",  "جد - Grandfather" to "جد",
+            "خطوبة - Engagement" to "خطوبة",  "مطلق - Divorced" to "مطلق",
+            "شغل - Work" to "شغل",  "فلوس - Money" to "فلوس",
+            "كلية - College" to "كلية",  "لغة - Language" to "لغة",
+            "اسم - Name" to "اسم",  "رقم - Number" to "رقم",
+            "انترنت - Internet" to "انترنت",  "سماعة - Headphones" to "سماعة",
+            "الجو - Weather" to "الجو",  "مشكلة - Problem" to "مشكلة",
+            "كام - How much" to "كام كمية"
+          ))
+        }
+      }
+
       Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.sdp),
@@ -555,9 +707,15 @@ fun SimpleCameraTranslator(onBack: () -> Unit) {
         border = BorderStroke(2.sdp, AccentGold.copy(alpha = 0.35f))
       ) {
         Column(Modifier.padding(20.sdp), verticalArrangement = Arrangement.spacedBy(10.sdp)) {
-          Text("Current Scope", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
+          Text("How It Works", color = NavyPrimary, fontSize = 18.ssp, fontWeight = FontWeight.Bold)
           Text(
-            "This now uses real camera frames and a real MediaPipe gesture model. It does not cover full sign-language vocabulary or guarantee 100% accuracy. Full Arabic and English sign-language translation needs a custom trained model and evaluation data.",
+            "This translator uses two AI models working together:\n\n" +
+              "1. MediaPipe Gesture Recognizer - instantly detects $instantGestureCount common hand gestures from a single camera frame.\n\n" +
+              "2. ESL LSTM Model - recognizes $eslSequenceCount Egyptian Sign Language signs by analyzing hand movement sequences (30 frames).\n\n" +
+              "Together they provide $totalRecognizedSignCount camera-recognizable signs today. " +
+              "The app also ships with a bilingual lexicon of $lexiconEntryCount entries and $phraseRuleCount sentence rules, " +
+              "so translation can grow without hardcoded limits.\n\n" +
+              "To truly read 100+ new gestures directly from the camera, the next step is replacing the current ESL model and labels file with a larger trained Egyptian Sign Language model.",
             color = NavyPrimary
           )
         }
@@ -694,6 +852,30 @@ private fun DetectionOverlay(detection: GestureDetectionEntry) {
 }
 
 @Composable
+private fun EslSignCategory(title: String, signs: List<Pair<String, String>>) {
+  Column(verticalArrangement = Arrangement.spacedBy(6.sdp)) {
+    Text(title, color = NavyPrimary, fontSize = 15.ssp, fontWeight = FontWeight.SemiBold)
+    @OptIn(ExperimentalLayoutApi::class)
+    FlowRow(
+      horizontalArrangement = Arrangement.spacedBy(6.sdp),
+      verticalArrangement = Arrangement.spacedBy(6.sdp)
+    ) {
+      signs.forEach { (label, _) ->
+        Text(
+          label,
+          modifier = Modifier
+            .background(BluePrimary, RoundedCornerShape(8.sdp))
+            .border(1.sdp, Gray200, RoundedCornerShape(8.sdp))
+            .padding(horizontal = 10.sdp, vertical = 6.sdp),
+          color = NavyPrimary,
+          fontSize = 13.ssp
+        )
+      }
+    }
+  }
+}
+
+@Composable
 private fun LiveGestureCameraPreview(
   modifier: Modifier,
   hasCameraPermission: Boolean,
@@ -705,6 +887,7 @@ private fun LiveGestureCameraPreview(
   val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
   val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
   val recognizer = remember(context) { MediaPipeGestureRecognizer(context.applicationContext) }
+  val handLandmarker = remember(context) { MediaPipeHandLandmarker(context.applicationContext) }
   val latestOnFrameAnalyzed by rememberUpdatedState(onFrameAnalyzed)
   val latestIsAnalyzing by rememberUpdatedState(isAnalyzing)
   val lastAnalyzedTimestamp = remember { AtomicLong(0L) }
@@ -713,6 +896,7 @@ private fun LiveGestureCameraPreview(
   DisposableEffect(Unit) {
     onDispose {
       recognizer.close()
+      handLandmarker.close()
       analysisExecutor.shutdown()
     }
   }
@@ -742,8 +926,21 @@ private fun LiveGestureCameraPreview(
             return@setAnalyzer
           }
           lastAnalyzedTimestamp.set(frameTimestampMs)
-          val result = recognizer.analyze(imageProxy, frameTimestampMs)
-          mainExecutor.execute { latestOnFrameAnalyzed(result) }
+          // Run gesture recognizer (7 instant gestures)
+          val gestureResult = recognizer.analyze(imageProxy, frameTimestampMs)
+          // Run hand landmarker (2-hand landmarks for ESL LSTM)
+          val landmarkResult = if (handLandmarker.isReady) {
+            handLandmarker.extractLandmarks(imageProxy, frameTimestampMs)
+          } else null
+          // Merge both results
+          val mergedResult = if (landmarkResult != null && landmarkResult.handCount > 0) {
+            gestureResult.copy(
+              rightHandCoords = landmarkResult.rightHandCoords,
+              leftHandCoords = landmarkResult.leftHandCoords,
+              handCount = maxOf(gestureResult.handCount, landmarkResult.handCount)
+            )
+          } else gestureResult
+          mainExecutor.execute { latestOnFrameAnalyzed(mergedResult) }
           imageProxy.close()
         }
         cameraProvider?.unbindAll()

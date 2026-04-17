@@ -31,6 +31,8 @@ import androidx.compose.ui.window.Dialog
 import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 
+private val LogoutDialogConfirm = Color(0xFFB91C1C)
+
 @Composable
 fun LogoutConfirmationDialog(
   onConfirm: () -> Unit,
@@ -85,7 +87,7 @@ fun LogoutConfirmationDialog(
             .height(60.dp),
           shape = RoundedCornerShape(14.dp),
           colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFFEF000F),
+            containerColor = LogoutDialogConfirm,
             contentColor = Color.White
           ),
           contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
@@ -122,4 +124,3 @@ fun LogoutConfirmationDialog(
     }
   }
 }
-

@@ -300,14 +300,14 @@ private fun openNavigation(context: Context, destinationLabel: String) {
     val encodedDestination = Uri.encode(destination)
     val navigationIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("google.navigation:q=$encodedDestination&mode=w")
+        Uri.parse("google.navigation:q=$encodedDestination&mode=d")
     ).apply {
         setPackage("com.google.android.apps.maps")
         if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     val browserIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encodedDestination&travelmode=walking")
+        Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encodedDestination&travelmode=driving")
     ).apply {
         if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
