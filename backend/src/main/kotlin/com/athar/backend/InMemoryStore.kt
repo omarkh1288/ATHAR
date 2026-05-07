@@ -12,6 +12,8 @@ import java.util.UUID
 import kotlin.math.roundToInt
 import org.mindrot.jbcrypt.BCrypt
 
+private const val DEFAULT_EMAIL_VERIFICATION_MESSAGE = "We sent a verification code to your email."
+
 internal data class AccountRecord(
   val id: String,
   val role: UserRole,
@@ -128,6 +130,31 @@ internal data class SupportMessageRecord(
   val createdAtEpochSeconds: Long
 )
 
+internal data class PendingRegistrationRecord(
+  val challengeId: String,
+  val role: UserRole,
+  val email: String,
+  val fullName: String,
+  var code: String,
+  var expiresAtEpochSeconds: Long,
+  var resendAvailableAtEpochSeconds: Long,
+  var attemptsRemaining: Int,
+  val passwordHash: String,
+  val userRequest: RegisterUserRequest? = null,
+  val volunteerRequest: RegisterVolunteerRequest? = null
+) {
+  fun toChallengeDto(message: String = DEFAULT_EMAIL_VERIFICATION_MESSAGE): EmailVerificationChallengeDto {
+    return EmailVerificationChallengeDto(
+      challengeId = challengeId,
+      email = email,
+      role = role,
+      expiresAtEpochSeconds = expiresAtEpochSeconds,
+      resendAvailableAtEpochSeconds = resendAvailableAtEpochSeconds,
+      message = message
+    )
+  }
+}
+
 internal class InMemoryStore(
   private val accountDatabase: AccountDatabase = AccountDatabase()
 ) {
@@ -136,6 +163,8 @@ internal class InMemoryStore(
 
   private val accountsById = linkedMapOf<String, AccountRecord>()
   private val accountIdByEmail = linkedMapOf<String, String>()
+  private val pendingRegistrationsByChallengeId = linkedMapOf<String, PendingRegistrationRecord>()
+  private val pendingChallengeIdByEmail = linkedMapOf<String, String>()
   private val sessionsById = linkedMapOf<String, SessionRecord>()
   private val sessionIdByRefreshToken = linkedMapOf<String, String>()
   private val requestsById = linkedMapOf<String, AssistanceRequestRecord>()
@@ -419,6 +448,156 @@ internal class InMemoryStore(
       )
     )
     ServiceResult.Success(account)
+  }
+
+  fun createPendingUserRegistration(
+    request: RegisterUserRequest,
+    passwordHash: String,
+    code: String,
+    expiresAtEpochSeconds: Long,
+    resendAvailableAtEpochSeconds: Long,
+    attemptsRemaining: Int
+  ): ServiceResult<EmailVerificationChallengeDto> = synchronized(lock) {
+    pruneExpiredPendingRegistrationsLocked()
+    val fullName = request.fullName.trim()
+    val email = request.email.trim().lowercase(Locale.getDefault())
+    validateCommonRegistration(fullName, email, request.password)?.let { return failure(HttpStatusCode.BadRequest, it) }
+    if (request.phone.trim().isBlank()) return failure(HttpStatusCode.BadRequest, "Phone is required.")
+    ensureEmailAvailable(email)?.let { return failure(HttpStatusCode.Conflict, it) }
+
+    clearPendingRegistrationByEmailLocked(email)
+    val record = PendingRegistrationRecord(
+      challengeId = "verify-${UUID.randomUUID()}",
+      role = UserRole.User,
+      email = email,
+      fullName = fullName,
+      code = code,
+      expiresAtEpochSeconds = expiresAtEpochSeconds,
+      resendAvailableAtEpochSeconds = resendAvailableAtEpochSeconds,
+      attemptsRemaining = attemptsRemaining,
+      passwordHash = passwordHash,
+      userRequest = request.copy(email = email, fullName = fullName)
+    )
+    savePendingRegistrationLocked(record)
+    ServiceResult.Success(record.toChallengeDto())
+  }
+
+  fun createPendingVolunteerRegistration(
+    request: RegisterVolunteerRequest,
+    passwordHash: String,
+    code: String,
+    expiresAtEpochSeconds: Long,
+    resendAvailableAtEpochSeconds: Long,
+    attemptsRemaining: Int
+  ): ServiceResult<EmailVerificationChallengeDto> = synchronized(lock) {
+    pruneExpiredPendingRegistrationsLocked()
+    val fullName = request.fullName.trim()
+    val email = request.email.trim().lowercase(Locale.getDefault())
+    validateCommonRegistration(fullName, email, request.password)?.let { return failure(HttpStatusCode.BadRequest, it) }
+    if (request.phone.trim().isBlank()) return failure(HttpStatusCode.BadRequest, "Phone is required.")
+    ensureEmailAvailable(email)?.let { return failure(HttpStatusCode.Conflict, it) }
+
+    clearPendingRegistrationByEmailLocked(email)
+    val record = PendingRegistrationRecord(
+      challengeId = "verify-${UUID.randomUUID()}",
+      role = UserRole.Volunteer,
+      email = email,
+      fullName = fullName,
+      code = code,
+      expiresAtEpochSeconds = expiresAtEpochSeconds,
+      resendAvailableAtEpochSeconds = resendAvailableAtEpochSeconds,
+      attemptsRemaining = attemptsRemaining,
+      passwordHash = passwordHash,
+      volunteerRequest = request.copy(email = email, fullName = fullName)
+    )
+    savePendingRegistrationLocked(record)
+    ServiceResult.Success(record.toChallengeDto())
+  }
+
+  fun getPendingRegistration(
+    challengeId: String,
+    nowEpochSeconds: Long,
+    requireResendReady: Boolean = false
+  ): ServiceResult<PendingRegistrationRecord> = synchronized(lock) {
+    pruneExpiredPendingRegistrationsLocked(nowEpochSeconds)
+    val record = pendingRegistrationsByChallengeId[challengeId]
+      ?: return failure(HttpStatusCode.NotFound, "Verification request was not found. Please register again.")
+    if (record.expiresAtEpochSeconds <= nowEpochSeconds) {
+      clearPendingRegistrationLocked(challengeId)
+      return failure(HttpStatusCode.BadRequest, "Verification code expired. Please register again.")
+    }
+    if (requireResendReady && record.resendAvailableAtEpochSeconds > nowEpochSeconds) {
+      return failure(HttpStatusCode.TooManyRequests, "Please wait before requesting another code.")
+    }
+    ServiceResult.Success(record)
+  }
+
+  fun refreshPendingRegistrationChallenge(
+    challengeId: String,
+    code: String,
+    expiresAtEpochSeconds: Long,
+    resendAvailableAtEpochSeconds: Long,
+    attemptsRemaining: Int
+  ): ServiceResult<EmailVerificationChallengeDto> = synchronized(lock) {
+    val record = pendingRegistrationsByChallengeId[challengeId]
+      ?: return failure(HttpStatusCode.NotFound, "Verification request was not found. Please register again.")
+    record.code = code
+    record.expiresAtEpochSeconds = expiresAtEpochSeconds
+    record.resendAvailableAtEpochSeconds = resendAvailableAtEpochSeconds
+    record.attemptsRemaining = attemptsRemaining
+    ServiceResult.Success(record.toChallengeDto())
+  }
+
+  fun verifyPendingRegistration(
+    challengeId: String,
+    code: String,
+    nowEpochSeconds: Long
+  ): ServiceResult<AccountRecord> = synchronized(lock) {
+    pruneExpiredPendingRegistrationsLocked(nowEpochSeconds)
+    val normalizedCode = code.trim()
+    val record = pendingRegistrationsByChallengeId[challengeId]
+      ?: return failure(HttpStatusCode.NotFound, "Verification request was not found. Please register again.")
+
+    if (record.expiresAtEpochSeconds <= nowEpochSeconds) {
+      clearPendingRegistrationLocked(challengeId)
+      return failure(HttpStatusCode.BadRequest, "Verification code expired. Please register again.")
+    }
+
+    if (normalizedCode != record.code) {
+      record.attemptsRemaining -= 1
+      if (record.attemptsRemaining <= 0) {
+        clearPendingRegistrationLocked(challengeId)
+        return failure(HttpStatusCode.BadRequest, "Too many incorrect attempts. Please register again.")
+      }
+      return failure(
+        HttpStatusCode.BadRequest,
+        "Incorrect verification code. ${record.attemptsRemaining} attempt(s) remaining."
+      )
+    }
+
+    val result = when (record.role) {
+      UserRole.User -> {
+        val userRequest = record.userRequest
+          ?: return failure(HttpStatusCode.BadRequest, "Verification request is invalid.")
+        registerUser(userRequest, record.passwordHash)
+      }
+      UserRole.Volunteer -> {
+        val volunteerRequest = record.volunteerRequest
+          ?: return failure(HttpStatusCode.BadRequest, "Verification request is invalid.")
+        registerVolunteer(volunteerRequest, record.passwordHash)
+      }
+    }
+
+    if (result is ServiceResult.Success) {
+      clearPendingRegistrationLocked(challengeId)
+    } else if (result is ServiceResult.Failure && result.status == HttpStatusCode.Conflict) {
+      clearPendingRegistrationLocked(challengeId)
+    }
+    result
+  }
+
+  fun removePendingRegistration(challengeId: String) = synchronized(lock) {
+    clearPendingRegistrationLocked(challengeId)
   }
 
   fun authenticate(emailRaw: String, password: String): ServiceResult<AccountRecord> = synchronized(lock) {
@@ -1849,7 +2028,30 @@ internal class InMemoryStore(
     return "This email is already registered as $roleName. Please sign in."
   }
 
+  private fun savePendingRegistrationLocked(record: PendingRegistrationRecord) {
+    pendingRegistrationsByChallengeId[record.challengeId] = record
+    pendingChallengeIdByEmail[record.email] = record.challengeId
+  }
+
+  private fun clearPendingRegistrationByEmailLocked(email: String) {
+    val challengeId = pendingChallengeIdByEmail[email] ?: return
+    clearPendingRegistrationLocked(challengeId)
+  }
+
+  private fun clearPendingRegistrationLocked(challengeId: String) {
+    val removed = pendingRegistrationsByChallengeId.remove(challengeId) ?: return
+    pendingChallengeIdByEmail.remove(removed.email, challengeId)
+  }
+
+  private fun pruneExpiredPendingRegistrationsLocked(nowEpochSeconds: Long = nowEpochSeconds()) {
+    val expiredIds = pendingRegistrationsByChallengeId.values
+      .filter { it.expiresAtEpochSeconds <= nowEpochSeconds }
+      .map { it.challengeId }
+    expiredIds.forEach { clearPendingRegistrationLocked(it) }
+  }
+
   private fun saveAccount(account: AccountRecord) {
+    clearPendingRegistrationByEmailLocked(account.email)
     saveAccountInMemory(account)
     persistAccount(account)
   }
@@ -2264,9 +2466,6 @@ internal class InMemoryStore(
   }
 
   private fun resolveAnalyticsVolunteerId(userId: String): String {
-    // For testing purposes, we temporarily map all analytics queries to the seed volunteer (Sara Mohammed)
-    // to ensure the Weekly Activity chart and other metrics are populated with demo data regardless
-    // of which account is logged in (e.g., Khaled).
-    return "vol-seed-1"
+    return userId
   }
 }

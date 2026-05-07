@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.outlined.Wc
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
@@ -81,11 +82,13 @@ import androidx.compose.ui.unit.sp
 import com.athar.accessibilitymapping.ui.theme.sdp
 import com.athar.accessibilitymapping.ui.theme.ssp
 import androidx.core.app.ActivityCompat
+import com.athar.accessibilitymapping.data.ApiAccessibilityContribution
 import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.ApiCategory
 import com.athar.accessibilitymapping.data.ApiGovernment
 import com.athar.accessibilitymapping.data.ApiLocationReportRequest
 import com.athar.accessibilitymapping.data.AtharRepository
+import com.athar.accessibilitymapping.data.PendingContributionsCache
 import com.athar.accessibilitymapping.ui.components.Governorate
 import com.athar.accessibilitymapping.ui.components.GovernorateSelector
 import com.google.android.gms.location.LocationCallback
@@ -106,6 +109,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.roundToInt
 
 object AtharColors {
@@ -128,7 +132,17 @@ val accessibilityFeatures = listOf(
   AccessibilityFeature("ramp", "Ramp", Icons.AutoMirrored.Filled.TrendingUp),
   AccessibilityFeature("elevator", "Elevator", Icons.Default.SwapVert),
   AccessibilityFeature("parking", "Parking", Icons.Default.DirectionsCar),
-  AccessibilityFeature("toilet", "Toilet", Icons.Outlined.Wc)
+  AccessibilityFeature("toilet", "Toilet", Icons.Outlined.Wc),
+  AccessibilityFeature("wideEntrance", "Wide Entrance", Icons.Default.OpenInFull)
+)
+
+private val locationReportFeatureAliases = mapOf(
+  "wheelchair" to setOf("wheelchair", "wheelchair_accessible"),
+  "ramp" to setOf("ramp", "ramb", "ramp_available"),
+  "elevator" to setOf("elevator", "elevator_available"),
+  "parking" to setOf("parking"),
+  "toilet" to setOf("toilet", "accessible_toilet"),
+  "wideEntrance" to setOf("wideEntrance", "wide_entrance")
 )
 
 data class LocationSuggestion(val name: String, val lat: Double, val lng: Double)
@@ -153,7 +167,8 @@ private val accessibilityValidationFields = setOf(
   "ramp_available",
   "elevator_available",
   "parking",
-  "accessible_toilet"
+  "accessible_toilet",
+  "wide_entrance"
 )
 
 @Composable
@@ -1029,14 +1044,24 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
               submitError = ""
               submitValidationErrors = emptyMap()
               isSubmitting = true
+              val normalizedSelectedFeatures = selectedFeatures.normalizedLocationReportFeatureIds()
               val selectedLabels = accessibilityFeatures
-                .filter { selectedFeatures.contains(it.id) }
+                .filter { normalizedSelectedFeatures.containsAnyLocationReportAlias(it.id) }
                 .joinToString { it.label }
-              val hasWheelchair = selectedFeatures.contains("wheelchair")
-              val hasRamp = selectedFeatures.contains("ramp")
-              val hasElevator = selectedFeatures.contains("elevator")
-              val hasParking = selectedFeatures.contains("parking")
-              val hasAccessibleToilet = selectedFeatures.contains("toilet")
+              val hasWheelchair = normalizedSelectedFeatures.containsAnyLocationReportAlias("wheelchair")
+              val hasRamp = normalizedSelectedFeatures.containsAnyLocationReportAlias("ramp")
+              val hasElevator = normalizedSelectedFeatures.containsAnyLocationReportAlias("elevator")
+              val hasParking = normalizedSelectedFeatures.containsAnyLocationReportAlias("parking")
+              val hasAccessibleToilet = normalizedSelectedFeatures.containsAnyLocationReportAlias("toilet")
+              val hasWideEntrance = normalizedSelectedFeatures.containsAnyLocationReportAlias("wideEntrance")
+              val backendAccessibilityPayloadSummary = linkedMapOf(
+                "wheelchair_accessible" to hasWheelchair,
+                "ramp_available" to hasRamp,
+                "elevator_available" to hasElevator,
+                "parking" to hasParking,
+                "accessible_toilet" to hasAccessibleToilet,
+                "wide_entrance" to hasWideEntrance
+              )
               val request = ApiLocationReportRequest(
                 name = selectedLocation.ifBlank { "New Place From Mobile" },
                 address = selectedLocation.ifBlank { "Unknown address" },
@@ -1052,7 +1077,7 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                 elevatorAvailable = hasElevator,
                 parking = hasParking,
                 wheelchairAccessible = hasWheelchair,
-                wideEntrance = false,
+                wideEntrance = hasWideEntrance,
                 accessibleToilet = hasAccessibleToilet,
                 notes = buildString {
                   append("Submitted from Add Place Report screen")
@@ -1064,11 +1089,39 @@ fun AddPlaceReportScreen(onBack: () -> Unit) {
                     append(" | Selected features: ")
                     append(selectedLabels)
                   }
+                  val normalizedUiTagSummary = normalizedSelectedFeatures
+                    .sorted()
+                    .joinToString(separator = ",")
+                    .ifBlank { "none" }
+                  append(" | Accessibility tags: ")
+                  append(normalizedUiTagSummary)
+                  append(" | Accessibility payload: ")
+                  append(
+                    backendAccessibilityPayloadSummary.entries.joinToString(separator = ",") { (key, value) ->
+                      "$key=$value"
+                    }
+                  )
                 }
               )
               coroutineScope.launch {
                 when (val result = repository.submitLocationReport(request)) {
                   is ApiCallResult.Success -> {
+                    val returnedLocationId = result.data.locationId
+                    val returnedContribution = result.data.contribution
+                    if (returnedLocationId != null) {
+                      val optimistic = returnedContribution?.copy(locationId = returnedLocationId)
+                        ?: ApiAccessibilityContribution(
+                          locationId = returnedLocationId,
+                          wheelchairAccessible = hasWheelchair,
+                          rampAvailable = hasRamp,
+                          elevatorAvailable = hasElevator,
+                          parking = hasParking,
+                          accessibleToilet = hasAccessibleToilet,
+                          wideEntrance = hasWideEntrance,
+                          pendingVerification = true
+                        )
+                      PendingContributionsCache.put(returnedLocationId, optimistic)
+                    }
                     submitted = true
                     submitError = ""
                     submitValidationErrors = emptyMap()
@@ -1331,6 +1384,7 @@ private fun formatLocationReportFieldLabel(field: String): String {
     "elevator_available" -> "Elevator"
     "parking" -> "Parking"
     "accessible_toilet" -> "Toilet"
+    "wide_entrance" -> "Wide Entrance"
     else -> field.replace('_', ' ').replaceFirstChar { it.uppercase() }
   }
 }
@@ -1338,7 +1392,7 @@ private fun formatLocationReportFieldLabel(field: String): String {
 private fun formatLocationReportFailure(result: ApiCallResult.Failure): String {
   val lines = mutableListOf<String>()
   val baseMessage = result.message.ifBlank { "Failed to submit report." }
-  if (baseMessage.isNotBlank()) {
+  if (baseMessage.isNotBlank() && result.validationErrors.isEmpty() && result.validationField == null) {
     lines += baseMessage
   }
 
@@ -1348,11 +1402,36 @@ private fun formatLocationReportFailure(result: ApiCallResult.Failure): String {
       lines += "${formatLocationReportFieldLabel(field)}: $message"
     }
 
+  if (result.validationErrors.isEmpty() && !result.validationField.isNullOrBlank()) {
+    lines += "${formatLocationReportFieldLabel(result.validationField)}: $baseMessage"
+  } else if (lines.isEmpty() && baseMessage.isNotBlank()) {
+    lines += baseMessage
+  }
+
   return lines
     .filter { it.isNotBlank() }
     .distinct()
     .joinToString("\n")
     .ifBlank { "Failed to submit report." }
+}
+
+private fun normalizeLocationReportFeatureId(value: String): String {
+  return value
+    .trim()
+    .replace("_", "")
+    .replace("-", "")
+    .lowercase(Locale.ROOT)
+}
+
+private fun Set<String>.normalizedLocationReportFeatureIds(): Set<String> {
+  return asSequence()
+    .map(::normalizeLocationReportFeatureId)
+    .toSet()
+}
+
+private fun Set<String>.containsAnyLocationReportAlias(featureId: String): Boolean {
+  val aliases = locationReportFeatureAliases[featureId].orEmpty().ifEmpty { setOf(featureId) }
+  return aliases.any { alias -> contains(normalizeLocationReportFeatureId(alias)) }
 }
 
 private suspend fun fetchPlaceSuggestions(

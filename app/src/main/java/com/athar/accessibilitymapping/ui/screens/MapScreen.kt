@@ -1921,6 +1921,15 @@ private fun LocationDetailSheet(
         style = MapTitleSmallStyle.copy(fontWeight = FontWeight.SemiBold)
       )
 
+      val pendingContribution = com.athar.accessibilitymapping.data.PendingContributionsCache.get(location.id)
+      if (pendingContribution != null && pendingContribution.pendingVerification) {
+        Text(
+          "Your recent contribution is pending verification",
+          color = NavyPrimary.copy(alpha = 0.7f),
+          style = MapTitleSmallStyle.copy(fontWeight = FontWeight.Normal, fontSize = 12.sp)
+        )
+      }
+
       // Accessibility Features List
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FeatureRow("Wheelchair Ramp", location.features.ramp, Icons.AutoMirrored.Outlined.Accessible)

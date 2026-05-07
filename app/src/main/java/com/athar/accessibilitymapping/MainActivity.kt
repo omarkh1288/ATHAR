@@ -62,6 +62,8 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.google.android.libraries.places.api.Places
 import kotlinx.coroutines.launch
 
+class MainActivity : AtharActivity()
+
 open class AtharActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     installSplashScreen()
@@ -216,6 +218,12 @@ private fun AppRoot() {
         currentUserEmail = accountResult.data.email.ifBlank { currentUserEmail }
         currentUserDisabilityType = accountResult.data.disabilityType ?: currentUserDisabilityType
         isVolunteerLive = accountResult.data.volunteerLive
+        val storedPhotoPath = appPreferences.readProfilePhotoPath(accountResult.data.id)
+        currentUserPhotoPath = when {
+          !storedPhotoPath.isNullOrBlank() -> storedPhotoPath
+          !accountResult.data.profilePhotoPath.isNullOrBlank() -> accountResult.data.profilePhotoPath
+          else -> currentUserPhotoPath
+        }
       }
       is ApiCallResult.Failure -> Unit
     }
@@ -271,6 +279,12 @@ private fun AppRoot() {
               },
               onRegisterVolunteer = { payload ->
                 authRepository.registerVolunteer(payload)
+              },
+              onVerifyEmail = { challengeId, code ->
+                authRepository.verifyEmailChallenge(challengeId, code)
+              },
+              onResendEmailChallenge = { challengeId ->
+                authRepository.resendEmailChallenge(challengeId)
               }
             )
           }
@@ -323,6 +337,9 @@ private fun AppRoot() {
                           appPreferences.saveProfilePhotoPath(activeUserId, photoPath)
                         }
                       }
+                    },
+                    onAccountRefreshRequested = {
+                      shouldRefreshAccount = true
                     },
                     onLogout = {
                       coroutineScope.launch {

@@ -110,6 +110,35 @@ fun Application.module() {
         post("/register-volunteer") {
           call.handleApiRegister(authService)
         }
+        post("/verify-email") {
+          val fields = call.readFlexibleFields()
+          val challengeId = fields.firstNonBlank("challenge_id", "challengeId").orEmpty()
+          val code = fields.firstNonBlank("otp", "code", "verification_code").orEmpty()
+          if (challengeId.isBlank() || code.isBlank()) {
+            return@post call.respondBadRequest("Verification request id and code are required.")
+          }
+          call.respondLegacyAuthResult(
+            authService.verifyEmail(
+              VerifyEmailRequest(
+                challengeId = challengeId,
+                code = code,
+                deviceName = fields.firstNonBlank("device_name", "deviceName")
+              )
+            )
+          )
+        }
+        post("/verify-email/resend") {
+          val fields = call.readFlexibleFields()
+          val challengeId = fields.firstNonBlank("challenge_id", "challengeId").orEmpty()
+          if (challengeId.isBlank()) {
+            return@post call.respondBadRequest("Verification request id is required.")
+          }
+          call.respondResult(
+            authService.resendEmailVerification(
+              ResendEmailVerificationRequest(challengeId = challengeId)
+            )
+          )
+        }
         post("/login") {
           val fields = call.readFlexibleFields()
           val email = fields.firstNonBlank("email")
@@ -440,7 +469,7 @@ private suspend fun io.ktor.server.application.ApplicationCall.handleApiRegister
   }
 
   val result = if (role == "volunteer") {
-    authService.registerVolunteer(
+    authService.startVolunteerRegistration(
       RegisterVolunteerRequest(
         fullName = fullName,
         email = email,
@@ -459,7 +488,7 @@ private suspend fun io.ktor.server.application.ApplicationCall.handleApiRegister
       )
     )
   } else {
-    authService.registerUser(
+    authService.startUserRegistration(
       RegisterUserRequest(
         fullName = fullName,
         email = email,
@@ -473,7 +502,7 @@ private suspend fun io.ktor.server.application.ApplicationCall.handleApiRegister
     )
   }
 
-  respondLegacyAuthResult(result)
+  respondResult(result)
 }
 
 private suspend fun io.ktor.server.application.ApplicationCall.readFlexibleFields(): Map<String, List<String>> {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import android.webkit.MimeTypeMap
 import com.athar.accessibilitymapping.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -26,6 +27,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import java.io.File
 import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
@@ -107,6 +109,7 @@ data class ApiAuthUser(
   val email: String,
   val phone: String,
   val location: String,
+  val profilePhotoPath: String? = null,
   val disabilityType: String? = null,
   val memberSince: String,
   val passwordChangedAt: String? = null,
@@ -126,6 +129,26 @@ data class ApiActionResult(
 )
 
 @Serializable
+data class ApiAccessibilityContribution(
+  val id: Int? = null,
+  val locationId: String? = null,
+  val wheelchairAccessible: Boolean = false,
+  val rampAvailable: Boolean = false,
+  val elevatorAvailable: Boolean = false,
+  val parking: Boolean = false,
+  val accessibleToilet: Boolean = false,
+  val wideEntrance: Boolean = false,
+  val status: String? = null,
+  val pendingVerification: Boolean = true
+)
+
+data class ApiLocationReportResult(
+  val action: ApiActionResult,
+  val contribution: ApiAccessibilityContribution? = null,
+  val locationId: String? = null
+)
+
+@Serializable
 data class ApiTokenPair(
   val accessToken: String,
   val refreshToken: String,
@@ -137,6 +160,21 @@ data class ApiAuthResponse(
   val user: ApiAuthUser,
   val tokens: ApiTokenPair
 )
+
+data class ApiEmailVerificationChallenge(
+  val challengeId: String,
+  val email: String,
+  val role: ApiUserRole,
+  val expiresAtEpochSeconds: Long,
+  val resendAvailableAtEpochSeconds: Long,
+  val codeLength: Int = 6,
+  val message: String = "We sent a verification code to your email."
+)
+
+sealed class ApiRegistrationStartResponse {
+  data class Authenticated(val auth: ApiAuthResponse) : ApiRegistrationStartResponse()
+  data class VerificationRequired(val challenge: ApiEmailVerificationChallenge) : ApiRegistrationStartResponse()
+}
 
 @Serializable
 data class ApiUpdateProfileRequest(
@@ -604,7 +642,7 @@ class BackendApiClient(private val appContext: Context? = null) {
     }
   }
 
-  suspend fun registerUser(request: UserRegistrationPayload): ApiCallResult<ApiAuthResponse> {
+  suspend fun registerUser(request: UserRegistrationPayload): ApiCallResult<ApiRegistrationStartResponse> {
     val trimmedLocation = request.location.trim()
     val fields = linkedMapOf(
       "name" to request.fullName.trim(),
@@ -622,12 +660,12 @@ class BackendApiClient(private val appContext: Context? = null) {
       "emergency_contact_phone" to request.emergencyContactPhone.trim()
     )
     return when (val response = postMultipart("/auth/register-user", fields, filePart = null)) {
-      is ApiCallResult.Success -> parseAuthResponse(response.data)
+      is ApiCallResult.Success -> parseRegistrationStartResponse(response.data)
       is ApiCallResult.Failure -> response
     }
   }
 
-  suspend fun registerVolunteer(request: VolunteerRegistrationPayload): ApiCallResult<ApiAuthResponse> {
+  suspend fun registerVolunteer(request: VolunteerRegistrationPayload): ApiCallResult<ApiRegistrationStartResponse> {
     val trimmedLocation = request.location.trim()
     val languages = request.languages
       .map { it.trim() }
@@ -669,13 +707,41 @@ class BackendApiClient(private val appContext: Context? = null) {
           filePart = idDocumentPart
         )
       ) {
-        is ApiCallResult.Success -> parseAuthResponse(response.data)
+        is ApiCallResult.Success -> parseRegistrationStartResponse(response.data)
         is ApiCallResult.Failure -> response
       }
     }
 
     return when (val response = postMultipart("/auth/register-volunteer", multipartFields, filePart = null)) {
+      is ApiCallResult.Success -> parseRegistrationStartResponse(response.data)
+      is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun verifyEmailChallenge(challengeId: String, code: String): ApiCallResult<ApiAuthResponse> {
+    val fields = linkedMapOf(
+      "challenge_id" to challengeId.trim(),
+      "code" to code.trim(),
+      "otp" to code.trim(),
+      "device_name" to "Athar Android"
+    )
+    return when (val response = postMultipart("/auth/verify-email", fields, filePart = null)) {
       is ApiCallResult.Success -> parseAuthResponse(response.data)
+      is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun resendEmailChallenge(challengeId: String): ApiCallResult<ApiEmailVerificationChallenge> {
+    val fields = mapOf("challenge_id" to challengeId.trim())
+    return when (val response = postMultipart("/auth/verify-email/resend", fields, filePart = null)) {
+      is ApiCallResult.Success -> {
+        val challenge = parseEmailVerificationChallenge(response.data)
+        if (challenge != null) {
+          ApiCallResult.Success(challenge)
+        } else {
+          ApiCallResult.Failure("Failed to parse verification challenge.")
+        }
+      }
       is ApiCallResult.Failure -> response
     }
   }
@@ -758,6 +824,23 @@ class BackendApiClient(private val appContext: Context? = null) {
           ApiCallResult.Success(user)
         } else {
           ApiCallResult.Failure("Failed to parse updated profile.")
+        }
+      }
+      is ApiCallResult.Failure -> response
+    }
+  }
+
+  suspend fun uploadProfilePhoto(accessToken: String, photoUri: String): ApiCallResult<ApiAuthUser> {
+    val photoPart = readProfilePhotoPart(photoUri)
+      ?: return ApiCallResult.Failure("Upload failed, please try again")
+
+    return when (val response = postMultipart("/profile/photo", emptyMap(), photoPart, token = accessToken)) {
+      is ApiCallResult.Success -> {
+        val user = parseUser(response.data)
+        if (user != null) {
+          ApiCallResult.Success(user)
+        } else {
+          ApiCallResult.Failure("Failed to parse updated profile photo.")
         }
       }
       is ApiCallResult.Failure -> response
@@ -1756,44 +1839,90 @@ class BackendApiClient(private val appContext: Context? = null) {
   suspend fun submitLocationReport(
     accessToken: String,
     request: ApiLocationReportRequest
-  ): ApiCallResult<ApiActionResult> {
-    val content = linkedMapOf<String, JsonElement>(
-      "name" to JsonPrimitive(request.name.trim()),
-      "address" to JsonPrimitive(request.address.trim()),
-      "government_id" to JsonPrimitive(request.governmentId),
-      "latitude" to JsonPrimitive(request.latitude),
-      "longitude" to JsonPrimitive(request.longitude),
-      "rating" to JsonPrimitive(request.rating),
-      "ramp_available" to JsonPrimitive(request.rampAvailable),
-      "elevator_available" to JsonPrimitive(request.elevatorAvailable),
-      "parking" to JsonPrimitive(request.parking),
-      "wheelchair_accessible" to JsonPrimitive(request.wheelchairAccessible),
-      "wide_entrance" to JsonPrimitive(request.wideEntrance),
-      "accessible_toilet" to JsonPrimitive(request.accessibleToilet)
+  ): ApiCallResult<ApiLocationReportResult> {
+    val fields = linkedMapOf(
+      "name" to request.name.trim(),
+      "address" to request.address.trim(),
+      "government_id" to request.governmentId.toString(),
+      "latitude" to request.latitude.toString(),
+      "longitude" to request.longitude.toString(),
+      "rating" to request.rating.toString(),
+      "ramp_available" to request.rampAvailable.toFormBoolean(),
+      "elevator_available" to request.elevatorAvailable.toFormBoolean(),
+      "parking" to request.parking.toFormBoolean(),
+      "wheelchair_accessible" to request.wheelchairAccessible.toFormBoolean(),
+      "wide_entrance" to request.wideEntrance.toFormBoolean(),
+      "accessible_toilet" to request.accessibleToilet.toFormBoolean()
     )
-    content["category_id"] = request.categoryId?.let { JsonPrimitive(it) } ?: JsonNull
+    request.categoryId?.let {
+      fields["category_id"] = it.toString()
+    }
     request.comment?.takeIf { it.isNotBlank() }?.let {
-      content["comment"] = JsonPrimitive(it.trim())
+      fields["comment"] = it.trim()
     }
     request.notes?.takeIf { it.isNotBlank() }?.let {
-      content["notes"] = JsonPrimitive(it.trim())
+      fields["notes"] = it.trim()
     }
 
     return when (
-      val response = post(
+      val response = postMultipart(
         "/locations/report",
-        body = JsonObject(content),
+        fields = fields,
+        filePart = null,
         token = accessToken
       )
     ) {
       is ApiCallResult.Success -> {
-        val message = response.data?.asObjectOrNull()?.readString("message")
+        val root = response.data?.asObjectOrNull()
+        val message = root?.readString("message")
           ?: "Place report submitted successfully."
-        ApiCallResult.Success(ApiActionResult(success = true, message = message))
+        val locationObj = root?.get("location")?.asObjectOrNull()
+        val locationId = locationObj?.readString("id")
+          ?: locationObj?.get("id")?.jsonPrimitive?.longOrNull?.toString()
+          ?: locationObj?.get("id")?.jsonPrimitive?.intOrNull?.toString()
+        val contributionObj = root?.get("accessibility_contribution")?.asObjectOrNull()
+        val contribution = contributionObj?.let { parseAccessibilityContribution(it) }
+        Log.d("LocationReportApi", "parsed locationId=$locationId contribution=$contribution")
+        ApiCallResult.Success(
+          ApiLocationReportResult(
+            action = ApiActionResult(success = true, message = message),
+            contribution = contribution,
+            locationId = locationId ?: contribution?.locationId
+          )
+        )
       }
-      is ApiCallResult.Failure -> response
+      is ApiCallResult.Failure -> {
+        Log.w(
+          "LocationReportApi",
+          "Location report failed: status=${response.statusCode}, field=${response.validationField}, " +
+            "errors=${response.validationErrors}, message=${response.message}"
+        )
+        response
+      }
     }
   }
+
+  private fun parseAccessibilityContribution(obj: JsonObject): ApiAccessibilityContribution {
+    val locationIdString = obj.readString("location_id")
+      ?: obj["location_id"]?.jsonPrimitive?.longOrNull?.toString()
+      ?: obj["location_id"]?.jsonPrimitive?.intOrNull?.toString()
+    val idInt = obj["id"]?.jsonPrimitive?.intOrNull
+      ?: obj["id"]?.jsonPrimitive?.longOrNull?.toInt()
+    return ApiAccessibilityContribution(
+      id = idInt,
+      locationId = locationIdString,
+      wheelchairAccessible = obj.readBoolean("wheelchair_accessible") ?: false,
+      rampAvailable = obj.readBoolean("ramp_available") ?: false,
+      elevatorAvailable = obj.readBoolean("elevator_available") ?: false,
+      parking = obj.readBoolean("parking") ?: false,
+      accessibleToilet = obj.readBoolean("accessible_toilet") ?: false,
+      wideEntrance = obj.readBoolean("wide_entrance") ?: false,
+      status = obj.readString("status"),
+      pendingVerification = obj.readBoolean("pending_verification") ?: true
+    )
+  }
+
+  private fun Boolean.toFormBoolean(): String = if (this) "1" else "0"
 
   suspend fun sendSupportMessage(accessToken: String, subject: String, message: String): ApiCallResult<ApiActionResult> {
     val body = JsonObject(
@@ -1865,6 +1994,18 @@ class BackendApiClient(private val appContext: Context? = null) {
     return runCatching { json.decodeFromJsonElement<T>(element) }.getOrNull()
   }
 
+  private fun parseRegistrationStartResponse(data: JsonElement?): ApiCallResult<ApiRegistrationStartResponse> {
+    val challenge = parseEmailVerificationChallenge(data)
+    if (challenge != null) {
+      return ApiCallResult.Success(ApiRegistrationStartResponse.VerificationRequired(challenge))
+    }
+
+    return when (val auth = parseAuthResponse(data)) {
+      is ApiCallResult.Success -> ApiCallResult.Success(ApiRegistrationStartResponse.Authenticated(auth.data))
+      is ApiCallResult.Failure -> auth
+    }
+  }
+
   private fun parseAuthResponse(data: JsonElement?): ApiCallResult<ApiAuthResponse> {
     val dataObject = data?.asObjectOrNull()
       ?: return ApiCallResult.Failure("Failed to parse authentication response.")
@@ -1895,9 +2036,55 @@ class BackendApiClient(private val appContext: Context? = null) {
     )
   }
 
+  private fun parseEmailVerificationChallenge(data: JsonElement?): ApiEmailVerificationChallenge? {
+    val root = data?.asObjectOrNull() ?: return null
+    val hasChallengeFlag = root.readBoolean(
+      "verification_required",
+      "verificationRequired",
+      "requires_verification",
+      "requiresVerification"
+    ) ?: false
+    val candidate = root["challenge"]?.asObjectOrNull()
+      ?: root["verification"]?.asObjectOrNull()
+      ?: root["email_verification"]?.asObjectOrNull()
+      ?: root.takeIf {
+        hasChallengeFlag || it.readString("challenge_id", "challengeId") != null
+      }
+      ?: return null
+
+    val challengeId = candidate.readString("challenge_id", "challengeId", "id") ?: return null
+    val email = candidate.readString("email") ?: return null
+    val role = when (candidate.readString("role")?.lowercase(Locale.getDefault())) {
+      "volunteer" -> ApiUserRole.Volunteer
+      else -> ApiUserRole.User
+    }
+    val expiresAt = candidate.readLong("expires_at_epoch_seconds", "expiresAtEpochSeconds") ?: return null
+    val resendAvailableAt = candidate.readLong(
+      "resend_available_at_epoch_seconds",
+      "resendAvailableAtEpochSeconds"
+    ) ?: expiresAt
+    val codeLength = candidate.readInt("code_length", "codeLength") ?: 6
+    val message = candidate.readString("message")
+      ?: root.readString("message")
+      ?: "We sent a verification code to your email."
+
+    return ApiEmailVerificationChallenge(
+      challengeId = challengeId,
+      email = email,
+      role = role,
+      expiresAtEpochSeconds = expiresAt,
+      resendAvailableAtEpochSeconds = resendAvailableAt,
+      codeLength = codeLength,
+      message = message
+    )
+  }
+
   private fun parseUser(element: JsonElement?): ApiAuthUser? {
     val root = element?.asObjectOrNull() ?: return null
-    val obj = root["user"]?.asObjectOrNull() ?: root
+    val obj = root["user"]?.asObjectOrNull()
+      ?: root["data"]?.asObjectOrNull()
+      ?: root["profile"]?.asObjectOrNull()
+      ?: root
     val id = obj.readString("id") ?: return null
     val role = when (obj.readString("role")?.lowercase(Locale.getDefault())) {
       "volunteer" -> ApiUserRole.Volunteer
@@ -1921,6 +2108,16 @@ class BackendApiClient(private val appContext: Context? = null) {
       email = email,
       phone = phone,
       location = obj.readString("location", "city").orEmpty(),
+      profilePhotoPath = resolveProfilePhotoPath(
+        obj.readString(
+          "profile_photo_path",
+          "profilePhotoPath",
+          "profile_photo_url",
+          "profilePhotoUrl",
+          "avatar_url",
+          "avatarUrl"
+        )
+      ),
       disabilityType = disabilityType,
       memberSince = memberSince,
       passwordChangedAt = obj.readString("password_changed_at", "passwordChangedAt"),
@@ -2012,25 +2209,56 @@ class BackendApiClient(private val appContext: Context? = null) {
     val accessibility = obj["accessibility"]?.asObjectOrNull()
     val verified = accessibility?.get("verified_report")?.asObjectOrNull()
     val contributions = accessibility?.get("contributions_summary")?.asObjectOrNull()
+    val contributionsCount = contributions?.readInt("count") ?: 0
+
+    val fallbackContribution: JsonObject? = if (verified == null && contributionsCount == 0) {
+      obj["accessibility_contribution"]?.asObjectOrNull()
+        ?: obj["latest_contribution"]?.asObjectOrNull()
+        ?: accessibility?.get("latest_contribution")?.asObjectOrNull()
+        ?: accessibility?.get("accessibility_contribution")?.asObjectOrNull()
+    } else null
+
+    val pendingCached = PendingContributionsCache.get(id)
+    Log.d("parseLocation", "id=$id verified=${verified!=null} count=$contributionsCount pendingCached=${pendingCached!=null}")
 
     val features = ApiLocationFeatures(
       ramp = verified.readBoolean("ramp_available")
         ?: contributions.readBoolean("ramp_available")
+        ?: fallbackContribution.readBoolean("ramp_available")
+        ?: pendingCached?.rampAvailable
         ?: false,
       elevator = verified.readBoolean("elevator_available")
         ?: contributions.readBoolean("elevator_available")
+        ?: fallbackContribution.readBoolean("elevator_available")
+        ?: pendingCached?.elevatorAvailable
         ?: false,
       accessibleToilet = verified.readBoolean("accessible_toilet")
         ?: contributions.readBoolean("accessible_toilet")
+        ?: fallbackContribution.readBoolean("accessible_toilet")
+        ?: pendingCached?.accessibleToilet
         ?: false,
       accessibleParking = verified.readBoolean("parking")
         ?: contributions.readBoolean("parking")
+        ?: fallbackContribution.readBoolean("parking")
+        ?: pendingCached?.parking
         ?: false,
       wideEntrance = verified.readBoolean("wide_entrance")
         ?: contributions.readBoolean("wide_entrance")
+        ?: fallbackContribution.readBoolean("wide_entrance")
+        ?: pendingCached?.wideEntrance
         ?: false,
       brailleSignage = false
-    )
+    ).let { base ->
+      if (pendingCached != null && verified == null) {
+        base.copy(
+          ramp = base.ramp || pendingCached.rampAvailable,
+          elevator = base.elevator || pendingCached.elevatorAvailable,
+          accessibleToilet = base.accessibleToilet || pendingCached.accessibleToilet,
+          accessibleParking = base.accessibleParking || pendingCached.parking,
+          wideEntrance = base.wideEntrance || pendingCached.wideEntrance
+        )
+      } else base
+    }
 
     val distanceKm = obj.readDouble("distance_km")
     val distanceLabel = if (distanceKm != null) {
@@ -3095,6 +3323,48 @@ class BackendApiClient(private val appContext: Context? = null) {
     )
   }
 
+  private fun readProfilePhotoPart(photoUri: String?): UploadFilePart? {
+    val rawPhoto = photoUri?.trim().orEmpty()
+    if (rawPhoto.isBlank()) return null
+
+    val parsedUri = runCatching { Uri.parse(rawPhoto) }.getOrNull()
+    if (parsedUri?.scheme.equals("content", ignoreCase = true)) {
+      val contentUri = parsedUri ?: return null
+      val context = appContext ?: return null
+      val resolver = context.contentResolver
+      val bytes = runCatching {
+        resolver.openInputStream(contentUri)?.use { input -> input.readBytes() }
+      }.getOrNull() ?: return null
+      if (bytes.isEmpty()) return null
+
+      val fileName = resolveDocumentFileName(context, contentUri).ifBlank { "profile_photo.jpg" }
+      val mimeType = resolver.getType(contentUri)?.takeIf { it.isNotBlank() }
+        ?: resolveMimeType(fileName)
+
+      return UploadFilePart(
+        fieldName = "photo",
+        fileName = fileName,
+        contentType = mimeType,
+        bytes = bytes
+      )
+    }
+
+    val photoFile = when {
+      parsedUri?.scheme.equals("file", ignoreCase = true) -> parsedUri?.path?.let(::File)
+      else -> File(rawPhoto)
+    }?.takeIf { it.exists() && it.isFile } ?: return null
+
+    val bytes = runCatching { photoFile.readBytes() }.getOrNull() ?: return null
+    if (bytes.isEmpty()) return null
+
+    return UploadFilePart(
+      fieldName = "photo",
+      fileName = photoFile.name.ifBlank { "profile_photo.jpg" },
+      contentType = resolveMimeType(photoFile.name),
+      bytes = bytes
+    )
+  }
+
   private fun logApiPayload(label: String, payload: JsonElement?) {
     if (!BuildConfig.DEBUG) return
     val line = "$label => ${payload?.toString().orEmpty()}"
@@ -3126,6 +3396,35 @@ class BackendApiClient(private val appContext: Context? = null) {
     }.getOrNull()
       ?.takeIf { it.isNotBlank() }
       ?: fallback
+  }
+
+  private fun resolveMimeType(fileName: String): String {
+    val extension = fileName.substringAfterLast('.', "").lowercase(Locale.getDefault())
+    return MimeTypeMap.getSingleton()
+      .getMimeTypeFromExtension(extension)
+      ?.takeIf { it.isNotBlank() }
+      ?: "application/octet-stream"
+  }
+
+  private fun resolveProfilePhotoPath(rawPath: String?): String? {
+    val normalized = rawPath?.trim().orEmpty()
+    if (normalized.isBlank()) return null
+    if (
+      normalized.startsWith("http://", ignoreCase = true) ||
+      normalized.startsWith("https://", ignoreCase = true) ||
+      normalized.startsWith("content://", ignoreCase = true) ||
+      normalized.startsWith("file://", ignoreCase = true) ||
+      Regex("^[A-Za-z]:[\\\\/].*").matches(normalized)
+    ) {
+      return normalized
+    }
+
+    val base = baseUrl.removeSuffix("/api")
+    return if (normalized.startsWith('/')) {
+      "$base$normalized"
+    } else {
+      "$base/${normalized.trimStart('/')}"
+    }
   }
 
   private fun parseMemberSince(rawCreatedAt: String?): String {

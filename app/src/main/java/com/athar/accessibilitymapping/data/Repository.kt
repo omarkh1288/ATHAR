@@ -17,7 +17,7 @@ import kotlin.math.sqrt
 
 class AtharRepository(
   context: Context,
-  private val api: BackendApiClient = BackendApiClient(),
+  private val api: BackendApiClient = BackendApiClient(context.applicationContext),
   private val sessionStore: AuthSessionStore = AuthSessionStore(context.applicationContext),
   private val localRequestStore: LocalRequestStore = LocalRequestStore(context.applicationContext),
   private val appPreferences: AppPreferencesStore = AppPreferencesStore(context.applicationContext)
@@ -996,8 +996,16 @@ class AtharRepository(
     api.getCategories(token = accessToken)
   }
 
-  suspend fun submitLocationReport(request: ApiLocationReportRequest): ApiCallResult<ApiActionResult> = withContext(Dispatchers.IO) {
-    callAuthorized { token -> api.submitLocationReport(token, request) }
+  suspend fun submitLocationReport(request: ApiLocationReportRequest): ApiCallResult<ApiLocationReportResult> = withContext(Dispatchers.IO) {
+    val result = callAuthorized { token -> api.submitLocationReport(token, request) }
+    if (result is ApiCallResult.Success) {
+      val locId = result.data.locationId
+      val contribution = result.data.contribution
+      if (locId != null && contribution != null) {
+        PendingContributionsCache.put(locId, contribution.copy(locationId = locId))
+      }
+    }
+    result
   }
 
   suspend fun sendSupportMessage(subject: String, message: String): ApiCallResult<ApiActionResult> = withContext(Dispatchers.IO) {
@@ -1020,6 +1028,10 @@ class AtharRepository(
       }
       is ApiCallResult.Failure -> result
     }
+  }
+
+  suspend fun uploadProfilePhoto(photoUri: String): ApiCallResult<ApiAuthUser> = withContext(Dispatchers.IO) {
+    callAuthorized { token -> api.uploadProfilePhoto(token, photoUri) }
   }
 
   suspend fun changePassword(currentPassword: String, newPassword: String): ApiCallResult<ApiActionResult> = withContext(Dispatchers.IO) {
@@ -1255,6 +1267,7 @@ class AtharRepository(
       email = email,
       phone = phone,
       location = location,
+      profilePhotoPath = null,
       disabilityType = disabilityType,
       memberSince = memberSince,
       volunteerLive = volunteerLive,

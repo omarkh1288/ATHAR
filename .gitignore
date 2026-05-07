@@ -10,6 +10,7 @@ local.properties
 
 # Log/OS Files
 *.log
+build_output*.txt
 
 # Android Studio generated files and folders
 captures/
@@ -39,3 +40,7 @@ google-services.json
 
 # Backend build outputs
 backend/bin/
+
+# Local temp/debug artifacts
+tmp/
+claude-code-jetbrains-plugin/

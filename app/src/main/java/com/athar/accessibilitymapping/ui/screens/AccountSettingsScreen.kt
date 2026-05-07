@@ -45,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
@@ -93,9 +94,12 @@ fun AccountSettingsScreen(
   profilePhotoPath: String?,
   onLanguageChange: (AppLanguage) -> Unit,
   onProfilePhotoChanged: (String?) -> Unit,
+  onAccountRefreshRequested: () -> Unit = {},
   onOpenChangePassword: () -> Unit = {}
 ) {
   val context = LocalContext.current
+  val repository = remember(context) { AtharRepository(context) }
+  val coroutineScope = rememberCoroutineScope()
   val viewModel: AccountSettingsViewModel = viewModel()
 
   val name by viewModel.name.collectAsState()
@@ -110,18 +114,39 @@ fun AccountSettingsScreen(
   val saveError by viewModel.saveError.collectAsState()
   val saveMessage by viewModel.saveMessage.collectAsState()
   var photoError by remember { mutableStateOf<String?>(null) }
+  var photoMessage by remember { mutableStateOf<String?>(null) }
+  var isUploadingPhoto by remember { mutableStateOf(false) }
   var disabilityExpanded by remember { mutableStateOf(false) }
 
   val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
     if (uri == null) return@rememberLauncherForActivityResult
+    val previousPhotoPath = profilePhotoPath
     val savedPhotoPath = runCatching {
       copySelectedProfilePhoto(context, uri, userId)
     }.getOrNull()
     if (savedPhotoPath == null) {
+      photoMessage = null
       photoError = "Couldn't update your profile photo. Please try again."
     } else {
       photoError = null
+      photoMessage = null
       onProfilePhotoChanged(savedPhotoPath)
+      isUploadingPhoto = true
+      coroutineScope.launch {
+        when (val result = repository.uploadProfilePhoto(savedPhotoPath)) {
+          is ApiCallResult.Success -> {
+            photoError = null
+            photoMessage = "Photo uploaded successfully"
+            onAccountRefreshRequested()
+          }
+          is ApiCallResult.Failure -> {
+            onProfilePhotoChanged(previousPhotoPath)
+            photoMessage = null
+            photoError = formatProfilePhotoUploadError(result)
+          }
+        }
+        isUploadingPhoto = false
+      }
     }
   }
 
@@ -176,7 +201,7 @@ fun AccountSettingsScreen(
               .size(32.dp)
               .background(AccentGold, CircleShape)
               .border(2.dp, AccentGoldDark, CircleShape)
-              .clickable { photoPicker.launch("image/*") },
+              .clickable(enabled = !isUploadingPhoto) { photoPicker.launch("image/*") },
             contentAlignment = Alignment.Center
           ) {
             Icon(
@@ -192,6 +217,7 @@ fun AccountSettingsScreen(
 
         Button(
           onClick = { photoPicker.launch("image/*") },
+          enabled = !isUploadingPhoto,
           colors = ButtonDefaults.buttonColors(
             containerColor = AccentGold,
             contentColor = Color.White
@@ -201,7 +227,7 @@ fun AccountSettingsScreen(
           modifier = Modifier.height(42.dp)
         ) {
           Text(
-            text = "Change Photo",
+            text = if (isUploadingPhoto) "Uploading..." else "Change Photo",
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
           )
@@ -212,6 +238,14 @@ fun AccountSettingsScreen(
           Text(
             text = photoError ?: "",
             color = Color(0xFFB91C1C),
+            fontSize = 13.sp
+          )
+        }
+        if (photoMessage != null) {
+          Spacer(modifier = Modifier.height(8.dp))
+          Text(
+            text = photoMessage ?: "",
+            color = Color(0xFF166534),
             fontSize = 13.sp
           )
         }
@@ -518,6 +552,29 @@ private fun formatPasswordChangedLabel(rawValue: String?): String {
   val localDate = parsedInstant.atZone(ZoneId.systemDefault()).toLocalDate()
   val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
   return "Last changed ${localDate.format(formatter)}"
+}
+
+private fun formatProfilePhotoUploadError(result: ApiCallResult.Failure): String {
+  val normalizedMessages = buildList {
+    add(result.message)
+    addAll(result.validationErrors.values)
+  }.joinToString(" ").lowercase(Locale.getDefault())
+
+  return when {
+    result.statusCode == 401 -> "Session expired. Please sign in again."
+    result.statusCode == 422 && (
+      normalizedMessages.contains("jpg") ||
+        normalizedMessages.contains("jpeg") ||
+        normalizedMessages.contains("png") ||
+        normalizedMessages.contains("webp") ||
+        normalizedMessages.contains("mime") ||
+        normalizedMessages.contains("format")
+      ) -> "Invalid image format. Use JPG/PNG/WEBP"
+    result.statusCode == 422 -> result.validationErrors["photo"]
+      ?: result.message.ifBlank { "Upload failed, please try again" }
+    result.statusCode == null -> "Upload failed, please try again"
+    else -> result.message.ifBlank { "Upload failed, please try again" }
+  }
 }
 
 private fun parseTimestamp(rawValue: String): Instant? {

@@ -244,6 +244,44 @@ class InMemoryStoreTest {
   }
 
   @Test
+  fun pendingRegistrationCreatesAccountOnlyAfterVerification() {
+    val context = newStoreContext()
+    val store = context.store
+    val usersBefore = rowCount(context.jdbcUrl, "user_profiles")
+
+    val challenge = assertIs<ServiceResult.Success<EmailVerificationChallengeDto>>(
+      store.createPendingUserRegistration(
+        request = RegisterUserRequest(
+          fullName = "Pending User",
+          email = "pending-user@example.com",
+          phone = "+10000000040",
+          location = "Riyadh",
+          password = "Password123!",
+          disabilityType = "Wheelchair user",
+          emergencyContactName = "Emergency Contact",
+          emergencyContactPhone = "+10000000041"
+        ),
+        passwordHash = "hashed-password",
+        code = "123456",
+        expiresAtEpochSeconds = Long.MAX_VALUE,
+        resendAvailableAtEpochSeconds = 0L,
+        attemptsRemaining = 5
+      )
+    ).value
+
+    assertEquals(usersBefore, rowCount(context.jdbcUrl, "user_profiles"))
+
+    val verified = store.verifyPendingRegistration(
+      challengeId = challenge.challengeId,
+      code = "123456",
+      nowEpochSeconds = 1L
+    )
+
+    assertIs<ServiceResult.Success<AccountRecord>>(verified)
+    assertEquals(usersBefore + 1, rowCount(context.jdbcUrl, "user_profiles"))
+  }
+
+  @Test
   fun registerVolunteerPersistsUploadedIdDocumentMetadataAndBytes() {
     val context = newStoreContext()
     val store = context.store

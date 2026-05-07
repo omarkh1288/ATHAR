@@ -36,11 +36,16 @@ fun ProfilePhoto(
   placeholderIcon: ImageVector = Icons.Outlined.Person,
   placeholderIconSize: Dp = 40.sdp
 ) {
-  val imageFile = remember(photoPath) {
-    photoPath
-      ?.takeIf { it.isNotBlank() }
-      ?.let(::File)
-      ?.takeIf(File::exists)
+  val imageModel = remember(photoPath) {
+    val normalizedPath = photoPath?.trim().orEmpty()
+    when {
+      normalizedPath.isBlank() -> null
+      normalizedPath.startsWith("http://", ignoreCase = true) ||
+        normalizedPath.startsWith("https://", ignoreCase = true) ||
+        normalizedPath.startsWith("content://", ignoreCase = true) ||
+        normalizedPath.startsWith("file://", ignoreCase = true) -> normalizedPath
+      else -> File(normalizedPath).takeIf(File::exists)
+    }
   }
 
   Box(
@@ -50,9 +55,9 @@ fun ProfilePhoto(
       .border(2.sdp, borderColor, CircleShape),
     contentAlignment = Alignment.Center
   ) {
-    if (imageFile != null) {
+    if (imageModel != null) {
       AsyncImage(
-        model = imageFile,
+        model = imageModel,
         contentDescription = contentDescription,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop

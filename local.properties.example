@@ -1,0 +1,9 @@
+# Copy this file to local.properties on each machine and fill in local values.
+# Do not commit local.properties.
+
+# Android SDK path is machine-specific.
+sdk.dir=C\:\\Android\\Sdk
+
+# Optional app configuration for local development.
+MAPS_API_KEY=
+BACKEND_BASE_URL=

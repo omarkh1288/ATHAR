@@ -151,6 +151,7 @@ fun ProfileScreen(
   currentLanguage: AppLanguage,
   onLanguageChange: (AppLanguage) -> Unit,
   onProfilePhotoChanged: (String?) -> Unit,
+  onAccountRefreshRequested: () -> Unit,
   onLogout: () -> Unit
 ) {
   val profileViewModel: ProfileViewModel = viewModel(key = "profile-$userId")
@@ -173,6 +174,7 @@ fun ProfileScreen(
       profilePhotoPath = profilePhotoPath,
       onLanguageChange = onLanguageChange,
       onProfilePhotoChanged = onProfilePhotoChanged,
+      onAccountRefreshRequested = onAccountRefreshRequested,
       onOpenChangePassword = { activeScreen = "changePassword" }
     )
     return

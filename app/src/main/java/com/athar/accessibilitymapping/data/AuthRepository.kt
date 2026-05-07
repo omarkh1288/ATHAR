@@ -37,67 +37,89 @@ class AuthRepository(
     }
   }
 
-  suspend fun registerUser(payload: UserRegistrationPayload): AuthOperationResult = withContext(Dispatchers.IO) {
+  suspend fun registerUser(payload: UserRegistrationPayload): RegistrationOperationResult = withContext(Dispatchers.IO) {
     when (val result = api.registerUser(payload)) {
       is ApiCallResult.Success -> {
-        val auth = result.data
-        val session = saveRemoteSession(auth)
-        appPreferences.saveProfileLocation(payload.location.trim())
-        appPreferences.readOrCreateMemberSince()
-        if (auth.tokens.accessToken.isNotBlank()) {
-          api.patchProfile(
-            accessToken = auth.tokens.accessToken,
-            request = ApiUpdateProfileRequest(
-              fullName = payload.fullName,
-              phone = payload.phone,
-              location = payload.location,
-              disabilityType = payload.disabilityType
-            )
-          )
-        }
-        AuthOperationResult.Success(session)
-      }
-      is ApiCallResult.Failure -> {
-        if (shouldAllowOfflineAuthFallback(result)) {
-          return@withContext when (val fallback = localAccounts.registerUser(payload)) {
-            is AuthOperationResult.Success -> {
-              saveLocalSession(fallback.session)
-              fallback
+        when (val response = result.data) {
+          is ApiRegistrationStartResponse.Authenticated -> {
+            val auth = response.auth
+            val session = saveRemoteSession(auth)
+            appPreferences.saveProfileLocation(payload.location.trim())
+            appPreferences.readOrCreateMemberSince()
+            if (auth.tokens.accessToken.isNotBlank()) {
+              api.patchProfile(
+                accessToken = auth.tokens.accessToken,
+                request = ApiUpdateProfileRequest(
+                  fullName = payload.fullName,
+                  phone = payload.phone,
+                  location = payload.location,
+                  disabilityType = payload.disabilityType
+                )
+              )
             }
-            is AuthOperationResult.Error -> fallback
+            RegistrationOperationResult.Authenticated(session)
+          }
+          is ApiRegistrationStartResponse.VerificationRequired -> {
+            RegistrationOperationResult.VerificationRequired(response.challenge.toDomainModel())
           }
         }
-        AuthOperationResult.Error(resolveAuthFailureMessage(result.message))
+      }
+      is ApiCallResult.Failure -> {
+        RegistrationOperationResult.Error(resolveRegistrationFailureMessage(result))
       }
     }
   }
 
-  suspend fun registerVolunteer(payload: VolunteerRegistrationPayload): AuthOperationResult = withContext(Dispatchers.IO) {
+  suspend fun registerVolunteer(payload: VolunteerRegistrationPayload): RegistrationOperationResult = withContext(Dispatchers.IO) {
     when (val result = api.registerVolunteer(payload)) {
       is ApiCallResult.Success -> {
-        val auth = result.data
-        if (auth.user.role != ApiUserRole.Volunteer) {
-          return@withContext AuthOperationResult.Error(
-            "Volunteer registration requires admin activation. Your account was created, but is not yet a volunteer account."
-          )
+        when (val response = result.data) {
+          is ApiRegistrationStartResponse.Authenticated -> {
+            val auth = response.auth
+            if (auth.user.role != ApiUserRole.Volunteer) {
+              return@withContext RegistrationOperationResult.Error(
+                "Volunteer registration requires admin activation. Your account was created, but is not yet a volunteer account."
+              )
+            }
+            val session = saveRemoteSession(auth)
+            appPreferences.saveProfileLocation(payload.location.trim())
+            appPreferences.readOrCreateMemberSince()
+            RegistrationOperationResult.Authenticated(session)
+          }
+          is ApiRegistrationStartResponse.VerificationRequired -> {
+            RegistrationOperationResult.VerificationRequired(response.challenge.toDomainModel())
+          }
         }
-        val session = saveRemoteSession(auth)
-        appPreferences.saveProfileLocation(payload.location.trim())
+      }
+      is ApiCallResult.Failure -> {
+        RegistrationOperationResult.Error(resolveRegistrationFailureMessage(result))
+      }
+    }
+  }
+
+  suspend fun verifyEmailChallenge(challengeId: String, code: String): AuthOperationResult = withContext(Dispatchers.IO) {
+    when (val result = api.verifyEmailChallenge(challengeId, code)) {
+      is ApiCallResult.Success -> {
+        val session = saveRemoteSession(result.data)
+        appPreferences.saveProfileLocation(result.data.user.location.trim())
         appPreferences.readOrCreateMemberSince()
         AuthOperationResult.Success(session)
       }
       is ApiCallResult.Failure -> {
-        if (shouldAllowOfflineAuthFallback(result)) {
-          return@withContext when (val fallback = localAccounts.registerVolunteer(payload)) {
-            is AuthOperationResult.Success -> {
-              saveLocalSession(fallback.session)
-              fallback
-            }
-            is AuthOperationResult.Error -> fallback
-          }
-        }
-        AuthOperationResult.Error(resolveAuthFailureMessage(result.message))
+        AuthOperationResult.Error(resolveVerificationFailureMessage(result))
       }
+    }
+  }
+
+  suspend fun resendEmailChallenge(challengeId: String): ApiCallResult<EmailVerificationChallenge> = withContext(Dispatchers.IO) {
+    when (val result = api.resendEmailChallenge(challengeId)) {
+      is ApiCallResult.Success -> ApiCallResult.Success(result.data.toDomainModel())
+      is ApiCallResult.Failure -> ApiCallResult.Failure(
+        message = resolveVerificationFailureMessage(result),
+        statusCode = result.statusCode,
+        validationField = result.validationField,
+        validationErrors = result.validationErrors
+      )
     }
   }
 
@@ -124,6 +146,21 @@ class AuthRepository(
       api.logout(accessToken = accessToken, refreshToken = refreshToken)
     }
     sessionStore.clearSession()
+  }
+
+  private fun ApiEmailVerificationChallenge.toDomainModel(): EmailVerificationChallenge {
+    return EmailVerificationChallenge(
+      challengeId = challengeId,
+      email = email,
+      role = when (role) {
+        ApiUserRole.Volunteer -> UserRole.Volunteer
+        ApiUserRole.User -> UserRole.User
+      },
+      expiresAtEpochSeconds = expiresAtEpochSeconds,
+      resendAvailableAtEpochSeconds = resendAvailableAtEpochSeconds,
+      codeLength = codeLength,
+      message = message
+    )
   }
 
   private suspend fun saveRemoteSession(authResponse: ApiAuthResponse): AuthSession {
@@ -166,6 +203,27 @@ class AuthRepository(
       return false
     }
     return !api.isBackendReachable()
+  }
+
+  private fun resolveRegistrationFailureMessage(result: ApiCallResult.Failure): String {
+    return if (result.statusCode == null && shouldExplainVerificationConnectivity()) {
+      "Email verification requires a live backend connection. Check your internet and try again."
+    } else {
+      resolveAuthFailureMessage(result.message)
+    }
+  }
+
+  private fun resolveVerificationFailureMessage(result: ApiCallResult.Failure): String {
+    return if (result.statusCode == null && shouldExplainVerificationConnectivity()) {
+      "Email verification requires a live backend connection. Check your internet and try again."
+    } else {
+      result.message
+    }
+  }
+
+  private fun shouldExplainVerificationConnectivity(): Boolean {
+    val configuredBaseUrl = BuildConfig.BACKEND_BASE_URL.trim().lowercase()
+    return !("127.0.0.1" in configuredBaseUrl || "localhost" in configuredBaseUrl)
   }
 
   private fun resolveAuthFailureMessage(defaultMessage: String): String {

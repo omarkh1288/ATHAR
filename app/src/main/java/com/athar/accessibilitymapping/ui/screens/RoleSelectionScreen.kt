@@ -1,4 +1,4 @@
-﻿package com.athar.accessibilitymapping.ui.screens
+package com.athar.accessibilitymapping.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,16 +21,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,35 +45,162 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.athar.accessibilitymapping.R
+import com.athar.accessibilitymapping.data.ApiCallResult
 import com.athar.accessibilitymapping.data.AuthOperationResult
 import com.athar.accessibilitymapping.data.AuthSession
-import com.athar.accessibilitymapping.data.UserRole
+import com.athar.accessibilitymapping.data.EmailVerificationChallenge
+import com.athar.accessibilitymapping.data.RegistrationOperationResult
 import com.athar.accessibilitymapping.data.UserRegistrationPayload
+import com.athar.accessibilitymapping.data.UserRole
 import com.athar.accessibilitymapping.data.VolunteerRegistrationPayload
+import com.athar.accessibilitymapping.ui.components.PrimaryButton
 import com.athar.accessibilitymapping.ui.theme.AccentGold
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.ui.theme.SuccessGreen
+import kotlinx.coroutines.launch
+
+private sealed interface PendingVerificationLaunch {
+  val email: String
+  val role: UserRole
+  val isStarting: Boolean
+  val errorMessage: String?
+
+  data class User(
+    val payload: UserRegistrationPayload,
+    override val isStarting: Boolean = true,
+    override val errorMessage: String? = null
+  ) : PendingVerificationLaunch {
+    override val email: String get() = payload.email.trim()
+    override val role: UserRole get() = UserRole.User
+  }
+
+  data class Volunteer(
+    val payload: VolunteerRegistrationPayload,
+    override val isStarting: Boolean = true,
+    override val errorMessage: String? = null
+  ) : PendingVerificationLaunch {
+    override val email: String get() = payload.email.trim()
+    override val role: UserRole get() = UserRole.Volunteer
+  }
+}
 
 @Composable
 fun RoleSelectionScreen(
   onComplete: (AuthSession) -> Unit,
   onBack: () -> Unit,
-  onRegisterUser: suspend (UserRegistrationPayload) -> AuthOperationResult,
-  onRegisterVolunteer: suspend (VolunteerRegistrationPayload) -> AuthOperationResult
+  onRegisterUser: suspend (UserRegistrationPayload) -> RegistrationOperationResult,
+  onRegisterVolunteer: suspend (VolunteerRegistrationPayload) -> RegistrationOperationResult,
+  onVerifyEmail: suspend (String, String) -> AuthOperationResult,
+  onResendEmailChallenge: suspend (String) -> ApiCallResult<EmailVerificationChallenge>
 ) {
+  val coroutineScope = rememberCoroutineScope()
   var showRegister by remember { mutableStateOf<UserRole?>(null) }
+  var pendingVerification by remember { mutableStateOf<EmailVerificationChallenge?>(null) }
+  var pendingVerificationLaunch by remember { mutableStateOf<PendingVerificationLaunch?>(null) }
 
-  if (showRegister == UserRole.User) {
-    RegisterUserScreen(
-      onBack = { showRegister = null },
-      onComplete = { payload ->
-        when (val result = onRegisterUser(payload)) {
+  suspend fun startVerification(launchState: PendingVerificationLaunch) {
+    when (launchState) {
+      is PendingVerificationLaunch.User -> {
+        when (val result = onRegisterUser(launchState.payload)) {
+          is RegistrationOperationResult.VerificationRequired -> {
+            pendingVerificationLaunch = null
+            pendingVerification = result.challenge
+          }
+          is RegistrationOperationResult.Authenticated -> {
+            pendingVerificationLaunch = launchState.copy(
+              isStarting = false,
+              errorMessage = "We couldn't open email verification. Please try again."
+            )
+          }
+          is RegistrationOperationResult.Error -> {
+            pendingVerificationLaunch = launchState.copy(
+              isStarting = false,
+              errorMessage = result.message
+            )
+          }
+        }
+      }
+      is PendingVerificationLaunch.Volunteer -> {
+        when (val result = onRegisterVolunteer(launchState.payload)) {
+          is RegistrationOperationResult.VerificationRequired -> {
+            pendingVerificationLaunch = null
+            pendingVerification = result.challenge
+          }
+          is RegistrationOperationResult.Authenticated -> {
+            pendingVerificationLaunch = launchState.copy(
+              isStarting = false,
+              errorMessage = "We couldn't open email verification. Please try again."
+            )
+          }
+          is RegistrationOperationResult.Error -> {
+            pendingVerificationLaunch = launchState.copy(
+              isStarting = false,
+              errorMessage = result.message
+            )
+          }
+        }
+      }
+    }
+  }
+
+  val launchState = pendingVerificationLaunch
+  if (launchState != null) {
+    EmailVerificationStartScreen(
+      email = launchState.email,
+      role = launchState.role,
+      isStarting = launchState.isStarting,
+      errorMessage = launchState.errorMessage,
+      onBack = {
+        pendingVerificationLaunch = null
+      },
+      onRetry = {
+        pendingVerificationLaunch = when (launchState) {
+          is PendingVerificationLaunch.User -> launchState.copy(isStarting = true, errorMessage = null)
+          is PendingVerificationLaunch.Volunteer -> launchState.copy(isStarting = true, errorMessage = null)
+        }
+        coroutineScope.launch {
+          startVerification(
+            when (launchState) {
+              is PendingVerificationLaunch.User -> launchState.copy(isStarting = true, errorMessage = null)
+              is PendingVerificationLaunch.Volunteer -> launchState.copy(isStarting = true, errorMessage = null)
+            }
+          )
+        }
+      }
+    )
+    return
+  }
+
+  val challenge = pendingVerification
+  if (challenge != null) {
+    EmailVerificationScreen(
+      challenge = challenge,
+      onBack = { pendingVerification = null },
+      onChallengeUpdated = { pendingVerification = it },
+      onVerify = { code ->
+        when (val result = onVerifyEmail(challenge.challengeId, code)) {
           is AuthOperationResult.Success -> {
             onComplete(result.session)
             null
           }
           is AuthOperationResult.Error -> result.message
         }
+      },
+      onResend = {
+        onResendEmailChallenge(challenge.challengeId)
+      }
+    )
+    return
+  }
+
+  if (showRegister == UserRole.User) {
+    RegisterUserScreen(
+      onBack = { showRegister = null },
+      onComplete = { payload ->
+        val launchState = PendingVerificationLaunch.User(payload = payload)
+        pendingVerificationLaunch = launchState
+        startVerification(launchState)
+        null
       }
     )
     return
@@ -79,13 +210,10 @@ fun RoleSelectionScreen(
     RegisterVolunteerScreen(
       onBack = { showRegister = null },
       onComplete = { payload ->
-        when (val result = onRegisterVolunteer(payload)) {
-          is AuthOperationResult.Success -> {
-            onComplete(result.session)
-            null
-          }
-          is AuthOperationResult.Error -> result.message
-        }
+        val launchState = PendingVerificationLaunch.Volunteer(payload = payload)
+        pendingVerificationLaunch = launchState
+        startVerification(launchState)
+        null
       }
     )
     return
@@ -203,6 +331,113 @@ fun RoleSelectionScreen(
 }
 
 @Composable
+private fun EmailVerificationStartScreen(
+  email: String,
+  role: UserRole,
+  isStarting: Boolean,
+  errorMessage: String?,
+  onBack: () -> Unit,
+  onRetry: () -> Unit
+) {
+  val accent = if (role == UserRole.Volunteer) AccentGold else Color(0xFFD9B76D)
+
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(NavyPrimary)
+      .padding(20.dp)
+  ) {
+    Column(
+      modifier = Modifier.fillMaxSize(),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Box(
+          modifier = Modifier
+            .size(40.dp)
+            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+            .clickable(enabled = !isStarting, onClick = onBack),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier.size(22.dp)
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(48.dp))
+
+      Box(
+        modifier = Modifier
+          .size(92.dp)
+          .clip(CircleShape)
+          .background(accent.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+      ) {
+        if (isStarting) {
+          CircularProgressIndicator(
+            color = Color.White,
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(34.dp)
+          )
+        } else {
+          Icon(
+            imageVector = Icons.Outlined.Email,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(34.dp)
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(24.dp))
+
+      Text(
+        text = "Email Verification",
+        style = MaterialTheme.typography.headlineSmall,
+        color = Color.White
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+      Text(
+        text = if (isStarting) {
+          "Opening the OTP screen for ${email.trim()}..."
+        } else {
+          errorMessage ?: "We couldn't start email verification."
+        },
+        color = Color(0xFFD6E4F5)
+      )
+
+      Spacer(modifier = Modifier.height(28.dp))
+
+      if (!isStarting) {
+        PrimaryButton(
+          text = "Try Again",
+          onClick = onRetry,
+          background = accent,
+          modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        PrimaryButton(
+          text = "Back",
+          onClick = onBack,
+          background = Color.White,
+          contentColor = NavyPrimary,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    }
+  }
+}
+
+@Composable
 private fun RoleCard(
   title: String,
   description: String,
@@ -249,9 +484,3 @@ private fun RoleCard(
     }
   }
 }
-
-
-
-
-
-

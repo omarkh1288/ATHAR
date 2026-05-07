@@ -76,6 +76,36 @@ data class AuthResponseDto(
 )
 
 @Serializable
+data class EmailVerificationChallengeDto(
+  val challengeId: String,
+  val email: String,
+  val role: UserRole,
+  val expiresAtEpochSeconds: Long,
+  val resendAvailableAtEpochSeconds: Long,
+  val codeLength: Int = 6,
+  val message: String = "We sent a verification code to your email."
+)
+
+@Serializable
+data class RegistrationStartResponseDto(
+  val verificationRequired: Boolean = true,
+  val message: String = "We sent a verification code to your email.",
+  val challenge: EmailVerificationChallengeDto
+)
+
+@Serializable
+data class VerifyEmailRequest(
+  val challengeId: String,
+  val code: String,
+  val deviceName: String? = null
+)
+
+@Serializable
+data class ResendEmailVerificationRequest(
+  val challengeId: String
+)
+
+@Serializable
 data class RegisterUserRequest(
   val fullName: String,
   val email: String,

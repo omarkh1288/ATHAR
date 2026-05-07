@@ -29,6 +29,8 @@ dependencies {
   implementation("io.ktor:ktor-server-content-negotiation-jvm:2.3.13")
   implementation("io.ktor:ktor-serialization-kotlinx-json-jvm:2.3.13")
   implementation("io.ktor:ktor-server-call-logging-jvm:2.3.13")
+  implementation("com.sun.mail:jakarta.mail:2.0.1")
+  implementation("com.sun.activation:jakarta.activation:2.0.1")
   implementation("org.xerial:sqlite-jdbc:3.47.2.0")
   implementation("org.mindrot:jbcrypt:0.4")
   runtimeOnly("ch.qos.logback:logback-classic:1.5.8")

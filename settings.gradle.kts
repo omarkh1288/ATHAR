@@ -14,5 +14,16 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "AccessibilityMappingApp"
+
+val localBuildRoot = file("${System.getProperty("user.home")}/.gradle-local-build/${rootProject.name}")
+
+gradle.beforeProject {
+  val relativeProjectPath = path
+    .removePrefix(":")
+    .replace(":", "/")
+    .ifBlank { "root" }
+  layout.buildDirectory.set(localBuildRoot.resolve(relativeProjectPath))
+}
+
 include(":app")
 include(":backend")
