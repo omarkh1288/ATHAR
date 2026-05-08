@@ -841,6 +841,7 @@ private fun ConfirmationScreen(
     onTrackVolunteer: () -> Unit, onBackToHome: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
+    val showsConfirmationEmail = paymentMethodLabel.equals("Paymob", ignoreCase = true)
 
     Card(
         modifier = Modifier
@@ -918,6 +919,16 @@ private fun ConfirmationScreen(
                 ) {
                     Icon(Icons.Filled.Shield, null, tint = AtharColors.AccentDark, modifier = Modifier.size(20.sdp).padding(top = 2.sdp))
                     Text("Your volunteer has been notified and is heading to your location now.", color = AtharColors.Secondary, fontSize = 13.ssp)
+                }
+
+                if (showsConfirmationEmail) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp)).background(AtharColors.SuccessLight).padding(12.sdp),
+                        verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.sdp),
+                    ) {
+                        Icon(Icons.Filled.Email, null, tint = AtharColors.SuccessText, modifier = Modifier.size(20.sdp).padding(top = 2.sdp))
+                        Text("Payment successful. A confirmation email has been sent.", color = AtharColors.SuccessText, fontSize = 13.ssp)
+                    }
                 }
 
                 // Action buttons

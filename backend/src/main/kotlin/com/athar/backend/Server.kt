@@ -46,7 +46,7 @@ data class ApiPrincipal(
 ) : Principal
 
 fun main() {
-  val port = System.getenv("ATHAR_BACKEND_PORT")?.toIntOrNull() ?: 8080
+  val port = BackendConfig.int("ATHAR_BACKEND_PORT", "athar.backend.port") ?: 8080
   embeddedServer(Netty, host = "0.0.0.0", port = port, module = Application::module)
     .start(wait = true)
 }

@@ -16,32 +16,28 @@ import org.slf4j.LoggerFactory
 
 internal class EmailOtpSender {
   private val logger = LoggerFactory.getLogger(EmailOtpSender::class.java)
-  private val host = System.getenv("ATHAR_SMTP_HOST")?.trim().orEmpty()
-  private val port = System.getenv("ATHAR_SMTP_PORT")?.trim()?.toIntOrNull() ?: 587
-  private val username = System.getenv("ATHAR_SMTP_USERNAME")?.trim().orEmpty()
-  private val password = System.getenv("ATHAR_SMTP_PASSWORD")?.trim().orEmpty()
-  private val fromAddress = System.getenv("ATHAR_SMTP_FROM")?.trim().orEmpty()
-  private val fromName = System.getenv("ATHAR_SMTP_FROM_NAME")?.trim().orEmpty().ifBlank { "Athar" }
-  private val startTlsEnabled = System.getenv("ATHAR_SMTP_STARTTLS")
-    ?.trim()
-    ?.equals("false", ignoreCase = true)
-    ?.not()
-    ?: true
-  private val sslEnabled = System.getenv("ATHAR_SMTP_SSL")
-    ?.trim()
-    ?.equals("true", ignoreCase = true)
-    ?: false
-  private val timeoutMs = System.getenv("ATHAR_SMTP_TIMEOUT_MS")?.trim()?.toIntOrNull() ?: 15000
+  private val host = BackendConfig.string("ATHAR_SMTP_HOST", "athar.smtp.host").orEmpty()
+  private val port = BackendConfig.int("ATHAR_SMTP_PORT", "athar.smtp.port") ?: 587
+  private val username = BackendConfig.string("ATHAR_SMTP_USERNAME", "athar.smtp.username").orEmpty()
+  private val password = BackendConfig.string("ATHAR_SMTP_PASSWORD", "athar.smtp.password").orEmpty()
+  private val fromAddress = BackendConfig.string("ATHAR_SMTP_FROM", "athar.smtp.from").orEmpty()
+  private val fromName = BackendConfig.string("ATHAR_SMTP_FROM_NAME", "athar.smtp.fromName")
+    .orEmpty()
+    .ifBlank { "Athar" }
+  private val startTlsEnabled = BackendConfig.boolean("ATHAR_SMTP_STARTTLS", "athar.smtp.starttls") ?: true
+  private val sslEnabled = BackendConfig.boolean("ATHAR_SMTP_SSL", "athar.smtp.ssl") ?: false
+  private val timeoutMs = BackendConfig.int("ATHAR_SMTP_TIMEOUT_MS", "athar.smtp.timeoutMs") ?: 15000
 
   fun sendRegistrationOtp(email: String, fullName: String, code: String, expiresAtEpochSeconds: Long): Result<Unit> {
     if (host.isBlank() || fromAddress.isBlank()) {
-      logger.warn(
-        "SMTP is not configured. Registration OTP for {} <{}> is {}",
+      val message = "SMTP is not configured. Set ATHAR_SMTP_HOST and ATHAR_SMTP_FROM in local.properties or the environment."
+      logger.error(
+        "{} Registration OTP for {} <{}> was not sent.",
+        message,
         fullName.ifBlank { "User" },
-        email,
-        code
+        email
       )
-      return Result.success(Unit)
+      return Result.failure(IllegalStateException(message))
     }
 
     return runCatching {

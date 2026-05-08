@@ -7,3 +7,4 @@ sdk.dir=C\:\\Android\\Sdk
 # Optional app configuration for local development.
 MAPS_API_KEY=
 BACKEND_BASE_URL=
+

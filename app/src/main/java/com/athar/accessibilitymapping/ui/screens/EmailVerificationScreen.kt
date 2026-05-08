@@ -88,7 +88,10 @@ fun EmailVerificationScreen(
   onBack: () -> Unit,
   onChallengeUpdated: (EmailVerificationChallenge) -> Unit,
   onVerify: suspend (String) -> String?,
-  onResend: suspend () -> ApiCallResult<EmailVerificationChallenge>
+  onResend: suspend () -> ApiCallResult<EmailVerificationChallenge>,
+  isPreparingChallenge: Boolean = false,
+  challengeLoadError: String? = null,
+  onRetryChallengeLoad: (() -> Unit)? = null
 ) {
   val coroutineScope = rememberCoroutineScope()
   var code by remember(challenge.challengeId) { mutableStateOf("") }
@@ -97,6 +100,8 @@ fun EmailVerificationScreen(
   var isVerifying by remember(challenge.challengeId) { mutableStateOf(false) }
   var isResending by remember(challenge.challengeId) { mutableStateOf(false) }
   var currentEpochSeconds by remember { mutableStateOf(Instant.now().epochSecond) }
+  val challengeReady = challenge.challengeId.isNotBlank()
+  val isChallengePending = isPreparingChallenge || !challengeReady
 
   LaunchedEffect(challenge.challengeId, challenge.resendAvailableAtEpochSeconds, challenge.expiresAtEpochSeconds) {
     while (true) {
@@ -173,7 +178,7 @@ fun EmailVerificationScreen(
             .size(44.sdp)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.14f))
-            .clickable(enabled = !isVerifying && !isResending, onClick = onBack),
+            .clickable(enabled = !isVerifying && !isResending && !isPreparingChallenge, onClick = onBack),
           contentAlignment = Alignment.Center
         ) {
           Icon(
@@ -323,7 +328,12 @@ fun EmailVerificationScreen(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Refresh,
                 label = "Code status",
-                value = if (verificationExpired) "Expired" else formatCountdown(expirySecondsRemaining),
+                value = when {
+                  !challengeLoadError.isNullOrBlank() -> "Retry"
+                  isChallengePending -> "Loading"
+                  verificationExpired -> "Expired"
+                  else -> formatCountdown(expirySecondsRemaining)
+                },
                 accent = heroAccent
               )
             }
@@ -374,8 +384,8 @@ fun EmailVerificationScreen(
                 code = code,
                 codeLength = challenge.codeLength,
                 accentColor = heroAccent,
-                isError = errorMessage != null,
-                enabled = !verificationExpired && !isVerifying,
+                isError = errorMessage != null || !challengeLoadError.isNullOrBlank(),
+                enabled = challengeReady && !verificationExpired && !isVerifying && !isPreparingChallenge,
                 onCodeChange = {
                   code = it
                   errorMessage = null
@@ -383,7 +393,21 @@ fun EmailVerificationScreen(
               )
             }
 
-            if (!statusMessage.isNullOrBlank() && errorMessage.isNullOrBlank()) {
+            if (!challengeLoadError.isNullOrBlank()) {
+              StatusBanner(
+                text = challengeLoadError.orEmpty(),
+                background = Color(0xFFFEECEC),
+                border = ErrorRed.copy(alpha = 0.22f),
+                textColor = ErrorRed
+              )
+            } else if (isChallengePending) {
+              StatusBanner(
+                text = challenge.message,
+                background = Gray100,
+                border = Gray200,
+                textColor = NavyPrimary
+              )
+            } else if (!statusMessage.isNullOrBlank() && errorMessage.isNullOrBlank()) {
               StatusBanner(
                 text = statusMessage.orEmpty(),
                 background = Color(0xFFE7F8EE),
@@ -402,8 +426,16 @@ fun EmailVerificationScreen(
             }
 
             PrimaryButton(
-              text = if (isVerifying) "Verifying..." else "Verify Email",
+              text = when {
+                isPreparingChallenge -> "Loading..."
+                isVerifying -> "Verifying..."
+                else -> "Verify Email"
+              },
               onClick = {
+                if (!challengeReady) {
+                  errorMessage = challengeLoadError ?: "We're still preparing your verification request. Please wait."
+                  return@PrimaryButton
+                }
                 if (verificationExpired) {
                   errorMessage = "This code expired. Go back and register again."
                   return@PrimaryButton
@@ -419,19 +451,30 @@ fun EmailVerificationScreen(
                   isVerifying = false
                 }
               },
-              enabled = hasCompleteCode && !isVerifying && !verificationExpired,
+              enabled = challengeReady && hasCompleteCode && !isVerifying && !verificationExpired && !isPreparingChallenge,
               background = NavyPrimary,
               modifier = Modifier.fillMaxWidth()
             )
 
+            if (!challengeLoadError.isNullOrBlank() && onRetryChallengeLoad != null) {
+              OutlineActionButton(
+                text = if (isPreparingChallenge) "Retrying..." else "Retry Setup",
+                onClick = onRetryChallengeLoad,
+                borderColor = heroAccent,
+                contentColor = NavyPrimary,
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+
             OutlineActionButton(
               text = when {
+                isChallengePending -> "Preparing..."
                 isResending -> "Sending New Code..."
                 resendSecondsRemaining > 0L -> "Resend in ${formatCountdown(resendSecondsRemaining)}"
                 else -> "Resend Code"
               },
               onClick = {
-                if (resendSecondsRemaining > 0L || isResending) return@OutlineActionButton
+                if (isChallengePending || resendSecondsRemaining > 0L || isResending) return@OutlineActionButton
                 isResending = true
                 errorMessage = null
                 coroutineScope.launch {
@@ -448,8 +491,8 @@ fun EmailVerificationScreen(
                   isResending = false
                 }
               },
-              borderColor = if (resendSecondsRemaining > 0L || isResending) Gray200 else heroAccent,
-              contentColor = if (resendSecondsRemaining > 0L || isResending) Gray600 else NavyPrimary,
+              borderColor = if (isChallengePending || resendSecondsRemaining > 0L || isResending) Gray200 else heroAccent,
+              contentColor = if (isChallengePending || resendSecondsRemaining > 0L || isResending) Gray600 else NavyPrimary,
               modifier = Modifier.fillMaxWidth()
             )
 

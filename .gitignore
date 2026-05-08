@@ -4,13 +4,25 @@
 .gradle-user-home/
 build/
 
-# Local configuration file (sdk path, etc)
+# Local configuration file (sdk path, API keys, etc)
 local.properties
 .android/
+.android-user-home/
 
 # Log/OS Files
 *.log
 build_output*.txt
+build_err*.txt
+errors.txt
+errs.txt
+status.txt
+recent.txt
+recent_files.txt
+app_compile.log
+backend_compile.log
+backend_log*.txt
+backend_*_stderr.log
+backend_*_stdout.log
 
 # Android Studio generated files and folders
 captures/
@@ -44,3 +56,40 @@ backend/bin/
 # Local temp/debug artifacts
 tmp/
 claude-code-jetbrains-plugin/
+
+# JVM crash / replay logs
+hs_err_pid*.log
+replay_pid*.log
+
+# Temp debug files
+tmp_*.java
+tmp_*.class
+convert.py
+fix_errs.py
+generate_screenshots.py
+
+# Temp images/screenshots/json used during development
+device-screen.png
+device-window-dump.xml
+emulator_screen*.png
+screen*.png
+img.png
+ui.xml
+ui2.xml
+ui_after_edge.xml
+athar_ui.xml
+login_response.json
+earnings_response.json
+performance_response.json
+temp_id.*
+deps-*.txt
+
+# VS Code
+.vscode/
+
+# Kotlin
+.kotlin/
+.kotlin-daemon/
+
+# AI
+.ai/

@@ -10,6 +10,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -613,9 +614,18 @@ class BackendApiClient(private val appContext: Context? = null) {
     explicitNulls = false
   }
 
+  private val requestTimeoutMillis = 15_000L
+  private val connectTimeoutMillis = 10_000L
+  private val socketTimeoutMillis = 15_000L
+
   private val client = HttpClient(OkHttp) {
     install(ContentNegotiation) {
       json(json)
+    }
+    install(HttpTimeout) {
+      requestTimeoutMillis = this@BackendApiClient.requestTimeoutMillis
+      connectTimeoutMillis = this@BackendApiClient.connectTimeoutMillis
+      socketTimeoutMillis = this@BackendApiClient.socketTimeoutMillis
     }
     defaultRequest {
       header(HttpHeaders.Accept, ContentType.Application.Json.toString())
@@ -1995,9 +2005,19 @@ class BackendApiClient(private val appContext: Context? = null) {
   }
 
   private fun parseRegistrationStartResponse(data: JsonElement?): ApiCallResult<ApiRegistrationStartResponse> {
+    val root = data?.asObjectOrNull()
+    val verificationRequired = root.readBoolean(
+      "verification_required",
+      "verificationRequired",
+      "requires_verification",
+      "requiresVerification"
+    ) == true
     val challenge = parseEmailVerificationChallenge(data)
     if (challenge != null) {
       return ApiCallResult.Success(ApiRegistrationStartResponse.VerificationRequired(challenge))
+    }
+    if (verificationRequired) {
+      return ApiCallResult.Failure("Server requested email verification, but the challenge details were incomplete.")
     }
 
     return when (val auth = parseAuthResponse(data)) {
@@ -2052,18 +2072,28 @@ class BackendApiClient(private val appContext: Context? = null) {
       }
       ?: return null
 
-    val challengeId = candidate.readString("challenge_id", "challengeId", "id") ?: return null
-    val email = candidate.readString("email") ?: return null
-    val role = when (candidate.readString("role")?.lowercase(Locale.getDefault())) {
+    val challengeId = candidate.readString("challenge_id", "challengeId", "id")
+      ?: root.readString("challenge_id", "challengeId", "id")
+      ?: return null
+    val email = candidate.readString("email")
+      ?: root.readString("email")
+      ?: return null
+    val role = when ((candidate.readString("role") ?: root.readString("role"))?.lowercase(Locale.getDefault())) {
       "volunteer" -> ApiUserRole.Volunteer
       else -> ApiUserRole.User
     }
-    val expiresAt = candidate.readLong("expires_at_epoch_seconds", "expiresAtEpochSeconds") ?: return null
+    val expiresAt = candidate.readLong("expires_at_epoch_seconds", "expiresAtEpochSeconds")
+      ?: root.readLong("expires_at_epoch_seconds", "expiresAtEpochSeconds")
+      ?: return null
     val resendAvailableAt = candidate.readLong(
       "resend_available_at_epoch_seconds",
       "resendAvailableAtEpochSeconds"
-    ) ?: expiresAt
-    val codeLength = candidate.readInt("code_length", "codeLength") ?: 6
+    )
+      ?: root.readLong("resend_available_at_epoch_seconds", "resendAvailableAtEpochSeconds")
+      ?: expiresAt
+    val codeLength = candidate.readInt("code_length", "codeLength")
+      ?: root.readInt("code_length", "codeLength")
+      ?: 6
     val message = candidate.readString("message")
       ?: root.readString("message")
       ?: "We sent a verification code to your email."

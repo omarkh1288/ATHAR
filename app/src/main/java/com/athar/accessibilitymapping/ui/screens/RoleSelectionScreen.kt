@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import com.athar.accessibilitymapping.ui.components.PrimaryButton
 import com.athar.accessibilitymapping.ui.theme.AccentGold
 import com.athar.accessibilitymapping.ui.theme.NavyPrimary
 import com.athar.accessibilitymapping.ui.theme.SuccessGreen
+import java.time.Instant
 import kotlinx.coroutines.launch
 
 private sealed interface PendingVerificationLaunch {
@@ -84,6 +86,25 @@ private sealed interface PendingVerificationLaunch {
   }
 }
 
+private fun PendingVerificationLaunch.toPlaceholderChallenge(
+  nowEpochSeconds: Long = Instant.now().epochSecond
+): EmailVerificationChallenge {
+  return EmailVerificationChallenge(
+    challengeId = "",
+    email = email,
+    role = role,
+    expiresAtEpochSeconds = nowEpochSeconds + 10L * 60L,
+    resendAvailableAtEpochSeconds = nowEpochSeconds,
+    codeLength = 6,
+    message = errorMessage
+      ?: if (isStarting) {
+        "Opening the OTP screen for ${email.trim()}..."
+      } else {
+        "We couldn't start email verification."
+      }
+  )
+}
+
 @Composable
 fun RoleSelectionScreen(
   onComplete: (AuthSession) -> Unit,
@@ -98,22 +119,28 @@ fun RoleSelectionScreen(
   var pendingVerification by remember { mutableStateOf<EmailVerificationChallenge?>(null) }
   var pendingVerificationLaunch by remember { mutableStateOf<PendingVerificationLaunch?>(null) }
 
-  suspend fun startVerification(launchState: PendingVerificationLaunch) {
-    when (launchState) {
+  // Run verification in a LaunchedEffect so it survives composable swaps.
+  // When RegisterUserScreen sets pendingVerificationLaunch, that composable
+  // leaves the tree and its coroutineScope is cancelled.  This effect lives
+  // in RoleSelectionScreen, so the API call completes reliably.
+  LaunchedEffect(pendingVerificationLaunch) {
+    val launch = pendingVerificationLaunch ?: return@LaunchedEffect
+    if (!launch.isStarting) return@LaunchedEffect
+    when (launch) {
       is PendingVerificationLaunch.User -> {
-        when (val result = onRegisterUser(launchState.payload)) {
+        when (val result = onRegisterUser(launch.payload)) {
           is RegistrationOperationResult.VerificationRequired -> {
             pendingVerificationLaunch = null
             pendingVerification = result.challenge
           }
           is RegistrationOperationResult.Authenticated -> {
-            pendingVerificationLaunch = launchState.copy(
+            pendingVerificationLaunch = launch.copy(
               isStarting = false,
               errorMessage = "We couldn't open email verification. Please try again."
             )
           }
           is RegistrationOperationResult.Error -> {
-            pendingVerificationLaunch = launchState.copy(
+            pendingVerificationLaunch = launch.copy(
               isStarting = false,
               errorMessage = result.message
             )
@@ -121,19 +148,19 @@ fun RoleSelectionScreen(
         }
       }
       is PendingVerificationLaunch.Volunteer -> {
-        when (val result = onRegisterVolunteer(launchState.payload)) {
+        when (val result = onRegisterVolunteer(launch.payload)) {
           is RegistrationOperationResult.VerificationRequired -> {
             pendingVerificationLaunch = null
             pendingVerification = result.challenge
           }
           is RegistrationOperationResult.Authenticated -> {
-            pendingVerificationLaunch = launchState.copy(
+            pendingVerificationLaunch = launch.copy(
               isStarting = false,
               errorMessage = "We couldn't open email verification. Please try again."
             )
           }
           is RegistrationOperationResult.Error -> {
-            pendingVerificationLaunch = launchState.copy(
+            pendingVerificationLaunch = launch.copy(
               isStarting = false,
               errorMessage = result.message
             )
@@ -145,26 +172,25 @@ fun RoleSelectionScreen(
 
   val launchState = pendingVerificationLaunch
   if (launchState != null) {
-    EmailVerificationStartScreen(
-      email = launchState.email,
-      role = launchState.role,
-      isStarting = launchState.isStarting,
-      errorMessage = launchState.errorMessage,
+    EmailVerificationScreen(
+      challenge = launchState.toPlaceholderChallenge(),
       onBack = {
         pendingVerificationLaunch = null
       },
-      onRetry = {
-        pendingVerificationLaunch = when (launchState) {
-          is PendingVerificationLaunch.User -> launchState.copy(isStarting = true, errorMessage = null)
-          is PendingVerificationLaunch.Volunteer -> launchState.copy(isStarting = true, errorMessage = null)
-        }
-        coroutineScope.launch {
-          startVerification(
-            when (launchState) {
-              is PendingVerificationLaunch.User -> launchState.copy(isStarting = true, errorMessage = null)
-              is PendingVerificationLaunch.Volunteer -> launchState.copy(isStarting = true, errorMessage = null)
-            }
-          )
+      onChallengeUpdated = {},
+      onVerify = { launchState.errorMessage ?: "We're still preparing your verification request. Please wait." },
+      onResend = { ApiCallResult.Failure(launchState.errorMessage ?: "We're still preparing your verification request. Please wait.") },
+      isPreparingChallenge = launchState.isStarting,
+      challengeLoadError = launchState.errorMessage,
+      onRetryChallengeLoad = if (launchState.isStarting) {
+        null
+      } else {
+        {
+          val retryState = when (launchState) {
+            is PendingVerificationLaunch.User -> launchState.copy(isStarting = true, errorMessage = null)
+            is PendingVerificationLaunch.Volunteer -> launchState.copy(isStarting = true, errorMessage = null)
+          }
+          pendingVerificationLaunch = retryState
         }
       }
     )
@@ -197,9 +223,7 @@ fun RoleSelectionScreen(
     RegisterUserScreen(
       onBack = { showRegister = null },
       onComplete = { payload ->
-        val launchState = PendingVerificationLaunch.User(payload = payload)
-        pendingVerificationLaunch = launchState
-        startVerification(launchState)
+        pendingVerificationLaunch = PendingVerificationLaunch.User(payload = payload)
         null
       }
     )
@@ -210,9 +234,7 @@ fun RoleSelectionScreen(
     RegisterVolunteerScreen(
       onBack = { showRegister = null },
       onComplete = { payload ->
-        val launchState = PendingVerificationLaunch.Volunteer(payload = payload)
-        pendingVerificationLaunch = launchState
-        startVerification(launchState)
+        pendingVerificationLaunch = PendingVerificationLaunch.Volunteer(payload = payload)
         null
       }
     )

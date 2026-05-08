@@ -38,6 +38,23 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
+@rem Prefer a local Java 17 install for this Android project when available.
+set "REPO_JAVA_HOME="
+if exist "C:\Program Files\Java\jdk-17\bin\java.exe" set "REPO_JAVA_HOME=C:\Program Files\Java\jdk-17"
+if not defined REPO_JAVA_HOME (
+    for /d %%D in ("C:\Program Files\Eclipse Adoptium\jdk-17*") do (
+        if exist "%%~fD\bin\java.exe" set "REPO_JAVA_HOME=%%~fD"
+    )
+)
+if not defined REPO_JAVA_HOME if exist "C:\Program Files\Android\Android Studio1\jbr\bin\java.exe" set "REPO_JAVA_HOME=C:\Program Files\Android\Android Studio1\jbr"
+if not defined REPO_JAVA_HOME if exist "C:\Program Files\Android\Android Studio\jbr\bin\java.exe" set "REPO_JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
+
+if defined REPO_JAVA_HOME (
+    if not defined JAVA_HOME set "JAVA_HOME=%REPO_JAVA_HOME%"
+    echo %JAVA_HOME% | findstr /I /C:"jdk-17" >NUL 2>&1
+    if errorlevel 1 set "JAVA_HOME=%REPO_JAVA_HOME%"
+)
+
 @rem Find java.exe
 if defined JAVA_HOME goto findJavaFromJavaHome
 
